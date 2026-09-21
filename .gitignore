@@ -444,6 +444,11 @@ $RECYCLE.BIN/
 .idea/
 *.sln.iml
 
+# Expo
+.expo/
+dist/
+web-build/
+
 ##
 ## Visual Studio Code
 ##

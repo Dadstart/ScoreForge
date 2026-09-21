@@ -1,11 +1,17 @@
 # ScoreForge
 
-Cross-platform score-keeping app built with [Avalonia](https://avaloniaui.net/) 12 and .NET 10.
+Cross-platform score-keeping app. The active client is an **Expo (React Native + TypeScript)** app under [`mobile/`](mobile/).
 
-## Platforms
+## Run (Expo)
 
-- **Desktop** — Windows, macOS, and Linux
-- **Browser** — WebAssembly (WASM)
+```bash
+cd mobile
+npm install
+npm run web          # browser
+npm start            # Expo Dev Tools — then press w / a / i, or scan with Expo Go
+```
+
+Phone testing: install **Expo Go**, run `npm start`, scan the QR code (same Wi‑Fi).
 
 ## Game templates
 
@@ -17,43 +23,14 @@ Cross-platform score-keeping app built with [Avalonia](https://avaloniaui.net/) 
 | Golf | Holes as rounds | Lowest total after 9 or 18 holes |
 | Cribbage | Peg board (front/rear pegs) | First to 121 (or 61) |
 
-Games autosave locally (AppData JSON on desktop, `localStorage` in the browser). Undo, reset, and mark-complete are available on the scoreboard.
+Games autosave in AsyncStorage (device / browser). Cribbage shows fireworks when someone wins.
 
-## Prerequisites
+## Project layout
 
-- .NET SDK 10.0 (see `global.json`)
-- For browser: `dotnet workload install wasm-tools` (links Skia into the WASM build)
+- `mobile/` — **Expo app** (primary)
+- `ScoreForge*`, `tests/` — previous Avalonia/.NET prototype (legacy; not required to run the app)
+- `docs/ARCHITECTURE.md` — architecture notes
 
-## Run
+## Store builds (later)
 
-```bash
-# Desktop
-dotnet run --project ScoreForge.Desktop
-
-# Browser (opens a local WASM host)
-# Requires: dotnet workload install wasm-tools
-dotnet run --project ScoreForge.Browser
-```
-
-If the browser stays on the “Powered by Avalonia” splash, install the WASM workload, clean, and rebuild:
-
-```bash
-dotnet workload install wasm-tools
-dotnet clean ScoreForge.Browser/ScoreForge.Browser.csproj
-dotnet run --project ScoreForge.Browser
-```
-
-## Test
-
-```bash
-dotnet test
-```
-
-## Solution layout
-
-- `ScoreForge/` — shared UI, view models, domain, and scoring engine
-- `ScoreForge.Desktop/` — desktop host + file store
-- `ScoreForge.Browser/` — browser host + localStorage store
-- `tests/ScoreForge.Tests/` — scoring and persistence tests
-
-For a deeper walkthrough of layers, navigation, and data flow, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Use [EAS Build](https://docs.expo.dev/build/introduction/) from `mobile/` when you are ready for App Store / Google Play.
