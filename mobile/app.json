@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "ScoreForge",
+    "slug": "scoreforge",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "scheme": "scoreforge",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.dadstart.scoreforge"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0f1115",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "package": "com.dadstart.scoreforge",
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    }
+  }
+}
