@@ -116,12 +116,39 @@ public class ScoreCalculatorTests
     }
 
     [Fact]
+    public void Cribbage_CompletesAtOneTwentyOne()
+    {
+        var template = new CribbageTemplate();
+        var alice = new Player { Name = "Alice" };
+        var bob = new Player { Name = "Bob" };
+        var game = new Game
+        {
+            TemplateId = template.Id,
+            Players = [alice, bob],
+            TargetScore = 121,
+            Events =
+            [
+                new ScoreEvent { PlayerId = alice.Id, Points = 60 },
+                new ScoreEvent { PlayerId = bob.Id, Points = 40 },
+                new ScoreEvent { PlayerId = alice.Id, Points = 61 }
+            ]
+        };
+
+        var snapshot = ScoreCalculator.Calculate(game, template);
+
+        Assert.True(snapshot.IsComplete);
+        Assert.Equal("Alice", snapshot.WinnerName);
+        Assert.Equal(121, snapshot.Standings.First(s => s.IsWinner).Total);
+    }
+
+    [Fact]
     public void Catalog_ContainsExpectedTemplates()
     {
-        Assert.Equal(4, GameTemplateCatalog.All.Count);
+        Assert.Equal(5, GameTemplateCatalog.All.Count);
         Assert.NotNull(GameTemplateCatalog.GetById("free-play"));
         Assert.NotNull(GameTemplateCatalog.GetById("rounds"));
         Assert.NotNull(GameTemplateCatalog.GetById("rummy"));
         Assert.NotNull(GameTemplateCatalog.GetById("golf"));
+        Assert.NotNull(GameTemplateCatalog.GetById("cribbage"));
     }
 }

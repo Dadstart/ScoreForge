@@ -138,7 +138,7 @@ public partial class SetupViewModel : ViewModelBase
         try
         {
             await AppServices.GameStore.SaveAsync(game).ConfigureAwait(true);
-            _shell.NavigateTo(new BoardViewModel(_shell, game));
+            _shell.NavigateTo(BoardNavigation.CreateBoard(_shell, game));
         }
         catch (Exception ex)
         {

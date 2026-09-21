@@ -73,7 +73,7 @@ public partial class HomeViewModel : ViewModelBase
     {
         if (item is null)
             return;
-        _shell.NavigateTo(new BoardViewModel(_shell, item.Game));
+        _shell.NavigateTo(BoardNavigation.CreateBoard(_shell, item.Game));
     }
 
     [RelayCommand]

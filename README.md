@@ -15,6 +15,7 @@ Cross-platform score-keeping app built with [Avalonia](https://avaloniaui.net/) 
 | Rounds | Round entry | Highest total |
 | Rummy | Round entry | First to target (default 500) |
 | Golf | Holes as rounds | Lowest total after 9 or 18 holes |
+| Cribbage | Peg board (front/rear pegs) | First to 121 (or 61) |
 
 Games autosave locally (AppData JSON on desktop, `localStorage` in the browser). Undo, reset, and mark-complete are available on the scoreboard.
 
@@ -54,3 +55,5 @@ dotnet test
 - `ScoreForge.Desktop/` — desktop host + file store
 - `ScoreForge.Browser/` — browser host + localStorage store
 - `tests/ScoreForge.Tests/` — scoring and persistence tests
+
+For a deeper walkthrough of layers, navigation, and data flow, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

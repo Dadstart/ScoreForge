@@ -7,7 +7,8 @@ public static class GameTemplateCatalog
         new FreePlayTemplate(),
         new RoundsTemplate(),
         new RummyTemplate(),
-        new GolfTemplate()
+        new GolfTemplate(),
+        new CribbageTemplate()
     ];
 
     public static IReadOnlyList<IGameTemplate> All => Templates;

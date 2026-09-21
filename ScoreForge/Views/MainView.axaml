@@ -26,6 +26,9 @@
       </Grid>
     </Border>
 
-    <ContentControl Content="{Binding CurrentPage}" Margin="16" />
+    <ContentControl Content="{Binding CurrentPage}"
+                    Margin="16"
+                    HorizontalContentAlignment="Stretch"
+                    VerticalContentAlignment="Stretch" />
   </DockPanel>
 </UserControl>
