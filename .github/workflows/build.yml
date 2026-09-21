@@ -5,25 +5,25 @@ on:
     branches: [main, master]
   pull_request:
 
+defaults:
+  run:
+    working-directory: mobile
+
 jobs:
   build-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          global-json-file: global.json
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
 
-      - name: Restore
-        run: dotnet restore ScoreForge.slnx
+      - name: Install
+        run: npm ci
 
-      - name: Build
-        run: dotnet build ScoreForge.slnx -c Release --no-restore
-
-      - name: Test
-        run: dotnet test ScoreForge.slnx -c Release --no-build --verbosity normal
-
-      - name: Publish Desktop
-        run: dotnet publish ScoreForge.Desktop/ScoreForge.Desktop.csproj -c Release --no-restore -o artifacts/desktop
+      - name: Typecheck
+        run: npx tsc --noEmit

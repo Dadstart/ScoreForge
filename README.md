@@ -34,8 +34,11 @@ Games autosave in AsyncStorage (device / browser). Cribbage shows fireworks when
 ## Project layout
 
 - `mobile/` — **Expo app** (primary)
-- `ScoreForge*`, `tests/` — previous Avalonia/.NET prototype (legacy; not required to run the app)
 - `docs/ARCHITECTURE.md` — architecture notes
+
+## CI
+
+GitHub Actions runs `npm ci` and TypeScript checking in `mobile/` (see `.github/workflows/build.yml`).
 
 ## Store builds (later)
 

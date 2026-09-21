@@ -2,7 +2,7 @@
 
 ScoreForge is a score-keeping product. The **active implementation** is an Expo (React Native + TypeScript) app in [`mobile/`](../mobile/).
 
-An earlier Avalonia/.NET prototype remains in the repo under `ScoreForge/`, `ScoreForge.Desktop/`, and `ScoreForge.Browser/` for reference.
+An earlier Avalonia/.NET prototype was removed from the tree; see git history if needed.
 
 ## Active stack (Expo)
 
@@ -52,4 +52,4 @@ Ported from the Avalonia design: event-sourced `Game` + `ScoreEvent`s, template 
 
 ## Legacy Avalonia notes
 
-The Avalonia solution used a shared MVVM core, desktop file store, and browser `localStorage`. It is no longer the recommended way to run ScoreForge. See git history for that structure if needed.
+The Avalonia solution (shared MVVM core, desktop file store, browser `localStorage`) lived in earlier commits on this branch and is no longer part of the working tree.

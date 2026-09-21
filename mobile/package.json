@@ -27,7 +27,8 @@
     "start": "expo start --port 5555",
     "android": "expo start --android --port 5555",
     "ios": "expo start --ios --port 5555",
-    "web": "expo start --web --port 5555"
+    "web": "expo start --web --port 5555",
+    "typecheck": "tsc --noEmit"
   },
   "private": true
 }
