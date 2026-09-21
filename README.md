@@ -4,14 +4,20 @@ Cross-platform score-keeping app. The active client is an **Expo (React Native +
 
 ## Run (Expo)
 
+Pick **one** command (both start the same Metro server on port 5555):
+
 ```bash
 cd mobile
 npm install
-npm run web          # browser
-npm start            # Expo Dev Tools — then press w / a / i, or scan with Expo Go
+
+# Browser only
+npm run web
+
+# OR Expo Dev Tools (then press w for web, or scan QR with Expo Go on a phone)
+npm start
 ```
 
-Phone testing: install **Expo Go**, run `npm start`, scan the QR code (same Wi‑Fi).
+Do not run both at once — that causes “port in use.”
 
 ## Game templates
 
