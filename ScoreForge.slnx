@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="ScoreForge.Browser/ScoreForge.Browser.csproj" />
+  <Project Path="ScoreForge.Desktop/ScoreForge.Desktop.csproj" />
+  <Project Path="ScoreForge/ScoreForge.csproj" />
+  <Project Path="tests/ScoreForge.Tests/ScoreForge.Tests.csproj" />
+</Solution>
