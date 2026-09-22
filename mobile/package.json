@@ -30,7 +30,9 @@
     "android": "expo start --android --port 5555",
     "ios": "expo start --ios --port 5555",
     "web": "expo start --web --port 5555",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "export:web": "expo export --platform web",
+    "deploy:web": "npm run export:web && firebase deploy --only hosting"
   },
   "private": true
 }

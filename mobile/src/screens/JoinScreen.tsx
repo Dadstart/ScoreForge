@@ -70,8 +70,8 @@ export function JoinScreen({ navigation, route }: Props) {
       <Text style={styles.title}>Join with code</Text>
       <Text style={styles.subtitle}>
         {initialCode
-          ? 'QR code detected. Enter your display name to join.'
-          : 'Enter your display name and the magic code shared by the host — or scan their QR.'}
+          ? 'QR detected. Enter your display name to join (same browser as the host for now).'
+          : 'Enter your name and the host code. Until cloud sync lands, join only works in the same browser where the game was created.'}
       </Text>
 
       <Text style={styles.label}>Display name</Text>

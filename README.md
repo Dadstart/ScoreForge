@@ -45,6 +45,26 @@ Games autosave in AsyncStorage on this device/browser. **Cross-device sync is no
 - [`mobile/`](mobile/) — Expo app (primary)
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — architecture notes
 
+## Deploy web (Firebase Hosting)
+
+From [`mobile/`](mobile/), with [Firebase CLI](https://firebase.google.com/docs/cli) installed and logged in (`firebase login`):
+
+```bash
+cd mobile
+npm run deploy:web
+```
+
+That runs `expo export --platform web` into `dist/`, then deploys Hosting for project `scoreforge-494614` (see [`mobile/.firebaserc`](mobile/.firebaserc)). SPA rewrites send all routes to `index.html` so Join deep links work.
+
+Preview the export locally first:
+
+```bash
+npm run export:web
+npx serve dist
+```
+
+Public URL after deploy is typically `https://scoreforge-494614.web.app` (or your custom domain).
+
 ## CI
 
 GitHub Actions runs `npm ci` and TypeScript checking in `mobile/` (see [`.github/workflows/build.yml`](.github/workflows/build.yml)).

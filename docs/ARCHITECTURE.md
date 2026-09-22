@@ -80,7 +80,8 @@ Works in Expo Go, native builds, and web. Join currently resolves codes against 
 
 | Target | How |
 | --- | --- |
-| Web browser | `npm run web` in `mobile/` |
+| Web browser (dev) | `npm run web` in `mobile/` |
+| Web (public) | `npm run deploy:web` → Firebase Hosting (`mobile/firebase.json`) |
 | Android / iOS (dev) | Expo Go + `npm start` |
 | Stores | EAS Build later |
 

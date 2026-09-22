@@ -76,7 +76,7 @@ export async function joinGameByShareCode(
   const game = await findGameByShareCode(code);
   if (!game) {
     throw new Error(
-      'No game found with that code on this device yet. Cross-device sync is coming next.',
+      'Game not found on this device. Codes only work in the same browser until cloud sync is added.',
     );
   }
 
