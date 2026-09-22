@@ -8,10 +8,10 @@ import {
   View,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { createGame, createPlayer } from '../domain/models';
+import { createPlayer } from '../domain/models';
 import { getTemplate, templates } from '../domain/templates';
 import { loadDisplayName, saveDisplayName } from '../storage/displayNameStore';
-import { saveGame } from '../storage/gameStore';
+import { createAndSaveGame } from '../storage/gameStore';
 import { colors } from '../theme';
 import type { RootStackParamList } from '../navigation/types';
 
@@ -25,6 +25,7 @@ export function SetupScreen({ navigation }: Props) {
   const [targetScore, setTargetScore] = useState(String(templates[0].defaultTargetScore ?? ''));
   const [maxRounds, setMaxRounds] = useState(String(templates[0].defaultMaxRounds ?? '18'));
   const [validation, setValidation] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     void loadDisplayName().then((saved) => {
@@ -52,21 +53,28 @@ export function SetupScreen({ navigation }: Props) {
       return;
     }
 
-    await saveDisplayName(host);
+    setBusy(true);
+    setValidation(null);
+    try {
+      await saveDisplayName(host);
 
-    const game = createGame({
-      name: name.trim() || template.name,
-      templateId: template.id,
-      players: [createPlayer(host)],
-      targetScore: showTarget && targetScore ? Number(targetScore) : null,
-      maxRounds: showMaxRounds && maxRounds ? Number(maxRounds) : null,
-    });
+      const game = await createAndSaveGame({
+        name: name.trim() || template.name,
+        templateId: template.id,
+        players: [createPlayer(host)],
+        targetScore: showTarget && targetScore ? Number(targetScore) : null,
+        maxRounds: showMaxRounds && maxRounds ? Number(maxRounds) : null,
+      });
 
-    await saveGame(game);
-    if (template.id === 'cribbage') {
-      navigation.replace('Cribbage', { gameId: game.id });
-    } else {
-      navigation.replace('Board', { gameId: game.id });
+      if (template.id === 'cribbage') {
+        navigation.replace('Cribbage', { gameId: game.id });
+      } else {
+        navigation.replace('Board', { gameId: game.id });
+      }
+    } catch (e) {
+      setValidation(e instanceof Error ? e.message : 'Could not create game');
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -134,8 +142,12 @@ export function SetupScreen({ navigation }: Props) {
       {validation ? <Text style={styles.error}>{validation}</Text> : null}
 
       <View style={styles.row}>
-        <Pressable style={[styles.btn, styles.accent]} onPress={() => void start()}>
-          <Text style={styles.btnText}>Start</Text>
+        <Pressable
+          style={[styles.btn, styles.accent]}
+          disabled={busy}
+          onPress={() => void start()}
+        >
+          <Text style={styles.btnText}>{busy ? 'Creating…' : 'Start'}</Text>
         </Pressable>
         <Pressable style={styles.btn} onPress={() => navigation.goBack()}>
           <Text style={styles.btnText}>Cancel</Text>

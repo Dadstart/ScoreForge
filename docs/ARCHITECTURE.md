@@ -9,9 +9,12 @@ An earlier Avalonia/.NET prototype was removed from the tree; see git history if
 ```
 mobile/
 ├── App.tsx                    # navigation + deep linking
+├── firestore.rules            # Cloud Firestore security rules
+├── firebase.json              # Hosting + Firestore config
 ├── src/
+│   ├── firebase/              # app init + anonymous auth
 │   ├── domain/                # models, templates, scoreCalculator, localPlayer
-│   ├── storage/               # AsyncStorage game + displayName stores
+│   ├── storage/               # Firestore game store + known codes + displayName
 │   ├── linking/               # share URL create/parse for QR + deep links
 │   ├── navigation/            # types + React Navigation linking config
 │   ├── screens/               # Home, Setup, Join, Board, Cribbage, Settings
@@ -24,72 +27,75 @@ React Navigation native stack with `expo-linking` prefixes (`scoreforge://` and 
 
 | Screen | Role |
 | --- | --- |
-| **Home** | List / resume / delete games; compact share code + QR |
-| **Setup** | Template, options, **host display name only** (solo start) |
-| **Join** | Display name + share code (prefilled from QR / deep link) |
-| **Board** | Free Play, Rounds, Rummy, Golf |
-| **Cribbage** | Pegboard + own-peg scoring + win fireworks |
-| **Settings** | Notes / future theme options |
+| **Home** | List known share codes; resume / delete |
+| **Setup** | Template + host name → `createAndSaveGame` in Firestore |
+| **Join** | Display name + code → fetch cloud game, add player |
+| **Board** | Live subscribe; Free Play / Rounds / Rummy / Golf |
+| **Cribbage** | Live subscribe; own-peg scoring + fireworks |
+| **Settings** | Notes / future theme |
 
-Deep link into join: path `join` with query `code` (e.g. `scoreforge://join?code=K7M2QX`). QR codes encode `Linking.createURL('join', { queryParams: { code } })`.
+Deep link: `join?code=XXXXXX`. QR encodes `Linking.createURL('join', { queryParams: { code } })`.
 
-### Domain
-
-Event-sourced `Game` + append-only `ScoreEvent`s, template catalog, pure `calculate()` for standings and completion.
-
-| Field / concept | Notes |
-| --- | --- |
-| `shareCode` | 6-char unambiguous code on every game |
-| Display name | Stored in AsyncStorage; identifies “you” on this device |
-| Own-score only | UI only allows scoring / undoing for the local player (name match) |
-
-| Template | Mode | Win |
-| --- | --- | --- |
-| Free Play | Instant | Highest |
-| Rounds | Rounds (per-player “Add my score”) | Highest |
-| Rummy | Rounds | First to target (500) |
-| Golf | Rounds | Lowest after N holes |
-| Cribbage | Instant pegging | First to 121 |
-
-All templates: `minPlayers: 1`. Extra players join via share code.
-
-### Sharing flow
+### Cloud sync model
 
 ```mermaid
 sequenceDiagram
   participant Host
-  participant Store as AsyncStorage
+  participant FS as CloudFirestore
   participant Guest
-  Host->>Store: CreateGame shareCode plus host player
+  Host->>FS: create games/SHARECODE
   Host-->>Guest: Code or QR
-  Guest->>Guest: Join screen name plus code
-  Guest->>Store: joinGameByShareCode add player
-  Note over Host,Guest: Scoring restricted to local display name
+  Guest->>FS: get games/SHARECODE add player
+  Host->>FS: append events/eventId
+  FS-->>Guest: onSnapshot
+  Guest->>FS: append events/eventId
+  FS-->>Host: onSnapshot
 ```
 
-### Persistence
-
-| Key | Contents |
+| Path | Contents |
 | --- | --- |
-| `scoreforge.games` | Game list (incl. `shareCode`, players, events) |
-| `scoreforge.displayName` | Last used display name |
+| `games/{shareCode}` | Metadata: name, templateId, players, status, targets, timestamps |
+| `games/{shareCode}/events/{eventId}` | Append-only score events |
+| AsyncStorage `scoreforge.knownShareCodes` | Codes this device created or joined |
+| AsyncStorage `scoreforge.displayName` | Local player name for own-score UI |
 
-Works in Expo Go, native builds, and web. Join currently resolves codes against **local** storage only; cloud sync (e.g. Firestore) is planned next.
+- Document id **is** the share code (easy join via `get`).
+- **List** queries on `games` are denied in rules (cannot enumerate all games).
+- Auth: silent **anonymous** Firebase Auth (enable in console).
+- Board/Cribbage use `subscribeGame` for realtime updates.
+
+### Domain
+
+Event-sourced `Game` + append-only `ScoreEvent`s, template catalog, pure `calculate()`.
+
+Own-score only: UI matches `displayName` to a player; only that player's scores can be changed/undone.
+
+All templates start with `minPlayers: 1`; others join via code.
+
+| Template | Mode | Win |
+| --- | --- | --- |
+| Free Play | Instant | Highest |
+| Rounds | Per-player round scores | Highest |
+| Rummy | Per-player round scores | First to target (500) |
+| Golf | Per-player hole scores | Lowest after N holes |
+| Cribbage | Instant pegging | First to 121 |
 
 ### Platforms
 
 | Target | How |
 | --- | --- |
-| Web browser (dev) | `npm run web` in `mobile/` |
-| Web (public) | `npm run deploy:web` → Firebase Hosting (`mobile/firebase.json`) |
+| Web (dev) | `npm run web` |
+| Web (public) | `npm run deploy:web` / `deploy:all` |
 | Android / iOS (dev) | Expo Go + `npm start` |
 | Stores | EAS Build later |
 
-## Out of scope (current tree)
+### Deploy checklist
 
-- Google / Microsoft / Entra OAuth
-- Realtime multi-device sync (codes work same-device until a sync layer lands)
+1. Firestore database created  
+2. Authentication → **Anonymous** enabled  
+3. `mobile/.env` filled with web app config  
+4. `npm run deploy:rules` then `npm run deploy:web`
 
 ## Legacy Avalonia notes
 
-The Avalonia solution (shared MVVM core, desktop file store, browser `localStorage`) lived in earlier commits and is no longer part of the working tree.
+The Avalonia solution lived in earlier commits and is no longer part of the working tree.

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -15,7 +15,7 @@ import { createScoreEvent, type Game } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
 import { loadDisplayName } from '../storage/displayNameStore';
-import { loadGames, saveGame } from '../storage/gameStore';
+import { saveGame, subscribeGame } from '../storage/gameStore';
 import { colors } from '../theme';
 import type { RootStackParamList } from '../navigation/types';
 
@@ -29,15 +29,18 @@ export function BoardScreen({ navigation, route }: Props) {
   const [enteringScore, setEnteringScore] = useState(false);
   const [myRoundScore, setMyRoundScore] = useState('0');
 
-  const load = useCallback(async () => {
-    const [games, name] = await Promise.all([loadGames(), loadDisplayName()]);
-    setDisplayName(name);
-    setGame(games.find((g) => g.id === gameId) ?? null);
-  }, [gameId]);
+  useEffect(() => {
+    void loadDisplayName().then(setDisplayName);
+  }, []);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    const unsub = subscribeGame(
+      gameId,
+      (next) => setGame(next),
+      (err) => setError(err.message),
+    );
+    return unsub;
+  }, [gameId]);
 
   const template = game ? getTemplate(game.templateId) : undefined;
   const snapshot = useMemo(

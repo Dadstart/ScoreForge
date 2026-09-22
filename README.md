@@ -28,7 +28,20 @@ Do not run both at once — that causes “port in use.”
 
 Deep link: `scoreforge://join?code=XXXXXX` (Expo Go uses the Expo URL equivalent).
 
-Games autosave in AsyncStorage on this device/browser. **Cross-device sync is not wired yet** — join currently finds games stored locally. Cribbage shows fireworks when someone wins.
+Games sync through **Cloud Firestore** using the share code as the game id. Your device remembers codes you create or join. Each player only scores their own points. Cribbage shows fireworks when someone wins.
+
+## Firebase (cloud sync)
+
+1. Create a Firebase project with **Cloud Firestore** and **Anonymous** Authentication enabled.
+2. Copy web config into [`mobile/.env`](mobile/.env) (see [`.env.example`](mobile/.env.example)).
+3. Deploy rules from `mobile/`:
+
+```bash
+cd mobile
+npm run deploy:rules
+```
+
+4. Deploy the web app: `npm run deploy:web` (or `npm run deploy:all` for hosting + rules).
 
 ## Game templates
 

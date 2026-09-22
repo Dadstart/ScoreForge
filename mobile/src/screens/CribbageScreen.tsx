@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -15,7 +15,7 @@ import { createScoreEvent, type Game } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
 import { loadDisplayName } from '../storage/displayNameStore';
-import { loadGames, saveGame } from '../storage/gameStore';
+import { saveGame, subscribeGame } from '../storage/gameStore';
 import { colors } from '../theme';
 import type { RootStackParamList } from '../navigation/types';
 
@@ -32,20 +32,31 @@ export function CribbageScreen({ navigation, route }: Props) {
   const [showCelebration, setShowCelebration] = useState(false);
   const wasComplete = useRef(false);
 
-  const load = useCallback(async () => {
-    const [games, name] = await Promise.all([loadGames(), loadDisplayName()]);
-    setDisplayName(name);
-    const found = games.find((g) => g.id === gameId) ?? null;
-    setGame(found);
-    if (found) {
-      const tmpl = getTemplate(found.templateId);
-      if (tmpl) wasComplete.current = calculate(found, tmpl).isComplete;
-    }
-  }, [gameId]);
+  useEffect(() => {
+    void loadDisplayName().then(setDisplayName);
+  }, []);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    const unsub = subscribeGame(
+      gameId,
+      (found) => {
+        setGame(found);
+        if (found) {
+          const tmpl = getTemplate(found.templateId);
+          if (tmpl) {
+            const complete = calculate(found, tmpl).isComplete;
+            if (complete && !wasComplete.current) {
+              const snap = calculate(found, tmpl);
+              if (snap.winnerName) setShowCelebration(true);
+            }
+            wasComplete.current = complete;
+          }
+        }
+      },
+      (err) => setError(err.message),
+    );
+    return unsub;
+  }, [gameId]);
 
   const template = game ? getTemplate(game.templateId) : undefined;
   const target = game?.targetScore ?? template?.defaultTargetScore ?? 121;
@@ -85,7 +96,6 @@ export function CribbageScreen({ navigation, route }: Props) {
 
   const persist = async (next: Game, celebrate: boolean) => {
     await saveGame(next);
-    setGame(next);
     if (celebrate) setShowCelebration(true);
   };
 
