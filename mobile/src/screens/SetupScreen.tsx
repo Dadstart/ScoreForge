@@ -4,15 +4,15 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { Button, Field, Screen } from '../components/ui';
 import { createPlayer } from '../domain/models';
 import { getTemplate, templates } from '../domain/templates';
 import { loadDisplayName, saveDisplayName } from '../storage/displayNameStore';
 import { createAndSaveGame } from '../storage/gameStore';
-import { colors } from '../theme';
+import { colors, radii, space, typography } from '../theme';
 import type { RootStackParamList } from '../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Setup'>;
@@ -79,121 +79,107 @@ export function SetupScreen({ navigation }: Props) {
   };
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>New Game</Text>
+    <Screen>
+      <ScrollView contentContainerStyle={styles.content}>
+        <Text style={typography.title}>New Game</Text>
+        <Text style={[typography.subtitle, { marginBottom: 8 }]}>
+          Pick a template, name yourself, then share the code so others can join.
+        </Text>
 
-      <Text style={styles.label}>Template</Text>
-      {templates.map((t) => (
-        <Pressable
-          key={t.id}
-          style={[styles.template, templateId === t.id && styles.templateActive]}
-          onPress={() => selectTemplate(t.id)}
-        >
-          <Text style={styles.cardTitle}>{t.name}</Text>
-          <Text style={styles.muted}>{t.description}</Text>
-        </Pressable>
-      ))}
+        <Text style={[typography.section, styles.section]}>Template</Text>
+        {templates.map((t) => {
+          const active = templateId === t.id;
+          return (
+            <Pressable
+              key={t.id}
+              onPress={() => selectTemplate(t.id)}
+              style={[styles.template, active && styles.templateActive]}
+            >
+              <Text style={[styles.templateName, active && { color: colors.accent }]}>
+                {t.name}
+              </Text>
+              <Text style={typography.body}>{t.description}</Text>
+            </Pressable>
+          );
+        })}
 
-      <Text style={styles.label}>Game name</Text>
-      <TextInput style={styles.input} value={name} onChangeText={setName} placeholderTextColor={colors.muted} />
+        <Text style={[typography.section, styles.section]}>Game name</Text>
+        <Field value={name} onChangeText={setName} />
 
-      {showTarget ? (
-        <>
-          <Text style={styles.label}>Target score</Text>
-          <TextInput
-            style={styles.input}
-            value={targetScore}
-            onChangeText={setTargetScore}
-            keyboardType="number-pad"
-            placeholderTextColor={colors.muted}
+        {showTarget ? (
+          <>
+            <Text style={[typography.section, styles.section]}>Target score</Text>
+            <Field
+              value={targetScore}
+              onChangeText={setTargetScore}
+              keyboardType="number-pad"
+            />
+          </>
+        ) : null}
+
+        {showMaxRounds ? (
+          <>
+            <Text style={[typography.section, styles.section]}>Holes / max rounds</Text>
+            <Field
+              value={maxRounds}
+              onChangeText={setMaxRounds}
+              keyboardType="number-pad"
+            />
+          </>
+        ) : null}
+
+        <Text style={[typography.section, styles.section]}>Your name</Text>
+        <Text style={[typography.body, { marginBottom: 8 }]}>
+          Start alone. Share the game code so others can join.
+        </Text>
+        <Field
+          value={hostName}
+          onChangeText={(text) => {
+            setHostName(text);
+            setValidation(null);
+          }}
+          placeholder="Your name"
+          maxLength={40}
+        />
+
+        {validation ? <Text style={styles.error}>{validation}</Text> : null}
+
+        <View style={styles.row}>
+          <Button
+            label={busy ? 'Creating…' : 'Start'}
+            variant="primary"
+            busy={busy}
+            onPress={() => void start()}
+            style={{ flex: 1 }}
           />
-        </>
-      ) : null}
-
-      {showMaxRounds ? (
-        <>
-          <Text style={styles.label}>Holes / max rounds</Text>
-          <TextInput
-            style={styles.input}
-            value={maxRounds}
-            onChangeText={setMaxRounds}
-            keyboardType="number-pad"
-            placeholderTextColor={colors.muted}
-          />
-        </>
-      ) : null}
-
-      <Text style={styles.label}>Your name</Text>
-      <Text style={styles.hint}>
-        Start alone. Share the game code so others can join.
-      </Text>
-      <TextInput
-        style={styles.input}
-        value={hostName}
-        onChangeText={(text) => {
-          setHostName(text);
-          setValidation(null);
-        }}
-        placeholder="Your name"
-        placeholderTextColor={colors.muted}
-        maxLength={40}
-      />
-
-      {validation ? <Text style={styles.error}>{validation}</Text> : null}
-
-      <View style={styles.row}>
-        <Pressable
-          style={[styles.btn, styles.accent]}
-          disabled={busy}
-          onPress={() => void start()}
-        >
-          <Text style={styles.btnText}>{busy ? 'Creating…' : 'Start'}</Text>
-        </Pressable>
-        <Pressable style={styles.btn} onPress={() => navigation.goBack()}>
-          <Text style={styles.btnText}>Cancel</Text>
-        </Pressable>
-      </View>
-    </ScrollView>
+          <Button label="Cancel" variant="ghost" onPress={() => navigation.goBack()} />
+        </View>
+      </ScrollView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: 16, paddingBottom: 48, gap: 8 },
-  title: { color: colors.text, fontSize: 28, fontWeight: '700', marginBottom: 8 },
-  label: { color: colors.text, fontWeight: '700', marginTop: 8 },
-  muted: { color: colors.muted },
-  hint: { color: colors.muted, marginBottom: 4, lineHeight: 20 },
+  content: { padding: space.lg, paddingBottom: 48, gap: 8 },
+  section: { marginTop: 14, marginBottom: 6 },
   template: {
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
-    padding: 12,
-    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    padding: space.lg,
     marginBottom: 8,
+    gap: 6,
   },
-  templateActive: { borderColor: colors.accent },
-  cardTitle: { color: colors.text, fontWeight: '700', fontSize: 16 },
-  input: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    color: colors.text,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    minHeight: 44,
+  templateActive: {
+    borderColor: colors.accent,
+    backgroundColor: colors.accentSoft,
   },
-  row: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  btn: {
-    backgroundColor: colors.surfaceAlt,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 8,
-    minHeight: 44,
-    justifyContent: 'center',
+  templateName: {
+    ...typography.label,
+    fontSize: 17,
+    fontWeight: '700',
   },
-  accent: { backgroundColor: colors.accent },
-  btnText: { color: colors.text, fontWeight: '600' },
-  error: { color: colors.danger },
+  row: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  error: { color: colors.danger, marginTop: 8 },
 });

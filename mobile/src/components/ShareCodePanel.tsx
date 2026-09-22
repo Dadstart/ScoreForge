@@ -8,14 +8,15 @@ import {
 } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import Svg, { Circle, Path } from 'react-native-svg';
+import { Button } from './ui';
 import { createJoinShareUrl } from '../linking/shareLinks';
-import { colors } from '../theme';
+import { colors, radii, typography } from '../theme';
 
 type Props = {
   shareCode: string;
 };
 
-function ShareIcon({ size = 22, color = colors.text }: { size?: number; color?: string }) {
+function ShareIcon({ size = 20, color = colors.accent }: { size?: number; color?: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Circle cx="18" cy="5" r="3" stroke={color} strokeWidth="2" />
@@ -33,7 +34,7 @@ export function ShareCodePanel({ shareCode }: Props) {
   return (
     <>
       <Pressable
-        style={styles.iconBtn}
+        style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.85 }]}
         onPress={() => setOpen(true)}
         accessibilityRole="button"
         accessibilityLabel="Share game code"
@@ -49,13 +50,14 @@ export function ShareCodePanel({ shareCode }: Props) {
       >
         <View style={styles.backdrop}>
           <Pressable
-            style={StyleSheet.absoluteFillObject}
+            style={StyleSheet.absoluteFill}
             onPress={() => setOpen(false)}
             accessibilityLabel="Dismiss share dialog"
           />
           <View style={styles.sheet}>
             <Text style={styles.sheetTitle}>Share game</Text>
-            <Text style={styles.code}>{shareCode}</Text>
+            <Text style={typography.subtitle}>Friends scan the QR or enter this code.</Text>
+            <Text style={typography.code}>{shareCode}</Text>
             <View style={styles.qrFrame}>
               <QRCode
                 value={url}
@@ -64,10 +66,7 @@ export function ShareCodePanel({ shareCode }: Props) {
                 color={colors.bg}
               />
             </View>
-            <Text style={styles.hint}>Scan QR to open Join with this code</Text>
-            <Pressable style={styles.closeBtn} onPress={() => setOpen(false)}>
-              <Text style={styles.closeText}>Close</Text>
-            </Pressable>
+            <Button label="Close" onPress={() => setOpen(false)} style={{ alignSelf: 'stretch' }} />
           </View>
         </View>
       </Modal>
@@ -79,14 +78,16 @@ const styles = StyleSheet.create({
   iconBtn: {
     width: 44,
     height: 44,
-    borderRadius: 8,
-    backgroundColor: colors.surfaceAlt,
+    borderRadius: radii.md,
+    backgroundColor: colors.accentSoft,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 168, 75, 0.4)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.65)',
+    backgroundColor: colors.overlay,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
@@ -95,46 +96,21 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 340,
     backgroundColor: colors.surface,
-    borderRadius: 14,
+    borderRadius: radii.xl,
     borderWidth: 1,
-    borderColor: colors.border,
-    padding: 20,
+    borderColor: colors.borderStrong,
+    padding: 22,
     alignItems: 'center',
     gap: 12,
   },
   sheetTitle: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '700',
+    ...typography.title,
+    fontSize: 22,
     alignSelf: 'stretch',
-  },
-  code: {
-    color: colors.accent,
-    fontSize: 32,
-    fontWeight: '800',
-    letterSpacing: 4,
   },
   qrFrame: {
-    padding: 12,
+    padding: 14,
     backgroundColor: colors.text,
-    borderRadius: 10,
+    borderRadius: radii.md,
   },
-  hint: {
-    color: colors.muted,
-    fontSize: 13,
-    lineHeight: 18,
-    textAlign: 'center',
-  },
-  closeBtn: {
-    marginTop: 4,
-    backgroundColor: colors.surfaceAlt,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
-    minHeight: 44,
-    justifyContent: 'center',
-    alignSelf: 'stretch',
-    alignItems: 'center',
-  },
-  closeText: { color: colors.text, fontWeight: '600' },
 });

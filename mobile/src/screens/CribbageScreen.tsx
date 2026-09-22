@@ -6,17 +6,19 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CribbageBoard, type CribbagePegPlayer } from '../components/CribbageBoard';
 import { FireworksOverlay } from '../components/FireworksOverlay';
 import { ShareCodePanel } from '../components/ShareCodePanel';
+import { Badge, Button, Screen } from '../components/ui';
 import { findLocalPlayerId } from '../domain/localPlayer';
 import { createScoreEvent, type Game } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
 import { loadDisplayName } from '../storage/displayNameStore';
 import { saveGame, subscribeGame } from '../storage/gameStore';
-import { colors } from '../theme';
+import { colors, radii, space, typography } from '../theme';
 import type { RootStackParamList } from '../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Cribbage'>;
@@ -25,6 +27,7 @@ const PEG_COLORS = ['#ece8dc', '#c4302b', '#2e6eb4'];
 const QUICK = [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 15, 16];
 
 export function CribbageScreen({ navigation, route }: Props) {
+  const insets = useSafeAreaInsets();
   const { gameId } = route.params;
   const [game, setGame] = useState<Game | null>(null);
   const [displayName, setDisplayName] = useState('');
@@ -152,9 +155,11 @@ export function CribbageScreen({ navigation, route }: Props) {
 
   if (!game || !template || !snapshot) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator color={colors.accent} />
-      </View>
+      <Screen>
+        <View style={styles.center}>
+          <ActivityIndicator color={colors.accent} />
+        </View>
+      </Screen>
     );
   }
 
@@ -168,129 +173,136 @@ export function CribbageScreen({ navigation, route }: Props) {
       : `Race to ${target} · Set your display name (Join) to match a player before pegging`;
 
   return (
-    <View style={styles.screen}>
-      <View style={styles.header}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.title}>{game.name}</Text>
-          <Text style={styles.muted}>Cribbage</Text>
+    <Screen>
+      <View
+        style={[
+          styles.screen,
+          {
+            paddingTop: Math.max(insets.top, 10),
+            paddingBottom: Math.max(insets.bottom, 10),
+          },
+        ]}
+      >
+        <View style={styles.header}>
+          <View style={{ flex: 1, gap: 4 }}>
+            <Text style={typography.title}>{game.name}</Text>
+            <Badge label="Cribbage" tone="accent" />
+          </View>
+          <ShareCodePanel shareCode={game.shareCode} />
+          <Button label="Home" variant="ghost" onPress={() => navigation.navigate('Home')} />
         </View>
-        <ShareCodePanel shareCode={game.shareCode} />
-        <Pressable style={styles.btn} onPress={() => navigation.navigate('Home')}>
-          <Text style={styles.btnText}>Home</Text>
-        </Pressable>
-      </View>
 
-      <View style={styles.banner}>
-        <Text style={styles.bannerText}>{banner}</Text>
-      </View>
+        <View style={styles.banner}>
+          <Text style={styles.bannerText}>{banner}</Text>
+        </View>
 
-      <View style={styles.row}>
-        <Pressable style={styles.btn} onPress={() => void undo()} disabled={!localPlayerId}>
-          <Text style={styles.btnText}>Undo peg</Text>
-        </Pressable>
-        <Pressable style={styles.btn} onPress={() => void reset()}>
-          <Text style={styles.btnText}>Reset board</Text>
-        </Pressable>
-      </View>
-
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-
-      <View style={styles.boardWrap}>
-        <CribbageBoard players={pegPlayers} targetScore={target} />
-      </View>
-
-      <View style={styles.controls}>
-        <Text style={styles.label}>Players</Text>
         <View style={styles.row}>
-          {pegPlayers.map((p) => (
-            <View
-              key={p.id}
-              style={[styles.playerChip, p.id === localPlayerId && styles.accent]}
-            >
-              <View style={styles.pegger}>
-                <View style={[styles.dot, { backgroundColor: p.color }]} />
-                <Text style={styles.btnText}>
-                  {p.name} ({p.total})
-                  {p.id === localPlayerId ? ' · you' : ''}
-                </Text>
+          <Button label="Undo peg" onPress={() => void undo()} disabled={!localPlayerId} />
+          <Button label="Reset board" onPress={() => void reset()} />
+        </View>
+
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        <View style={styles.boardWrap}>
+          <CribbageBoard players={pegPlayers} targetScore={target} />
+        </View>
+
+        <View style={styles.controls}>
+          <Text style={typography.section}>Players</Text>
+          <View style={styles.row}>
+            {pegPlayers.map((p) => (
+              <View
+                key={p.id}
+                style={[styles.playerChip, p.id === localPlayerId && styles.playerChipYou]}
+              >
+                <View style={styles.pegger}>
+                  <View style={[styles.dot, { backgroundColor: p.color }]} />
+                  <Text style={typography.label}>
+                    {p.name} ({p.total})
+                    {p.id === localPlayerId ? ' · you' : ''}
+                  </Text>
+                </View>
               </View>
-            </View>
-          ))}
+            ))}
+          </View>
+
+          <Text style={[typography.section, { marginTop: 4 }]}>Peg your points</Text>
+          <View style={styles.row}>
+            {QUICK.map((n) => (
+              <Pressable
+                key={n}
+                style={[styles.pegBtn, !canPeg && styles.disabled]}
+                onPress={() => void peg(n)}
+                disabled={!canPeg}
+              >
+                <Text style={styles.pegBtnText}>{n}</Text>
+              </Pressable>
+            ))}
+          </View>
         </View>
 
-        <Text style={styles.label}>Peg your points</Text>
-        <View style={styles.row}>
-          {QUICK.map((n) => (
-            <Pressable
-              key={n}
-              style={[styles.pegBtn, styles.accent, !canPeg && styles.disabled]}
-              onPress={() => void peg(n)}
-              disabled={!canPeg}
-            >
-              <Text style={styles.btnText}>{n}</Text>
-            </Pressable>
-          ))}
-        </View>
+        {showCelebration ? (
+          <FireworksOverlay
+            winnerName={snapshot.winnerName}
+            onDismiss={() => setShowCelebration(false)}
+          />
+        ) : null}
       </View>
-
-      {showCelebration ? (
-        <FireworksOverlay
-          winnerName={snapshot.winnerName}
-          onDismiss={() => setShowCelebration(false)}
-        />
-      ) : null}
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg, padding: 12, gap: 8 },
-  center: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
+  screen: { flex: 1, paddingHorizontal: space.md, gap: 8 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  title: { color: colors.text, fontSize: 26, fontWeight: '700' },
-  muted: { color: colors.muted },
   banner: {
-    backgroundColor: colors.surfaceAlt,
+    backgroundColor: colors.accentSoft,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 168, 75, 0.35)',
     padding: 12,
-    borderRadius: 8,
+    borderRadius: radii.md,
   },
-  bannerText: { color: colors.text, fontWeight: '700', fontSize: 16 },
+  bannerText: { ...typography.label, fontSize: 15 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  btn: {
-    backgroundColor: colors.surfaceAlt,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 8,
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  accent: { backgroundColor: colors.accent },
-  disabled: { opacity: 0.4 },
-  btnText: { color: colors.text, fontWeight: '600' },
   error: { color: colors.danger },
   boardWrap: { flex: 1, minHeight: 180 },
   controls: {
     backgroundColor: colors.surface,
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: space.md,
     gap: 8,
   },
-  label: { color: colors.text, fontWeight: '700' },
   playerChip: {
     backgroundColor: colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: colors.border,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: radii.md,
     minHeight: 44,
     justifyContent: 'center',
+  },
+  playerChipYou: {
+    borderColor: colors.accent,
+    backgroundColor: colors.accentSoft,
   },
   pegger: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   dot: { width: 14, height: 14, borderRadius: 7 },
   pegBtn: {
     width: 48,
-    height: 40,
-    borderRadius: 8,
+    height: 42,
+    borderRadius: radii.md,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: colors.accent,
   },
+  pegBtnText: {
+    color: colors.accentText,
+    fontWeight: '800',
+    fontSize: 15,
+  },
+  disabled: { opacity: 0.35 },
 });

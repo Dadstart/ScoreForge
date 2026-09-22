@@ -1,23 +1,25 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ShareCodePanel } from '../components/ShareCodePanel';
+import { Badge, Button, Card, Screen } from '../components/ui';
 import { getTemplate } from '../domain/templates';
 import type { Game } from '../domain/models';
 import { deleteGame, loadGames } from '../storage/gameStore';
-import { colors } from '../theme';
+import { colors, space, typography } from '../theme';
 import type { RootStackParamList } from '../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
 export function HomeScreen({ navigation }: Props) {
+  const insets = useSafeAreaInsets();
   const [games, setGames] = useState<Game[]>([]);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -56,94 +58,113 @@ export function HomeScreen({ navigation }: Props) {
   };
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Games</Text>
-      <Text style={styles.subtitle}>Resume a saved game or start something new.</Text>
-
-      <View style={styles.row}>
-        <Pressable style={[styles.btn, styles.accent]} onPress={() => navigation.navigate('Setup')}>
-          <Text style={styles.btnText}>New Game</Text>
-        </Pressable>
-        <Pressable style={styles.btn} onPress={() => navigation.navigate('Join')}>
-          <Text style={styles.btnText}>Join with code</Text>
-        </Pressable>
-        <Pressable style={styles.btn} onPress={() => void refresh()}>
-          <Text style={styles.btnText}>Refresh</Text>
-        </Pressable>
-        <Pressable style={styles.btn} onPress={() => navigation.navigate('Settings')}>
-          <Text style={styles.btnText}>Settings</Text>
-        </Pressable>
-      </View>
-
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      {busy ? <ActivityIndicator color={colors.accent} style={{ marginTop: 24 }} /> : null}
-
-      {!busy &&
-        games.map((game) => {
-          const templateName = getTemplate(game.templateId)?.name ?? game.templateId;
-          return (
-            <View key={game.id} style={styles.card}>
-              <View style={styles.cardTop}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.cardTitle}>{game.name || 'Untitled game'}</Text>
-                  <Text style={styles.muted}>
-                    {templateName} · {game.status === 'Completed' ? 'Completed' : 'In progress'}
-                  </Text>
-                  <Text style={styles.muted}>
-                    Updated {new Date(game.updatedAt).toLocaleString()}
-                  </Text>
-                </View>
-                <ShareCodePanel shareCode={game.shareCode} />
-              </View>
-              <View style={styles.cardActions}>
-                <Pressable style={[styles.btn, styles.accent]} onPress={() => openGame(game)}>
-                  <Text style={styles.btnText}>Resume</Text>
-                </Pressable>
-                <Pressable style={styles.btn} onPress={() => void onDelete(game.id)}>
-                  <Text style={styles.btnText}>Delete</Text>
-                </Pressable>
-              </View>
-            </View>
-          );
-        })}
-
-      {!busy && games.length === 0 ? (
-        <Text style={[styles.muted, { marginTop: 32, textAlign: 'center' }]}>
-          No saved games yet. Tap New Game to begin.
+    <Screen>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: Math.max(insets.top, 16) + 8, paddingBottom: insets.bottom + 40 },
+        ]}
+      >
+        <Text style={typography.brand}>ScoreForge</Text>
+        <Text style={[typography.subtitle, styles.lead]}>
+          Keep score together — share a code, everyone tracks their own points.
         </Text>
-      ) : null}
-    </ScrollView>
+
+        <View style={styles.actions}>
+          <Button
+            label="New Game"
+            variant="primary"
+            onPress={() => navigation.navigate('Setup')}
+            style={styles.actionGrow}
+          />
+          <Button
+            label="Join with code"
+            onPress={() => navigation.navigate('Join')}
+            style={styles.actionGrow}
+          />
+        </View>
+        <View style={styles.actions}>
+          <Button label="Refresh" variant="ghost" onPress={() => void refresh()} />
+          <Button
+            label="Settings"
+            variant="ghost"
+            onPress={() => navigation.navigate('Settings')}
+          />
+        </View>
+
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {busy ? <ActivityIndicator color={colors.accent} style={{ marginTop: 28 }} /> : null}
+
+        {!busy && games.length > 0 ? (
+          <Text style={[typography.section, { marginTop: 20, marginBottom: 10 }]}>
+            Your games
+          </Text>
+        ) : null}
+
+        {!busy &&
+          games.map((game) => {
+            const templateName = getTemplate(game.templateId)?.name ?? game.templateId;
+            const done = game.status === 'Completed';
+            return (
+              <Card key={game.id} style={styles.gameCard}>
+                <View style={styles.cardTop}>
+                  <View style={{ flex: 1, gap: 6 }}>
+                    <Text style={styles.cardTitle}>{game.name || 'Untitled game'}</Text>
+                    <View style={styles.metaRow}>
+                      <Badge label={templateName} tone="accent" />
+                      <Badge
+                        label={done ? 'Completed' : 'In progress'}
+                        tone={done ? 'success' : 'neutral'}
+                      />
+                    </View>
+                    <Text style={styles.muted}>
+                      Updated {new Date(game.updatedAt).toLocaleString()}
+                    </Text>
+                  </View>
+                  <ShareCodePanel shareCode={game.shareCode} />
+                </View>
+                <View style={styles.cardActions}>
+                  <Button
+                    label="Resume"
+                    variant="primary"
+                    onPress={() => openGame(game)}
+                    style={{ flex: 1 }}
+                  />
+                  <Button
+                    label="Delete"
+                    variant="danger"
+                    onPress={() => void onDelete(game.id)}
+                  />
+                </View>
+              </Card>
+            );
+          })}
+
+        {!busy && games.length === 0 ? (
+          <Card style={styles.empty}>
+            <Text style={styles.emptyTitle}>No games yet</Text>
+            <Text style={typography.body}>
+              Start a new game, then share the code or QR so friends can join from any device.
+            </Text>
+          </Card>
+        ) : null}
+      </ScrollView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: 16, paddingBottom: 40 },
-  title: { color: colors.text, fontSize: 28, fontWeight: '700' },
-  subtitle: { color: colors.muted, marginTop: 4, marginBottom: 16 },
-  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
-  btn: {
-    backgroundColor: colors.surfaceAlt,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 8,
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  accent: { backgroundColor: colors.accent },
-  btnText: { color: colors.text, fontWeight: '600' },
-  error: { color: colors.danger, marginBottom: 8 },
-  card: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 10,
-    backgroundColor: colors.surface,
-    gap: 10,
-  },
+  content: { paddingHorizontal: space.lg, gap: 4 },
+  lead: { marginTop: 6, marginBottom: 20, maxWidth: 420 },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 8 },
+  actionGrow: { flexGrow: 1, minWidth: 140 },
+  error: { color: colors.danger, marginVertical: 8 },
+  gameCard: { marginBottom: 12 },
   cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  cardTitle: { color: colors.text, fontSize: 18, fontWeight: '700' },
-  muted: { color: colors.muted, marginTop: 2 },
+  cardTitle: { ...typography.title, fontSize: 20 },
+  metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  muted: { color: colors.muted, fontSize: 13 },
   cardActions: { flexDirection: 'row', gap: 8 },
+  empty: { marginTop: 28, alignItems: 'flex-start' },
+  emptyTitle: { ...typography.title, fontSize: 22 },
 });

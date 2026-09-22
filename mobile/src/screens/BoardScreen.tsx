@@ -5,18 +5,18 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ShareCodePanel } from '../components/ShareCodePanel';
+import { Badge, Button, Field, Screen } from '../components/ui';
 import { findLocalPlayerId, nextRoundForPlayer } from '../domain/localPlayer';
 import { createScoreEvent, type Game } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
 import { loadDisplayName } from '../storage/displayNameStore';
 import { saveGame, subscribeGame } from '../storage/gameStore';
-import { colors } from '../theme';
+import { colors, radii, space, typography } from '../theme';
 import type { RootStackParamList } from '../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Board'>;
@@ -65,9 +65,11 @@ export function BoardScreen({ navigation, route }: Props) {
 
   if (!game || !template || !snapshot) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator color={colors.accent} />
-      </View>
+      <Screen>
+        <View style={styles.center}>
+          <ActivityIndicator color={colors.accent} />
+        </View>
+      </Screen>
     );
   }
 
@@ -152,106 +154,97 @@ export function BoardScreen({ navigation, route }: Props) {
             : `${localPlayer.name} · Highest wins`;
 
   return (
-    <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.header}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.title}>{game.name}</Text>
-            <Text style={styles.muted}>{template.name}</Text>
+    <Screen>
+      <View style={styles.screen}>
+        <ScrollView contentContainerStyle={styles.content}>
+          <View style={styles.header}>
+            <View style={{ flex: 1, gap: 4 }}>
+              <Text style={typography.title}>{game.name}</Text>
+              <Badge label={template.name} tone="accent" />
+            </View>
+            <ShareCodePanel shareCode={game.shareCode} />
+            <Button label="Home" variant="ghost" onPress={() => navigation.navigate('Home')} />
           </View>
-          <ShareCodePanel shareCode={game.shareCode} />
-          <Pressable style={styles.btn} onPress={() => navigation.navigate('Home')}>
-            <Text style={styles.btnText}>Home</Text>
-          </Pressable>
-        </View>
 
-        <View style={styles.banner}>
-          <Text style={styles.bannerText}>{banner}</Text>
-        </View>
+          <View style={styles.banner}>
+            <Text style={styles.bannerText}>{banner}</Text>
+          </View>
 
-        <View style={styles.row}>
-          <Pressable style={styles.btn} onPress={() => void undo()} disabled={!localPlayerId}>
-            <Text style={styles.btnText}>Undo</Text>
-          </Pressable>
-          <Pressable
-            style={styles.btn}
-            onPress={() =>
-              void applyGame((g) => {
-                g.events = [];
-                g.status = 'InProgress';
-                return g;
-              })
-            }
-          >
-            <Text style={styles.btnText}>Reset</Text>
-          </Pressable>
-          {!complete ? (
-            <Pressable
-              style={styles.btn}
+          <View style={styles.row}>
+            <Button label="Undo" onPress={() => void undo()} disabled={!localPlayerId} />
+            <Button
+              label="Reset"
               onPress={() =>
                 void applyGame((g) => {
-                  g.status = 'Completed';
+                  g.events = [];
+                  g.status = 'InProgress';
                   return g;
                 })
               }
-            >
-              <Text style={styles.btnText}>Mark complete</Text>
-            </Pressable>
-          ) : null}
-          {isRounds && !complete && localPlayerId ? (
-            <Pressable
-              style={[styles.btn, styles.accent]}
-              onPress={() => {
-                setMyRoundScore('0');
-                setEnteringScore(true);
-              }}
-            >
-              <Text style={styles.btnText}>Add my score</Text>
-            </Pressable>
-          ) : null}
-        </View>
-
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-
-        {isInstant ? (
-          <View style={styles.wrap}>
-            {snapshot.standings.map((s) => {
-              const isYou = s.playerId === localPlayerId;
-              return (
-                <View
-                  key={s.playerId}
-                  style={[styles.card, isYou ? styles.cardYou : styles.cardOther]}
-                >
-                  <Text style={styles.cardTitle}>
-                    {s.playerName}
-                    {isYou ? ' · you' : ''}
-                  </Text>
-                  <Text style={styles.score}>{s.total}</Text>
-                  {isYou && !complete ? (
-                    <View style={styles.row}>
-                      <Pressable
-                        style={styles.scoreBtn}
-                        onPress={() => void adjust(s.playerId, -1)}
-                      >
-                        <Text style={styles.scoreBtnText}>−</Text>
-                      </Pressable>
-                      <Pressable
-                        style={[styles.scoreBtn, styles.accent]}
-                        onPress={() => void adjust(s.playerId, 1)}
-                      >
-                        <Text style={styles.scoreBtnText}>+</Text>
-                      </Pressable>
-                    </View>
-                  ) : null}
-                  {s.isLeader ? <Text style={styles.muted}>Leader</Text> : null}
-                  {s.isWinner ? <Text style={styles.muted}>Winner</Text> : null}
-                </View>
-              );
-            })}
+            />
+            {!complete ? (
+              <Button
+                label="Mark complete"
+                onPress={() =>
+                  void applyGame((g) => {
+                    g.status = 'Completed';
+                    return g;
+                  })
+                }
+              />
+            ) : null}
+            {isRounds && !complete && localPlayerId ? (
+              <Button
+                label="Add my score"
+                variant="primary"
+                onPress={() => {
+                  setMyRoundScore('0');
+                  setEnteringScore(true);
+                }}
+              />
+            ) : null}
           </View>
-        ) : (
-          <View>
-            <ScrollView horizontal>
+
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+
+          {isInstant ? (
+            <View style={styles.wrap}>
+              {snapshot.standings.map((s) => {
+                const isYou = s.playerId === localPlayerId;
+                return (
+                  <View
+                    key={s.playerId}
+                    style={[styles.scoreCard, isYou ? styles.scoreCardYou : styles.scoreCardOther]}
+                  >
+                    <Text style={styles.cardTitle}>
+                      {s.playerName}
+                      {isYou ? ' · you' : ''}
+                    </Text>
+                    <Text style={typography.score}>{s.total}</Text>
+                    {isYou && !complete ? (
+                      <View style={styles.row}>
+                        <Pressable
+                          style={styles.scoreBtn}
+                          onPress={() => void adjust(s.playerId, -1)}
+                        >
+                          <Text style={styles.scoreBtnText}>−</Text>
+                        </Pressable>
+                        <Pressable
+                          style={[styles.scoreBtn, styles.scoreBtnPlus]}
+                          onPress={() => void adjust(s.playerId, 1)}
+                        >
+                          <Text style={[styles.scoreBtnText, { color: colors.accentText }]}>+</Text>
+                        </Pressable>
+                      </View>
+                    ) : null}
+                    {s.isLeader ? <Badge label="Leader" tone="accent" /> : null}
+                    {s.isWinner ? <Badge label="Winner" tone="success" /> : null}
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               {snapshot.standings.map((s) => (
                 <View
                   key={s.playerId}
@@ -264,122 +257,124 @@ export function BoardScreen({ navigation, route }: Props) {
                     {s.playerName}
                     {s.playerId === localPlayerId ? ' · you' : ''}
                   </Text>
-                  <Text style={styles.bannerText}>Total: {s.total}</Text>
-                  {s.isWinner ? <Text style={styles.muted}>Winner</Text> : null}
+                  <Text style={styles.chipTotal}>{s.total}</Text>
+                  {s.isWinner ? <Badge label="Winner" tone="success" /> : null}
                 </View>
               ))}
             </ScrollView>
-          </View>
-        )}
-      </ScrollView>
+          )}
+        </ScrollView>
 
-      {enteringScore && localPlayer ? (
-        <View style={styles.roundPanel}>
-          <Text style={styles.cardTitle}>
-            Your score (round {nextRoundForPlayer(game, localPlayer.id)})
-          </Text>
-          <View style={styles.playerRow}>
-            <Text style={[styles.btnText, { width: 120 }]}>{localPlayer.name}</Text>
-            <TextInput
-              style={[styles.input, { flex: 1 }]}
-              value={myRoundScore}
-              onChangeText={setMyRoundScore}
-              keyboardType="number-pad"
-              placeholderTextColor={colors.muted}
-            />
+        {enteringScore && localPlayer ? (
+          <View style={styles.roundPanel}>
+            <Text style={styles.cardTitle}>
+              Your score (round {nextRoundForPlayer(game, localPlayer.id)})
+            </Text>
+            <View style={styles.playerRow}>
+              <Text style={[typography.label, { width: 120 }]}>{localPlayer.name}</Text>
+              <Field
+                style={{ flex: 1 }}
+                value={myRoundScore}
+                onChangeText={setMyRoundScore}
+                keyboardType="number-pad"
+              />
+            </View>
+            <View style={styles.row}>
+              <Button label="Submit" variant="primary" onPress={() => void submitMyScore()} />
+              <Button
+                label="Cancel"
+                variant="ghost"
+                onPress={() => {
+                  setEnteringScore(false);
+                  setMyRoundScore('0');
+                }}
+              />
+            </View>
           </View>
-          <View style={styles.row}>
-            <Pressable style={[styles.btn, styles.accent]} onPress={() => void submitMyScore()}>
-              <Text style={styles.btnText}>Submit</Text>
-            </Pressable>
-            <Pressable
-              style={styles.btn}
-              onPress={() => {
-                setEnteringScore(false);
-                setMyRoundScore('0');
-              }}
-            >
-              <Text style={styles.btnText}>Cancel</Text>
-            </Pressable>
-          </View>
-        </View>
-      ) : null}
-    </View>
+        ) : null}
+      </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: 16, paddingBottom: 24, gap: 10 },
-  center: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
+  screen: { flex: 1 },
+  content: { padding: space.lg, paddingBottom: 24, gap: 12 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  title: { color: colors.text, fontSize: 26, fontWeight: '700' },
-  muted: { color: colors.muted },
   banner: {
-    backgroundColor: colors.surfaceAlt,
-    padding: 12,
-    borderRadius: 8,
+    backgroundColor: colors.accentSoft,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 168, 75, 0.35)',
+    padding: 14,
+    borderRadius: radii.md,
   },
-  bannerText: { color: colors.text, fontWeight: '700', fontSize: 16 },
+  bannerText: {
+    ...typography.label,
+    fontSize: 15,
+    color: colors.text,
+  },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  btn: {
-    backgroundColor: colors.surfaceAlt,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 8,
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  accent: { backgroundColor: colors.accent },
-  btnText: { color: colors.text, fontWeight: '600' },
   error: { color: colors.danger },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  card: {
-    width: 160,
-    borderWidth: 2,
-    borderRadius: 12,
-    padding: 12,
+  scoreCard: {
+    width: 168,
+    borderWidth: 1.5,
+    borderRadius: radii.lg,
+    padding: 14,
     alignItems: 'center',
     backgroundColor: colors.surface,
     gap: 8,
   },
-  cardYou: { borderColor: colors.accent },
-  cardOther: { borderColor: colors.border },
-  cardTitle: { color: colors.text, fontWeight: '700', fontSize: 16, textAlign: 'center' },
-  score: { color: colors.text, fontSize: 40, fontWeight: '800' },
+  scoreCardYou: {
+    borderColor: colors.accent,
+    backgroundColor: colors.accentSoft,
+  },
+  scoreCardOther: { borderColor: colors.border },
+  cardTitle: {
+    ...typography.label,
+    fontSize: 15,
+    textAlign: 'center',
+  },
   scoreBtn: {
     width: 52,
     height: 52,
-    borderRadius: 8,
+    borderRadius: radii.md,
     backgroundColor: colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  scoreBtnPlus: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
   scoreBtnText: { color: colors.text, fontSize: 28, fontWeight: '700' },
   totalChip: {
-    backgroundColor: colors.surfaceAlt,
-    padding: 12,
-    borderRadius: 8,
-    marginRight: 8,
-    minWidth: 110,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
+    borderRadius: radii.md,
+    marginRight: 10,
+    minWidth: 120,
+    gap: 6,
   },
-  chipYou: { borderWidth: 2, borderColor: colors.accent },
+  chipYou: {
+    borderColor: colors.accent,
+    backgroundColor: colors.accentSoft,
+  },
+  chipTotal: {
+    ...typography.score,
+    fontSize: 28,
+  },
   roundPanel: {
     borderTopWidth: 1,
     borderTopColor: colors.border,
     backgroundColor: colors.surface,
-    padding: 12,
-    gap: 8,
+    padding: space.lg,
+    gap: 10,
   },
   playerRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  input: {
-    backgroundColor: colors.bg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    color: colors.text,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    minHeight: 44,
-  },
 });

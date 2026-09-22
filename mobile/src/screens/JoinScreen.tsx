@@ -1,18 +1,16 @@
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { Button, Field, Screen } from '../components/ui';
 import { normalizeShareCode } from '../domain/models';
 import { getTemplate } from '../domain/templates';
 import { loadDisplayName, saveDisplayName } from '../storage/displayNameStore';
 import { findGameByShareCode, joinGameByShareCode } from '../storage/gameStore';
-import { colors } from '../theme';
+import { colors, space, typography } from '../theme';
 import type { RootStackParamList } from '../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Join'>;
@@ -66,101 +64,62 @@ export function JoinScreen({ navigation, route }: Props) {
   };
 
   return (
-    <View style={styles.screen}>
-      <Text style={styles.title}>Join with code</Text>
-      <Text style={styles.subtitle}>
-        {initialCode
-          ? 'QR detected. Enter your display name to join this cloud game.'
-          : 'Enter your name and the host share code (works across devices).'}
-      </Text>
+    <Screen>
+      <View style={styles.screen}>
+        <Text style={typography.title}>Join with code</Text>
+        <Text style={typography.subtitle}>
+          {initialCode
+            ? 'QR detected. Enter your display name to join this cloud game.'
+            : 'Enter your name and the host share code (works across devices).'}
+        </Text>
 
-      <Text style={styles.label}>Display name</Text>
-      <TextInput
-        style={styles.nameInput}
-        value={displayName}
-        onChangeText={(t) => {
-          setDisplayName(t);
-          setError(null);
-        }}
-        autoCapitalize="words"
-        autoCorrect={false}
-        placeholder="Your name"
-        placeholderTextColor={colors.muted}
-        maxLength={40}
-      />
+        <Text style={[typography.section, styles.section]}>Display name</Text>
+        <Field
+          value={displayName}
+          onChangeText={(t) => {
+            setDisplayName(t);
+            setError(null);
+          }}
+          autoCapitalize="words"
+          autoCorrect={false}
+          placeholder="Your name"
+          maxLength={40}
+        />
 
-      <Text style={styles.label}>Share code</Text>
-      <TextInput
-        style={styles.codeInput}
-        value={code}
-        onChangeText={(t) => {
-          setCode(t.toUpperCase());
-          setError(null);
-        }}
-        autoCapitalize="characters"
-        autoCorrect={false}
-        placeholder="e.g. K7M2QX"
-        placeholderTextColor={colors.muted}
-        maxLength={8}
-      />
+        <Text style={[typography.section, styles.section]}>Share code</Text>
+        <Field
+          mono
+          value={code}
+          onChangeText={(t) => {
+            setCode(t.toUpperCase());
+            setError(null);
+          }}
+          autoCapitalize="characters"
+          autoCorrect={false}
+          placeholder="K7M2QX"
+          maxLength={8}
+        />
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Pressable
-        style={[styles.btn, styles.accent]}
-        disabled={busy}
-        onPress={() => void join()}
-      >
-        {busy ? (
-          <ActivityIndicator color={colors.text} />
-        ) : (
-          <Text style={styles.btnText}>Join game</Text>
-        )}
-      </Pressable>
-      <Pressable style={styles.btn} onPress={() => navigation.goBack()}>
-        <Text style={styles.btnText}>Cancel</Text>
-      </Pressable>
-    </View>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        <View style={styles.row}>
+          <Button
+            label="Join game"
+            variant="primary"
+            busy={busy}
+            onPress={() => void join()}
+            style={{ flex: 1 }}
+          />
+          <Button label="Cancel" variant="ghost" onPress={() => navigation.goBack()} />
+        </View>
+      </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg, padding: 16, gap: 10 },
-  title: { color: colors.text, fontSize: 28, fontWeight: '700' },
-  subtitle: { color: colors.muted, lineHeight: 22, marginBottom: 8 },
-  label: { color: colors.muted, fontWeight: '600', marginTop: 4 },
-  nameInput: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    color: colors.text,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  codeInput: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    color: colors.text,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 28,
-    letterSpacing: 3,
-    fontWeight: '800',
-  },
+  screen: { flex: 1, padding: space.lg, gap: 10 },
+  section: { marginTop: 10, marginBottom: 4 },
   error: { color: colors.danger },
-  btn: {
-    alignSelf: 'flex-start',
-    backgroundColor: colors.surfaceAlt,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 8,
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  accent: { backgroundColor: colors.accent },
-  btnText: { color: colors.text, fontWeight: '600' },
+  row: { flexDirection: 'row', gap: 10, marginTop: 12 },
 });
