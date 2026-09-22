@@ -6,6 +6,7 @@ import type { RootStackParamList } from './src/navigation/types';
 import { BoardScreen } from './src/screens/BoardScreen';
 import { CribbageScreen } from './src/screens/CribbageScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
+import { JoinScreen } from './src/screens/JoinScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { SetupScreen } from './src/screens/SetupScreen';
 import { colors } from './src/theme';
@@ -42,6 +43,7 @@ export default function App() {
             options={{ title: 'ScoreForge' }}
           />
           <Stack.Screen name="Setup" component={SetupScreen} options={{ title: 'New Game' }} />
+          <Stack.Screen name="Join" component={JoinScreen} options={{ title: 'Join Game' }} />
           <Stack.Screen name="Board" component={BoardScreen} options={{ title: 'Scoreboard' }} />
           <Stack.Screen
             name="Cribbage"

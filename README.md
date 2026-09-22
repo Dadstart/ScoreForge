@@ -31,6 +31,8 @@ Do not run both at once — that causes “port in use.”
 
 Games autosave in AsyncStorage (device / browser). Cribbage shows fireworks when someone wins.
 
+Each game starts with **you alone** and gets a **share code** (e.g. `K7M2QX`). Others use **Join with code** (plus their display name) to join. Cross-device sync via these codes is next.
+
 ## Project layout
 
 - `mobile/` — **Expo app** (primary)

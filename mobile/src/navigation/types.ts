@@ -5,6 +5,7 @@ import type { Game } from '../domain/models';
 export type RootStackParamList = {
   Home: undefined;
   Setup: undefined;
+  Join: undefined;
   Board: { gameId: string };
   Cribbage: { gameId: string };
   Settings: undefined;

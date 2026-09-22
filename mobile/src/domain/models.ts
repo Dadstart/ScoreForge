@@ -15,6 +15,8 @@ export interface ScoreEvent {
 
 export interface Game {
   id: string;
+  /** Short code others enter to join this game (e.g. "K7M2QX"). */
+  shareCode: string;
   name: string;
   templateId: string;
   players: Player[];
@@ -54,6 +56,7 @@ export function createGame(partial: {
   const now = new Date().toISOString();
   return {
     id: cryptoRandomId(),
+    shareCode: generateShareCode(),
     name: partial.name,
     templateId: partial.templateId,
     players: partial.players,
@@ -64,6 +67,22 @@ export function createGame(partial: {
     createdAt: now,
     updatedAt: now,
   };
+}
+
+/** Unambiguous alphabet (no 0/O, 1/I/L) for easy verbal sharing. */
+const SHARE_CODE_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+
+export function generateShareCode(length = 6): string {
+  let code = '';
+  for (let i = 0; i < length; i++) {
+    const idx = Math.floor(Math.random() * SHARE_CODE_ALPHABET.length);
+    code += SHARE_CODE_ALPHABET[idx];
+  }
+  return code;
+}
+
+export function normalizeShareCode(raw: string): string {
+  return raw.trim().toUpperCase().replace(/[^23456789ABCDEFGHJKLMNPQRSTUVWXYZ]/g, '');
 }
 
 function cryptoRandomId(): string {

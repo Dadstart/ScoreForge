@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -10,6 +10,7 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { createGame, createPlayer } from '../domain/models';
 import { getTemplate, templates } from '../domain/templates';
+import { loadDisplayName, saveDisplayName } from '../storage/displayNameStore';
 import { saveGame } from '../storage/gameStore';
 import { colors } from '../theme';
 import type { RootStackParamList } from '../navigation/types';
@@ -20,10 +21,16 @@ export function SetupScreen({ navigation }: Props) {
   const [templateId, setTemplateId] = useState(templates[0].id);
   const template = useMemo(() => getTemplate(templateId)!, [templateId]);
   const [name, setName] = useState(templates[0].name);
-  const [players, setPlayers] = useState(['Player 1', 'Player 2']);
+  const [hostName, setHostName] = useState('Player 1');
   const [targetScore, setTargetScore] = useState(String(templates[0].defaultTargetScore ?? ''));
   const [maxRounds, setMaxRounds] = useState(String(templates[0].defaultMaxRounds ?? '18'));
   const [validation, setValidation] = useState<string | null>(null);
+
+  useEffect(() => {
+    void loadDisplayName().then((saved) => {
+      if (saved.trim()) setHostName(saved.trim());
+    });
+  }, []);
 
   const showTarget =
     template.winCondition === 'FirstToTarget' || template.defaultTargetScore != null;
@@ -39,20 +46,18 @@ export function SetupScreen({ navigation }: Props) {
   };
 
   const start = async () => {
-    const names = players.map((p) => p.trim()).filter(Boolean);
-    if (names.length < template.minPlayers) {
-      setValidation(`Add at least ${template.minPlayers} players.`);
+    const host = hostName.trim();
+    if (!host) {
+      setValidation('Enter your display name.');
       return;
     }
-    if (names.length > template.maxPlayers) {
-      setValidation(`At most ${template.maxPlayers} players.`);
-      return;
-    }
+
+    await saveDisplayName(host);
 
     const game = createGame({
       name: name.trim() || template.name,
       templateId: template.id,
-      players: names.map((n) => createPlayer(n)),
+      players: [createPlayer(host)],
       targetScore: showTarget && targetScore ? Number(targetScore) : null,
       maxRounds: showMaxRounds && maxRounds ? Number(maxRounds) : null,
     });
@@ -110,43 +115,21 @@ export function SetupScreen({ navigation }: Props) {
         </>
       ) : null}
 
-      <View style={styles.rowBetween}>
-        <Text style={styles.label}>Players</Text>
-        <Pressable
-          style={styles.btn}
-          onPress={() => {
-            if (players.length >= template.maxPlayers) {
-              setValidation(`This template allows at most ${template.maxPlayers} players.`);
-              return;
-            }
-            setPlayers((p) => [...p, `Player ${p.length + 1}`]);
-          }}
-        >
-          <Text style={styles.btnText}>Add player</Text>
-        </Pressable>
-      </View>
-
-      {players.map((player, index) => (
-        <View key={index} style={styles.playerRow}>
-          <TextInput
-            style={[styles.input, { flex: 1 }]}
-            value={player}
-            onChangeText={(text) =>
-              setPlayers((all) => all.map((p, i) => (i === index ? text : p)))
-            }
-            placeholderTextColor={colors.muted}
-          />
-          <Pressable
-            style={styles.btn}
-            onPress={() => {
-              if (players.length <= 1) return;
-              setPlayers((all) => all.filter((_, i) => i !== index));
-            }}
-          >
-            <Text style={styles.btnText}>Remove</Text>
-          </Pressable>
-        </View>
-      ))}
+      <Text style={styles.label}>Your name</Text>
+      <Text style={styles.hint}>
+        Start alone. Share the game code so others can join.
+      </Text>
+      <TextInput
+        style={styles.input}
+        value={hostName}
+        onChangeText={(text) => {
+          setHostName(text);
+          setValidation(null);
+        }}
+        placeholder="Your name"
+        placeholderTextColor={colors.muted}
+        maxLength={40}
+      />
 
       {validation ? <Text style={styles.error}>{validation}</Text> : null}
 
@@ -168,6 +151,7 @@ const styles = StyleSheet.create({
   title: { color: colors.text, fontSize: 28, fontWeight: '700', marginBottom: 8 },
   label: { color: colors.text, fontWeight: '700', marginTop: 8 },
   muted: { color: colors.muted },
+  hint: { color: colors.muted, marginBottom: 4, lineHeight: 20 },
   template: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -189,8 +173,6 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   row: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  playerRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   btn: {
     backgroundColor: colors.surfaceAlt,
     paddingHorizontal: 14,

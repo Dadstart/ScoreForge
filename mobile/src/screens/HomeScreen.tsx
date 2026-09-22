@@ -63,6 +63,9 @@ export function HomeScreen({ navigation }: Props) {
         <Pressable style={[styles.btn, styles.accent]} onPress={() => navigation.navigate('Setup')}>
           <Text style={styles.btnText}>New Game</Text>
         </Pressable>
+        <Pressable style={styles.btn} onPress={() => navigation.navigate('Join')}>
+          <Text style={styles.btnText}>Join with code</Text>
+        </Pressable>
         <Pressable style={styles.btn} onPress={() => void refresh()}>
           <Text style={styles.btnText}>Refresh</Text>
         </Pressable>
@@ -81,6 +84,7 @@ export function HomeScreen({ navigation }: Props) {
             <View key={game.id} style={styles.card}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.cardTitle}>{game.name || 'Untitled game'}</Text>
+                <Text style={styles.code}>Code {game.shareCode}</Text>
                 <Text style={styles.muted}>
                   {templateName} · {game.status === 'Completed' ? 'Completed' : 'In progress'}
                 </Text>
@@ -136,6 +140,13 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   cardTitle: { color: colors.text, fontSize: 18, fontWeight: '700' },
+  code: {
+    color: colors.accent,
+    marginTop: 6,
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: 3,
+  },
   muted: { color: colors.muted, marginTop: 2 },
   cardActions: { flexDirection: 'row', gap: 8 },
 });
