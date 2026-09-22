@@ -158,8 +158,8 @@ export function BoardScreen({ navigation, route }: Props) {
           <View style={{ flex: 1 }}>
             <Text style={styles.title}>{game.name}</Text>
             <Text style={styles.muted}>{template.name}</Text>
-            <ShareCodePanel shareCode={game.shareCode} />
           </View>
+          <ShareCodePanel shareCode={game.shareCode} />
           <Pressable style={styles.btn} onPress={() => navigation.navigate('Home')}>
             <Text style={styles.btnText}>Home</Text>
           </Pressable>

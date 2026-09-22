@@ -83,15 +83,17 @@ export function HomeScreen({ navigation }: Props) {
           const templateName = getTemplate(game.templateId)?.name ?? game.templateId;
           return (
             <View key={game.id} style={styles.card}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>{game.name || 'Untitled game'}</Text>
-                <ShareCodePanel shareCode={game.shareCode} size="compact" />
-                <Text style={styles.muted}>
-                  {templateName} · {game.status === 'Completed' ? 'Completed' : 'In progress'}
-                </Text>
-                <Text style={styles.muted}>
-                  Updated {new Date(game.updatedAt).toLocaleString()}
-                </Text>
+              <View style={styles.cardTop}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cardTitle}>{game.name || 'Untitled game'}</Text>
+                  <Text style={styles.muted}>
+                    {templateName} · {game.status === 'Completed' ? 'Completed' : 'In progress'}
+                  </Text>
+                  <Text style={styles.muted}>
+                    Updated {new Date(game.updatedAt).toLocaleString()}
+                  </Text>
+                </View>
+                <ShareCodePanel shareCode={game.shareCode} />
               </View>
               <View style={styles.cardActions}>
                 <Pressable style={[styles.btn, styles.accent]} onPress={() => openGame(game)}>
@@ -140,6 +142,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     gap: 10,
   },
+  cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   cardTitle: { color: colors.text, fontSize: 18, fontWeight: '700' },
   muted: { color: colors.muted, marginTop: 2 },
   cardActions: { flexDirection: 'row', gap: 8 },

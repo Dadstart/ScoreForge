@@ -173,8 +173,8 @@ export function CribbageScreen({ navigation, route }: Props) {
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>{game.name}</Text>
           <Text style={styles.muted}>Cribbage</Text>
-          <ShareCodePanel shareCode={game.shareCode} />
         </View>
+        <ShareCodePanel shareCode={game.shareCode} />
         <Pressable style={styles.btn} onPress={() => navigation.navigate('Home')}>
           <Text style={styles.btnText}>Home</Text>
         </Pressable>
@@ -246,7 +246,7 @@ export function CribbageScreen({ navigation, route }: Props) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg, padding: 12, gap: 8 },
   center: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
-  header: { flexDirection: 'row', alignItems: 'flex-start' },
+  header: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   title: { color: colors.text, fontSize: 26, fontWeight: '700' },
   muted: { color: colors.muted },
   banner: {
