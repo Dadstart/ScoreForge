@@ -34,6 +34,8 @@ export function CribbageScreen({ navigation, route }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [showCelebration, setShowCelebration] = useState(false);
   const wasComplete = useRef(false);
+  /** Block win fireworks while reset/undo is writing (mid-flight snapshots can still look complete). */
+  const suppressCelebration = useRef(false);
 
   useEffect(() => {
     void loadDisplayName().then(setDisplayName);
@@ -47,10 +49,12 @@ export function CribbageScreen({ navigation, route }: Props) {
         if (found) {
           const tmpl = getTemplate(found.templateId);
           if (tmpl) {
-            const complete = calculate(found, tmpl).isComplete;
-            if (complete && !wasComplete.current) {
-              const snap = calculate(found, tmpl);
-              if (snap.winnerName) setShowCelebration(true);
+            const snap = calculate(found, tmpl);
+            const complete = snap.isComplete;
+            if (!complete) {
+              setShowCelebration(false);
+            } else if (!wasComplete.current && !suppressCelebration.current && snap.winnerName) {
+              setShowCelebration(true);
             }
             wasComplete.current = complete;
           }
@@ -138,19 +142,32 @@ export function CribbageScreen({ navigation, route }: Props) {
     const next: Game = { ...game, events: game.events.slice(0, -1) };
     const snap = calculate(next, template);
     next.status = snap.isComplete ? 'Completed' : 'InProgress';
+    if (!snap.isComplete) {
+      suppressCelebration.current = true;
+      setShowCelebration(false);
+    }
     wasComplete.current = snap.isComplete;
-    if (!snap.isComplete) setShowCelebration(false);
     setError(null);
-    await persist(next, false);
+    try {
+      await persist(next, false);
+    } finally {
+      suppressCelebration.current = false;
+    }
   };
 
   const reset = async () => {
     if (!game) return;
     const next: Game = { ...game, events: [], status: 'InProgress' };
+    suppressCelebration.current = true;
     wasComplete.current = false;
     setShowCelebration(false);
+    setGame(next);
     setError(null);
-    await persist(next, false);
+    try {
+      await persist(next, false);
+    } finally {
+      suppressCelebration.current = false;
+    }
   };
 
   if (!game || !template || !snapshot) {
