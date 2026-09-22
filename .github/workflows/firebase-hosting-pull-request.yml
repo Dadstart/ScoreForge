@@ -43,5 +43,5 @@ jobs:
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_SCOREFORGE_494614 }}
-          projectId: scoreforge-abcdef
+          projectId: scoreforge-494614
           entryPoint: mobile
