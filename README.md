@@ -19,28 +19,35 @@ npm start
 
 Do not run both at once — that causes “port in use.”
 
+## How play works
+
+1. **New Game** — pick a template, enter **your name**, start alone.
+2. Share the **code** or **QR** shown on Home / the board.
+3. Guests use **Join with code** (or scan the QR) with their display name.
+4. Each device only scores **that player’s** points (matched by display name).
+
+Deep link: `scoreforge://join?code=XXXXXX` (Expo Go uses the Expo URL equivalent).
+
+Games autosave in AsyncStorage on this device/browser. **Cross-device sync is not wired yet** — join currently finds games stored locally. Cribbage shows fireworks when someone wins.
+
 ## Game templates
 
 | Template | Scoring | Win condition |
 | --- | --- | --- |
-| Free Play | Instant +/− | Highest total |
-| Rounds | Round entry | Highest total |
-| Rummy | Round entry | First to target (default 500) |
-| Golf | Holes as rounds | Lowest total after 9 or 18 holes |
-| Cribbage | Peg board (front/rear pegs) | First to 121 (or 61) |
-
-Games autosave in AsyncStorage (device / browser). Cribbage shows fireworks when someone wins.
-
-Each game starts with **you alone** and gets a **share code** (e.g. `K7M2QX`). Others use **Join with code** (plus their display name) to join. Cross-device sync via these codes is next.
+| Free Play | Instant +/− (own score only) | Highest total |
+| Rounds | Add my score per round | Highest total |
+| Rummy | Add my score per round | First to target (default 500) |
+| Golf | Add my score per hole | Lowest total after 9 or 18 holes |
+| Cribbage | Peg own track only | First to 121 (or 61) |
 
 ## Project layout
 
-- `mobile/` — **Expo app** (primary)
-- `docs/ARCHITECTURE.md` — architecture notes
+- [`mobile/`](mobile/) — Expo app (primary)
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — architecture notes
 
 ## CI
 
-GitHub Actions runs `npm ci` and TypeScript checking in `mobile/` (see `.github/workflows/build.yml`).
+GitHub Actions runs `npm ci` and TypeScript checking in `mobile/` (see [`.github/workflows/build.yml`](.github/workflows/build.yml)).
 
 ## Store builds (later)
 
