@@ -449,6 +449,11 @@ $RECYCLE.BIN/
 dist/
 web-build/
 
+# Env
+.env
+.env*.local
+!.env.example
+
 ##
 ## Visual Studio Code
 ##

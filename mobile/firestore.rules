@@ -1,0 +1,16 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Share code is the document id. Knowing the code grants access.
+    // List is denied so games cannot be enumerated without a code.
+    match /games/{shareCode} {
+      allow get, create, update, delete: if true;
+      allow list: if false;
+
+      match /events/{eventId} {
+        allow get, list, create, delete: if true;
+        allow update: if false;
+      }
+    }
+  }
+}
