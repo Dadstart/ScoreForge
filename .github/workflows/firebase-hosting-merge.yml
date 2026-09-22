@@ -39,7 +39,7 @@ jobs:
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_SCOREFORGE_ABCDEF }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_SCOREFORGE_494614 }}
           channelId: live
-          projectId: scoreforge-abcdef
+          projectId: scoreforge-494614
           entryPoint: mobile
