@@ -4,6 +4,8 @@ import Svg, { Circle, Line } from 'react-native-svg';
 
 type Props = {
   winnerName: string | null;
+  /** Shown under the winner line (template or game name). */
+  subtitle?: string;
   onDismiss: () => void;
 };
 
@@ -30,7 +32,7 @@ type Rocket = {
 
 const PALETTE = ['#ffd740', '#ff5252', '#448aff', '#69f0ae', '#e040fb', '#ffab40', '#ffffff'];
 
-export function FireworksOverlay({ winnerName, onDismiss }: Props) {
+export function FireworksOverlay({ winnerName, subtitle = 'ScoreForge', onDismiss }: Props) {
   const [size, setSize] = useState({ width: 300, height: 500 });
   const [frame, setFrame] = useState(0);
   const particles = useRef<Particle[]>([]);
@@ -164,7 +166,7 @@ export function FireworksOverlay({ winnerName, onDismiss }: Props) {
 
       <View style={styles.center}>
         <Text style={styles.winner}>{winnerName ? `${winnerName} wins!` : 'Winner!'}</Text>
-        <Text style={styles.sub}>Cribbage</Text>
+        <Text style={styles.sub}>{subtitle}</Text>
       </View>
 
       <Pressable style={styles.btn} onPress={onDismiss}>
@@ -198,12 +200,12 @@ const styles = StyleSheet.create({
   btn: {
     position: 'absolute',
     bottom: 36,
-    backgroundColor: '#3b82f6',
+    backgroundColor: '#d4a84b',
     paddingHorizontal: 28,
     paddingVertical: 14,
-    borderRadius: 8,
+    borderRadius: 12,
     minWidth: 140,
     alignItems: 'center',
   },
-  btnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  btnText: { color: '#1a1408', fontWeight: '700', fontSize: 16 },
 });

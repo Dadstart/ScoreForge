@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -16,6 +16,7 @@ import { findLocalPlayerId } from '../domain/localPlayer';
 import { createScoreEvent, type Game } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
+import { useWinCelebration } from '../hooks/useWinCelebration';
 import { loadDisplayName } from '../storage/displayNameStore';
 import { saveGame, subscribeGame } from '../storage/gameStore';
 import { colors, radii, space, typography } from '../theme';
@@ -32,10 +33,14 @@ export function CribbageScreen({ navigation, route }: Props) {
   const [game, setGame] = useState<Game | null>(null);
   const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [showCelebration, setShowCelebration] = useState(false);
-  const wasComplete = useRef(false);
-  /** Block win fireworks while reset/undo is writing (mid-flight snapshots can still look complete). */
-  const suppressCelebration = useRef(false);
+  const {
+    showCelebration,
+    onSnapshot,
+    dismissCelebration,
+    beginSuppress,
+    endSuppress,
+    noteLocalResult,
+  } = useWinCelebration();
 
   useEffect(() => {
     void loadDisplayName().then(setDisplayName);
@@ -48,22 +53,13 @@ export function CribbageScreen({ navigation, route }: Props) {
         setGame(found);
         if (found) {
           const tmpl = getTemplate(found.templateId);
-          if (tmpl) {
-            const snap = calculate(found, tmpl);
-            const complete = snap.isComplete;
-            if (!complete) {
-              setShowCelebration(false);
-            } else if (!wasComplete.current && !suppressCelebration.current && snap.winnerName) {
-              setShowCelebration(true);
-            }
-            wasComplete.current = complete;
-          }
+          if (tmpl) onSnapshot(calculate(found, tmpl));
         }
       },
       (err) => setError(err.message),
     );
     return unsub;
-  }, [gameId]);
+  }, [gameId, onSnapshot]);
 
   const template = game ? getTemplate(game.templateId) : undefined;
   const target = game?.targetScore ?? template?.defaultTargetScore ?? 121;
@@ -101,9 +97,9 @@ export function CribbageScreen({ navigation, route }: Props) {
 
   const localPlayer = pegPlayers.find((p) => p.id === localPlayerId) ?? null;
 
-  const persist = async (next: Game, celebrate: boolean) => {
+  const persist = async (next: Game) => {
     await saveGame(next);
-    if (celebrate) setShowCelebration(true);
+    setGame(next);
   };
 
   const peg = async (points: number) => {
@@ -119,13 +115,10 @@ export function CribbageScreen({ navigation, route }: Props) {
     };
     const snap = calculate(next, template);
     if (snap.isComplete) next.status = 'Completed';
-
-    const shouldCelebrate =
-      snap.isComplete && !wasComplete.current && snap.winnerName != null;
-    wasComplete.current = snap.isComplete;
+    noteLocalResult(snap);
 
     try {
-      await persist(next, shouldCelebrate);
+      await persist(next);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Autosave failed');
@@ -142,31 +135,27 @@ export function CribbageScreen({ navigation, route }: Props) {
     const next: Game = { ...game, events: game.events.slice(0, -1) };
     const snap = calculate(next, template);
     next.status = snap.isComplete ? 'Completed' : 'InProgress';
-    if (!snap.isComplete) {
-      suppressCelebration.current = true;
-      setShowCelebration(false);
-    }
-    wasComplete.current = snap.isComplete;
+    beginSuppress();
     setError(null);
     try {
-      await persist(next, false);
+      noteLocalResult(snap);
+      await persist(next);
     } finally {
-      suppressCelebration.current = false;
+      endSuppress(snap.isComplete);
     }
   };
 
   const reset = async () => {
-    if (!game) return;
+    if (!game || !template) return;
     const next: Game = { ...game, events: [], status: 'InProgress' };
-    suppressCelebration.current = true;
-    wasComplete.current = false;
-    setShowCelebration(false);
+    beginSuppress();
     setGame(next);
     setError(null);
     try {
-      await persist(next, false);
+      noteLocalResult(calculate(next, template));
+      await persist(next);
     } finally {
-      suppressCelebration.current = false;
+      endSuppress(false);
     }
   };
 
@@ -261,7 +250,8 @@ export function CribbageScreen({ navigation, route }: Props) {
         {showCelebration ? (
           <FireworksOverlay
             winnerName={snapshot.winnerName}
-            onDismiss={() => setShowCelebration(false)}
+            subtitle="Cribbage"
+            onDismiss={dismissCelebration}
           />
         ) : null}
       </View>

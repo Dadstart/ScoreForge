@@ -8,12 +8,14 @@ import {
   View,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { FireworksOverlay } from '../components/FireworksOverlay';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Field, Screen } from '../components/ui';
 import { findLocalPlayerId, nextRoundForPlayer } from '../domain/localPlayer';
 import { createScoreEvent, type Game } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
+import { useWinCelebration } from '../hooks/useWinCelebration';
 import { loadDisplayName } from '../storage/displayNameStore';
 import { saveGame, subscribeGame } from '../storage/gameStore';
 import { colors, radii, space, typography } from '../theme';
@@ -28,6 +30,14 @@ export function BoardScreen({ navigation, route }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [enteringScore, setEnteringScore] = useState(false);
   const [myRoundScore, setMyRoundScore] = useState('0');
+  const {
+    showCelebration,
+    onSnapshot,
+    dismissCelebration,
+    beginSuppress,
+    endSuppress,
+    noteLocalResult,
+  } = useWinCelebration();
 
   useEffect(() => {
     void loadDisplayName().then(setDisplayName);
@@ -36,11 +46,17 @@ export function BoardScreen({ navigation, route }: Props) {
   useEffect(() => {
     const unsub = subscribeGame(
       gameId,
-      (next) => setGame(next),
+      (next) => {
+        setGame(next);
+        if (next) {
+          const tmpl = getTemplate(next.templateId);
+          if (tmpl) onSnapshot(calculate(next, tmpl));
+        }
+      },
       (err) => setError(err.message),
     );
     return unsub;
-  }, [gameId]);
+  }, [gameId, onSnapshot]);
 
   const template = game ? getTemplate(game.templateId) : undefined;
   const snapshot = useMemo(
@@ -77,7 +93,7 @@ export function BoardScreen({ navigation, route }: Props) {
   const isRounds = template.scoringMode === 'Rounds';
   const complete = snapshot.isComplete;
 
-  const applyGame = async (mutator: (g: Game) => Game) => {
+  const applyGame = async (mutator: (g: Game) => Game, opts?: { suppressWin?: boolean }) => {
     const next = mutator({
       ...game,
       players: [...game.players],
@@ -86,6 +102,19 @@ export function BoardScreen({ navigation, route }: Props) {
     const snap = calculate(next, template);
     if (snap.isComplete) next.status = 'Completed';
     else if (next.status === 'Completed' && !snap.isComplete) next.status = 'InProgress';
+
+    if (opts?.suppressWin || !snap.isComplete) {
+      beginSuppress();
+      try {
+        noteLocalResult(snap);
+        await persist(next);
+      } finally {
+        endSuppress(snap.isComplete);
+      }
+      return;
+    }
+
+    noteLocalResult(snap);
     await persist(next);
   };
 
@@ -106,18 +135,18 @@ export function BoardScreen({ navigation, route }: Props) {
       setError('Set your display name to match a player before undoing.');
       return;
     }
-    await applyGame((g) => {
-      let removed = false;
-      for (let i = g.events.length - 1; i >= 0; i--) {
-        if (g.events[i].playerId === localPlayerId) {
-          g.events.splice(i, 1);
-          removed = true;
-          break;
+    await applyGame(
+      (g) => {
+        for (let i = g.events.length - 1; i >= 0; i--) {
+          if (g.events[i].playerId === localPlayerId) {
+            g.events.splice(i, 1);
+            break;
+          }
         }
-      }
-      if (!removed) setError('No scores of yours to undo.');
-      return g;
-    });
+        return g;
+      },
+      { suppressWin: true },
+    );
   };
 
   const submitMyScore = async () => {
@@ -175,11 +204,14 @@ export function BoardScreen({ navigation, route }: Props) {
             <Button
               label="Reset"
               onPress={() =>
-                void applyGame((g) => {
-                  g.events = [];
-                  g.status = 'InProgress';
-                  return g;
-                })
+                void applyGame(
+                  (g) => {
+                    g.events = [];
+                    g.status = 'InProgress';
+                    return g;
+                  },
+                  { suppressWin: true },
+                )
               }
             />
             {!complete ? (
@@ -291,6 +323,14 @@ export function BoardScreen({ navigation, route }: Props) {
               />
             </View>
           </View>
+        ) : null}
+
+        {showCelebration ? (
+          <FireworksOverlay
+            winnerName={snapshot.winnerName}
+            subtitle={template.name}
+            onDismiss={dismissCelebration}
+          />
         ) : null}
       </View>
     </Screen>
