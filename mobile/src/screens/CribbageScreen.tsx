@@ -9,9 +9,11 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CribbageBoard, type CribbagePegPlayer } from '../components/CribbageBoard';
 import { FireworksOverlay } from '../components/FireworksOverlay';
+import { findLocalPlayerId } from '../domain/localPlayer';
 import { createScoreEvent, type Game } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
+import { loadDisplayName } from '../storage/displayNameStore';
 import { loadGames, saveGame } from '../storage/gameStore';
 import { colors } from '../theme';
 import type { RootStackParamList } from '../navigation/types';
@@ -24,33 +26,36 @@ const QUICK = [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 15, 16];
 export function CribbageScreen({ navigation, route }: Props) {
   const { gameId } = route.params;
   const [game, setGame] = useState<Game | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [showCelebration, setShowCelebration] = useState(false);
   const wasComplete = useRef(false);
 
   const load = useCallback(async () => {
-    const games = await loadGames();
+    const [games, name] = await Promise.all([loadGames(), loadDisplayName()]);
+    setDisplayName(name);
     const found = games.find((g) => g.id === gameId) ?? null;
     setGame(found);
-    if (found && !selectedId) setSelectedId(found.players[0]?.id ?? null);
     if (found) {
-      const template = getTemplate(found.templateId);
-      if (template) wasComplete.current = calculate(found, template).isComplete;
+      const tmpl = getTemplate(found.templateId);
+      if (tmpl) wasComplete.current = calculate(found, tmpl).isComplete;
     }
-  }, [gameId, selectedId]);
+  }, [gameId]);
 
   useEffect(() => {
     void load();
-    // only on mount / gameId
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameId]);
+  }, [load]);
 
   const template = game ? getTemplate(game.templateId) : undefined;
   const target = game?.targetScore ?? template?.defaultTargetScore ?? 121;
   const snapshot = useMemo(
     () => (game && template ? calculate(game, template) : null),
     [game, template],
+  );
+
+  const localPlayerId = useMemo(
+    () => (game ? findLocalPlayerId(game, displayName) : null),
+    [game, displayName],
   );
 
   const pegPlayers: CribbagePegPlayer[] = useMemo(() => {
@@ -70,10 +75,12 @@ export function CribbageScreen({ navigation, route }: Props) {
         rearPeg: Math.min(Math.max(previous, 0), target),
         color: PEG_COLORS[i % PEG_COLORS.length],
         isWinner: snapshot.standings.some((s) => s.playerId === player.id && s.isWinner),
-        isSelected: player.id === selectedId,
+        isSelected: player.id === localPlayerId,
       };
     });
-  }, [game, snapshot, selectedId, target]);
+  }, [game, snapshot, localPlayerId, target]);
+
+  const localPlayer = pegPlayers.find((p) => p.id === localPlayerId) ?? null;
 
   const persist = async (next: Game, celebrate: boolean) => {
     await saveGame(next);
@@ -82,17 +89,15 @@ export function CribbageScreen({ navigation, route }: Props) {
   };
 
   const peg = async (points: number) => {
-    if (!game || !template || !selectedId || snapshot?.isComplete) return;
-    const selected = pegPlayers.find((p) => p.id === selectedId);
-    if (!selected) return;
+    if (!game || !template || !localPlayerId || !localPlayer || snapshot?.isComplete) return;
 
     let delta = points;
-    if (selected.total + delta < 0) delta = -selected.total;
+    if (localPlayer.total + delta < 0) delta = -localPlayer.total;
     if (delta === 0) return;
 
     const next: Game = {
       ...game,
-      events: [...game.events, createScoreEvent(selectedId, delta)],
+      events: [...game.events, createScoreEvent(localPlayerId, delta)],
     };
     const snap = calculate(next, template);
     if (snap.isComplete) next.status = 'Completed';
@@ -110,12 +115,18 @@ export function CribbageScreen({ navigation, route }: Props) {
   };
 
   const undo = async () => {
-    if (!game || !template || game.events.length === 0) return;
+    if (!game || !template || !localPlayerId || game.events.length === 0) return;
+    const last = game.events[game.events.length - 1];
+    if (last.playerId !== localPlayerId) {
+      setError('You can only undo your own last peg.');
+      return;
+    }
     const next: Game = { ...game, events: game.events.slice(0, -1) };
     const snap = calculate(next, template);
     next.status = snap.isComplete ? 'Completed' : 'InProgress';
     wasComplete.current = snap.isComplete;
     if (!snap.isComplete) setShowCelebration(false);
+    setError(null);
     await persist(next, false);
   };
 
@@ -124,6 +135,7 @@ export function CribbageScreen({ navigation, route }: Props) {
     const next: Game = { ...game, events: [], status: 'InProgress' };
     wasComplete.current = false;
     setShowCelebration(false);
+    setError(null);
     await persist(next, false);
   };
 
@@ -135,11 +147,14 @@ export function CribbageScreen({ navigation, route }: Props) {
     );
   }
 
+  const canPeg = localPlayerId != null && !snapshot.isComplete;
   const banner = snapshot.isComplete
     ? snapshot.winnerName
       ? `${snapshot.winnerName} wins!`
       : 'Game complete'
-    : `Race to ${target} · Select a player and peg points`;
+    : localPlayer
+      ? `Race to ${target} · Pegging as ${localPlayer.name}`
+      : `Race to ${target} · Set your display name (Join) to match a player before pegging`;
 
   return (
     <View style={styles.screen}>
@@ -159,7 +174,7 @@ export function CribbageScreen({ navigation, route }: Props) {
       </View>
 
       <View style={styles.row}>
-        <Pressable style={styles.btn} onPress={() => void undo()}>
+        <Pressable style={styles.btn} onPress={() => void undo()} disabled={!localPlayerId}>
           <Text style={styles.btnText}>Undo peg</Text>
         </Pressable>
         <Pressable style={styles.btn} onPress={() => void reset()}>
@@ -174,32 +189,32 @@ export function CribbageScreen({ navigation, route }: Props) {
       </View>
 
       <View style={styles.controls}>
-        <Text style={styles.label}>Active pegger</Text>
+        <Text style={styles.label}>Players</Text>
         <View style={styles.row}>
           {pegPlayers.map((p) => (
-            <Pressable
+            <View
               key={p.id}
-              style={[styles.btn, p.isSelected && styles.accent]}
-              onPress={() => setSelectedId(p.id)}
+              style={[styles.playerChip, p.id === localPlayerId && styles.accent]}
             >
               <View style={styles.pegger}>
                 <View style={[styles.dot, { backgroundColor: p.color }]} />
                 <Text style={styles.btnText}>
                   {p.name} ({p.total})
+                  {p.id === localPlayerId ? ' · you' : ''}
                 </Text>
               </View>
-            </Pressable>
+            </View>
           ))}
         </View>
 
-        <Text style={styles.label}>Peg points</Text>
+        <Text style={styles.label}>Peg your points</Text>
         <View style={styles.row}>
           {QUICK.map((n) => (
             <Pressable
               key={n}
-              style={[styles.pegBtn, styles.accent]}
+              style={[styles.pegBtn, styles.accent, !canPeg && styles.disabled]}
               onPress={() => void peg(n)}
-              disabled={snapshot.isComplete}
+              disabled={!canPeg}
             >
               <Text style={styles.btnText}>{n}</Text>
             </Pressable>
@@ -246,6 +261,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   accent: { backgroundColor: colors.accent },
+  disabled: { opacity: 0.4 },
   btnText: { color: colors.text, fontWeight: '600' },
   error: { color: colors.danger },
   boardWrap: { flex: 1, minHeight: 180 },
@@ -256,6 +272,14 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   label: { color: colors.text, fontWeight: '700' },
+  playerChip: {
+    backgroundColor: colors.surfaceAlt,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
   pegger: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   dot: { width: 14, height: 14, borderRadius: 7 },
   pegBtn: {

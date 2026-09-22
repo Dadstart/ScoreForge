@@ -9,9 +9,11 @@ import {
   View,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { findLocalPlayerId, nextRoundForPlayer } from '../domain/localPlayer';
 import { createScoreEvent, type Game } from '../domain/models';
-import { calculate, nextRoundNumber } from '../domain/scoreCalculator';
+import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
+import { loadDisplayName } from '../storage/displayNameStore';
 import { loadGames, saveGame } from '../storage/gameStore';
 import { colors } from '../theme';
 import type { RootStackParamList } from '../navigation/types';
@@ -21,14 +23,15 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Board'>;
 export function BoardScreen({ navigation, route }: Props) {
   const { gameId } = route.params;
   const [game, setGame] = useState<Game | null>(null);
+  const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [enteringRound, setEnteringRound] = useState(false);
-  const [roundScores, setRoundScores] = useState<Record<string, string>>({});
+  const [enteringScore, setEnteringScore] = useState(false);
+  const [myRoundScore, setMyRoundScore] = useState('0');
 
   const load = useCallback(async () => {
-    const games = await loadGames();
-    const found = games.find((g) => g.id === gameId) ?? null;
-    setGame(found);
+    const [games, name] = await Promise.all([loadGames(), loadDisplayName()]);
+    setDisplayName(name);
+    setGame(games.find((g) => g.id === gameId) ?? null);
   }, [gameId]);
 
   useEffect(() => {
@@ -40,6 +43,11 @@ export function BoardScreen({ navigation, route }: Props) {
     () => (game && template ? calculate(game, template) : null),
     [game, template],
   );
+  const localPlayerId = useMemo(
+    () => (game ? findLocalPlayerId(game, displayName) : null),
+    [game, displayName],
+  );
+  const localPlayer = game?.players.find((p) => p.id === localPlayerId) ?? null;
 
   const persist = async (next: Game) => {
     try {
@@ -77,6 +85,10 @@ export function BoardScreen({ navigation, route }: Props) {
 
   const adjust = async (playerId: string, delta: number) => {
     if (!isInstant || complete) return;
+    if (playerId !== localPlayerId) {
+      setError('You can only change your own score.');
+      return;
+    }
     await applyGame((g) => {
       g.events.push(createScoreEvent(playerId, delta));
       return g;
@@ -84,51 +96,56 @@ export function BoardScreen({ navigation, route }: Props) {
   };
 
   const undo = async () => {
+    if (!localPlayerId) {
+      setError('Set your display name to match a player before undoing.');
+      return;
+    }
     await applyGame((g) => {
-      if (isRounds) {
-        const lastRound = g.events
-          .map((e) => e.roundNumber ?? 0)
-          .reduce((m, n) => Math.max(m, n), 0);
-        if (lastRound > 0) g.events = g.events.filter((e) => e.roundNumber !== lastRound);
-        else g.events.pop();
-      } else {
-        g.events.pop();
+      let removed = false;
+      for (let i = g.events.length - 1; i >= 0; i--) {
+        if (g.events[i].playerId === localPlayerId) {
+          g.events.splice(i, 1);
+          removed = true;
+          break;
+        }
       }
+      if (!removed) setError('No scores of yours to undo.');
       return g;
     });
   };
 
-  const submitRound = async () => {
-    const scores: { playerId: string; points: number }[] = [];
-    for (const player of game.players) {
-      const raw = roundScores[player.id] ?? '0';
-      const points = Number.parseInt(raw, 10);
-      if (Number.isNaN(points)) {
-        setError(`Invalid score for ${player.name}.`);
-        return;
-      }
-      scores.push({ playerId: player.id, points });
+  const submitMyScore = async () => {
+    if (!localPlayerId || !localPlayer) {
+      setError('Set your display name to match a player before scoring.');
+      return;
     }
-    const round = nextRoundNumber(game);
+    const points = Number.parseInt(myRoundScore, 10);
+    if (Number.isNaN(points)) {
+      setError(`Invalid score for ${localPlayer.name}.`);
+      return;
+    }
+    const round = nextRoundForPlayer(game, localPlayerId);
     await applyGame((g) => {
-      for (const s of scores) g.events.push(createScoreEvent(s.playerId, s.points, round));
+      g.events.push(createScoreEvent(localPlayerId, points, round));
       return g;
     });
-    setEnteringRound(false);
-    setRoundScores({});
+    setEnteringScore(false);
+    setMyRoundScore('0');
   };
 
   const banner = complete
     ? snapshot.winnerName
       ? `Winner: ${snapshot.winnerName}`
       : 'Game complete'
-    : isInstant
-      ? 'Tap +/− to update scores'
-      : template.winCondition === 'FirstToTarget'
-        ? `First to ${game.targetScore ?? template.defaultTargetScore} · Round ${snapshot.currentRound}`
-        : template.winCondition === 'LowestTotal'
-          ? `Round ${snapshot.currentRound} · Lowest wins`
-          : `Round ${snapshot.currentRound} · Highest wins`;
+    : !localPlayer
+      ? 'Set your display name (Join / Setup) to match a player before scoring'
+      : isInstant
+        ? `Scoring as ${localPlayer.name} · Tap +/− on your card`
+        : template.winCondition === 'FirstToTarget'
+          ? `First to ${game.targetScore ?? template.defaultTargetScore} · ${localPlayer.name}`
+          : template.winCondition === 'LowestTotal'
+            ? `${localPlayer.name} · Lowest wins`
+            : `${localPlayer.name} · Highest wins`;
 
   return (
     <View style={styles.screen}>
@@ -149,7 +166,7 @@ export function BoardScreen({ navigation, route }: Props) {
         </View>
 
         <View style={styles.row}>
-          <Pressable style={styles.btn} onPress={() => void undo()}>
+          <Pressable style={styles.btn} onPress={() => void undo()} disabled={!localPlayerId}>
             <Text style={styles.btnText}>Undo</Text>
           </Pressable>
           <Pressable
@@ -177,17 +194,15 @@ export function BoardScreen({ navigation, route }: Props) {
               <Text style={styles.btnText}>Mark complete</Text>
             </Pressable>
           ) : null}
-          {isRounds && !complete ? (
+          {isRounds && !complete && localPlayerId ? (
             <Pressable
               style={[styles.btn, styles.accent]}
               onPress={() => {
-                const init: Record<string, string> = {};
-                for (const p of game.players) init[p.id] = '0';
-                setRoundScores(init);
-                setEnteringRound(true);
+                setMyRoundScore('0');
+                setEnteringScore(true);
               }}
             >
-              <Text style={styles.btnText}>Add round</Text>
+              <Text style={styles.btnText}>Add my score</Text>
             </Pressable>
           ) : null}
         </View>
@@ -196,32 +211,55 @@ export function BoardScreen({ navigation, route }: Props) {
 
         {isInstant ? (
           <View style={styles.wrap}>
-            {snapshot.standings.map((s) => (
-              <View key={s.playerId} style={styles.card}>
-                <Text style={styles.cardTitle}>{s.playerName}</Text>
-                <Text style={styles.score}>{s.total}</Text>
-                <View style={styles.row}>
-                  <Pressable style={styles.scoreBtn} onPress={() => void adjust(s.playerId, -1)}>
-                    <Text style={styles.scoreBtnText}>−</Text>
-                  </Pressable>
-                  <Pressable
-                    style={[styles.scoreBtn, styles.accent]}
-                    onPress={() => void adjust(s.playerId, 1)}
-                  >
-                    <Text style={styles.scoreBtnText}>+</Text>
-                  </Pressable>
+            {snapshot.standings.map((s) => {
+              const isYou = s.playerId === localPlayerId;
+              return (
+                <View
+                  key={s.playerId}
+                  style={[styles.card, isYou ? styles.cardYou : styles.cardOther]}
+                >
+                  <Text style={styles.cardTitle}>
+                    {s.playerName}
+                    {isYou ? ' · you' : ''}
+                  </Text>
+                  <Text style={styles.score}>{s.total}</Text>
+                  {isYou && !complete ? (
+                    <View style={styles.row}>
+                      <Pressable
+                        style={styles.scoreBtn}
+                        onPress={() => void adjust(s.playerId, -1)}
+                      >
+                        <Text style={styles.scoreBtnText}>−</Text>
+                      </Pressable>
+                      <Pressable
+                        style={[styles.scoreBtn, styles.accent]}
+                        onPress={() => void adjust(s.playerId, 1)}
+                      >
+                        <Text style={styles.scoreBtnText}>+</Text>
+                      </Pressable>
+                    </View>
+                  ) : null}
+                  {s.isLeader ? <Text style={styles.muted}>Leader</Text> : null}
+                  {s.isWinner ? <Text style={styles.muted}>Winner</Text> : null}
                 </View>
-                {s.isLeader ? <Text style={styles.muted}>Leader</Text> : null}
-                {s.isWinner ? <Text style={styles.muted}>Winner</Text> : null}
-              </View>
-            ))}
+              );
+            })}
           </View>
         ) : (
           <View>
             <ScrollView horizontal>
               {snapshot.standings.map((s) => (
-                <View key={s.playerId} style={styles.totalChip}>
-                  <Text style={styles.cardTitle}>{s.playerName}</Text>
+                <View
+                  key={s.playerId}
+                  style={[
+                    styles.totalChip,
+                    s.playerId === localPlayerId && styles.chipYou,
+                  ]}
+                >
+                  <Text style={styles.cardTitle}>
+                    {s.playerName}
+                    {s.playerId === localPlayerId ? ' · you' : ''}
+                  </Text>
                   <Text style={styles.bannerText}>Total: {s.total}</Text>
                   {s.isWinner ? <Text style={styles.muted}>Winner</Text> : null}
                 </View>
@@ -231,30 +269,30 @@ export function BoardScreen({ navigation, route }: Props) {
         )}
       </ScrollView>
 
-      {enteringRound ? (
+      {enteringScore && localPlayer ? (
         <View style={styles.roundPanel}>
-          <Text style={styles.cardTitle}>Enter scores for this round</Text>
-          {game.players.map((p) => (
-            <View key={p.id} style={styles.playerRow}>
-              <Text style={[styles.btnText, { width: 120 }]}>{p.name}</Text>
-              <TextInput
-                style={[styles.input, { flex: 1 }]}
-                value={roundScores[p.id] ?? '0'}
-                onChangeText={(text) => setRoundScores((s) => ({ ...s, [p.id]: text }))}
-                keyboardType="number-pad"
-                placeholderTextColor={colors.muted}
-              />
-            </View>
-          ))}
+          <Text style={styles.cardTitle}>
+            Your score (round {nextRoundForPlayer(game, localPlayer.id)})
+          </Text>
+          <View style={styles.playerRow}>
+            <Text style={[styles.btnText, { width: 120 }]}>{localPlayer.name}</Text>
+            <TextInput
+              style={[styles.input, { flex: 1 }]}
+              value={myRoundScore}
+              onChangeText={setMyRoundScore}
+              keyboardType="number-pad"
+              placeholderTextColor={colors.muted}
+            />
+          </View>
           <View style={styles.row}>
-            <Pressable style={[styles.btn, styles.accent]} onPress={() => void submitRound()}>
-              <Text style={styles.btnText}>Submit round</Text>
+            <Pressable style={[styles.btn, styles.accent]} onPress={() => void submitMyScore()}>
+              <Text style={styles.btnText}>Submit</Text>
             </Pressable>
             <Pressable
               style={styles.btn}
               onPress={() => {
-                setEnteringRound(false);
-                setRoundScores({});
+                setEnteringScore(false);
+                setMyRoundScore('0');
               }}
             >
               <Text style={styles.btnText}>Cancel</Text>
@@ -302,13 +340,14 @@ const styles = StyleSheet.create({
   card: {
     width: 160,
     borderWidth: 2,
-    borderColor: colors.accent,
     borderRadius: 12,
     padding: 12,
     alignItems: 'center',
     backgroundColor: colors.surface,
     gap: 8,
   },
+  cardYou: { borderColor: colors.accent },
+  cardOther: { borderColor: colors.border },
   cardTitle: { color: colors.text, fontWeight: '700', fontSize: 16, textAlign: 'center' },
   score: { color: colors.text, fontSize: 40, fontWeight: '800' },
   scoreBtn: {
@@ -327,6 +366,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
     minWidth: 110,
   },
+  chipYou: { borderWidth: 2, borderColor: colors.accent },
   roundPanel: {
     borderTopWidth: 1,
     borderTopColor: colors.border,
