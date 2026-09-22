@@ -8,6 +8,7 @@ import {
   View,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { ShareCodePanel } from '../components/ShareCodePanel';
 import { getTemplate } from '../domain/templates';
 import type { Game } from '../domain/models';
 import { deleteGame, loadGames } from '../storage/gameStore';
@@ -84,7 +85,7 @@ export function HomeScreen({ navigation }: Props) {
             <View key={game.id} style={styles.card}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.cardTitle}>{game.name || 'Untitled game'}</Text>
-                <Text style={styles.code}>Code {game.shareCode}</Text>
+                <ShareCodePanel shareCode={game.shareCode} size="compact" />
                 <Text style={styles.muted}>
                   {templateName} · {game.status === 'Completed' ? 'Completed' : 'In progress'}
                 </Text>
@@ -140,13 +141,6 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   cardTitle: { color: colors.text, fontSize: 18, fontWeight: '700' },
-  code: {
-    color: colors.accent,
-    marginTop: 6,
-    fontSize: 28,
-    fontWeight: '800',
-    letterSpacing: 3,
-  },
   muted: { color: colors.muted, marginTop: 2 },
   cardActions: { flexDirection: 'row', gap: 8 },
 });

@@ -17,8 +17,9 @@ import type { RootStackParamList } from '../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Join'>;
 
-export function JoinScreen({ navigation }: Props) {
-  const [code, setCode] = useState('');
+export function JoinScreen({ navigation, route }: Props) {
+  const initialCode = normalizeShareCode(route.params?.code ?? '');
+  const [code, setCode] = useState(initialCode);
   const [displayName, setDisplayName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +27,11 @@ export function JoinScreen({ navigation }: Props) {
   useEffect(() => {
     void loadDisplayName().then(setDisplayName);
   }, []);
+
+  useEffect(() => {
+    const fromRoute = normalizeShareCode(route.params?.code ?? '');
+    if (fromRoute) setCode(fromRoute);
+  }, [route.params?.code]);
 
   const join = async () => {
     const normalized = normalizeShareCode(code);
@@ -63,7 +69,9 @@ export function JoinScreen({ navigation }: Props) {
     <View style={styles.screen}>
       <Text style={styles.title}>Join with code</Text>
       <Text style={styles.subtitle}>
-        Enter your display name and the magic code shared by the host.
+        {initialCode
+          ? 'QR code detected. Enter your display name to join.'
+          : 'Enter your display name and the magic code shared by the host — or scan their QR.'}
       </Text>
 
       <Text style={styles.label}>Display name</Text>

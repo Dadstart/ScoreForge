@@ -9,6 +9,7 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CribbageBoard, type CribbagePegPlayer } from '../components/CribbageBoard';
 import { FireworksOverlay } from '../components/FireworksOverlay';
+import { ShareCodePanel } from '../components/ShareCodePanel';
 import { findLocalPlayerId } from '../domain/localPlayer';
 import { createScoreEvent, type Game } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
@@ -162,7 +163,7 @@ export function CribbageScreen({ navigation, route }: Props) {
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>{game.name}</Text>
           <Text style={styles.muted}>Cribbage</Text>
-          <Text style={styles.code}>Share code {game.shareCode}</Text>
+          <ShareCodePanel shareCode={game.shareCode} />
         </View>
         <Pressable style={styles.btn} onPress={() => navigation.navigate('Home')}>
           <Text style={styles.btnText}>Home</Text>
@@ -238,13 +239,6 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'flex-start' },
   title: { color: colors.text, fontSize: 26, fontWeight: '700' },
   muted: { color: colors.muted },
-  code: {
-    color: colors.accent,
-    marginTop: 6,
-    fontSize: 28,
-    fontWeight: '800',
-    letterSpacing: 3,
-  },
   banner: {
     backgroundColor: colors.surfaceAlt,
     padding: 12,

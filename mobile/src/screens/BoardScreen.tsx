@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { ShareCodePanel } from '../components/ShareCodePanel';
 import { findLocalPlayerId, nextRoundForPlayer } from '../domain/localPlayer';
 import { createScoreEvent, type Game } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
@@ -154,7 +155,7 @@ export function BoardScreen({ navigation, route }: Props) {
           <View style={{ flex: 1 }}>
             <Text style={styles.title}>{game.name}</Text>
             <Text style={styles.muted}>{template.name}</Text>
-            <Text style={styles.code}>Share code {game.shareCode}</Text>
+            <ShareCodePanel shareCode={game.shareCode} />
           </View>
           <Pressable style={styles.btn} onPress={() => navigation.navigate('Home')}>
             <Text style={styles.btnText}>Home</Text>
@@ -311,13 +312,6 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   title: { color: colors.text, fontSize: 26, fontWeight: '700' },
   muted: { color: colors.muted },
-  code: {
-    color: colors.accent,
-    marginTop: 6,
-    fontSize: 28,
-    fontWeight: '800',
-    letterSpacing: 3,
-  },
   banner: {
     backgroundColor: colors.surfaceAlt,
     padding: 12,
