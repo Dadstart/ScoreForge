@@ -3,13 +3,12 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { AddPlayerModal } from '../components/AddPlayerModal';
 import { MonopolyBoard } from '../components/MonopolyBoard';
 import { FireworksOverlay } from '../components/FireworksOverlay';
 import { OptionSelect } from '../components/OptionSelect';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Card, Field, Screen } from '../components/ui';
-import { withAddedPlayer, withoutPlayer } from '../domain/addPlayer';
+import { withoutPlayer } from '../domain/addPlayer';
 import { findLocalPlayerId } from '../domain/localPlayer';
 import { type Game, createScoreEvent } from '../domain/models';
 import {
@@ -66,7 +65,6 @@ export function MonopolyScreen({ navigation, route }: Props) {
   const [game, setGame] = useState<Game | null>(null);
   const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [addingPlayer, setAddingPlayer] = useState(false);
   const [amount, setAmount] = useState('');
   const [payerId, setPayerId] = useState<string | null>(null);
   const [receiverId, setReceiverId] = useState(BANK_PARTY_ID);
@@ -76,7 +74,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
   const [railroadsOwned, setRailroadsOwned] = useState<RailroadCount>(1);
   const [utilitiesOwned, setUtilitiesOwned] = useState<UtilityCount>(1);
   const [dice, setDice] = useState('7');
-  const [settings, updateSettings] = useSettings();
+  const [settings] = useSettings();
   const showBoard = settings.showMonopolyBoard;
   const [boardDragging, setBoardDragging] = useState(false);
   const [landNote, setLandNote] = useState<string | null>(null);
@@ -405,29 +403,10 @@ export function MonopolyScreen({ navigation, route }: Props) {
             disabled={game.events.length === 0}
           />
           <Button
-            label="Reset"
-            onPress={() =>
-              void applyGame(
-                (g) => {
-                  g.events = [];
-                  g.status = 'InProgress';
-                  g.tokenSpaces = {};
-                  return g;
-                },
-                { suppressWin: true },
-              )
-            }
+            label="Settings"
+            variant="ghost"
+            onPress={() => navigation.navigate('Settings', { gameId })}
           />
-          {game.players.length < template.maxPlayers ? (
-            <Button label="Add player" onPress={() => setAddingPlayer(true)} />
-          ) : null}
-          {!complete ? (
-            <Button
-              label={showBoard ? 'Hide board' : 'Show board'}
-              onPress={() => updateSettings({ showMonopolyBoard: !showBoard })}
-            />
-          ) : null}
-          <Button label="Settings" variant="ghost" onPress={() => navigation.navigate('Settings')} />
           {!complete ? (
             <Button
               label="Mark complete"
@@ -697,17 +676,6 @@ export function MonopolyScreen({ navigation, route }: Props) {
         />
       ) : null}
 
-      <AddPlayerModal
-        visible={addingPlayer}
-        maxPlayers={template.maxPlayers}
-        currentCount={game.players.length}
-        onCancel={() => setAddingPlayer(false)}
-        onAdd={async (name) => {
-          const next = withAddedPlayer(game, name, template.maxPlayers);
-          await persist(next);
-          setError(null);
-        }}
-      />
     </Screen>
   );
 }

@@ -9,7 +9,7 @@ export type RootStackParamList = {
   Board: { gameId: string };
   Cribbage: { gameId: string };
   Monopoly: { gameId: string };
-  Settings: undefined;
+  Settings: { gameId?: string } | undefined;
 };
 
 export function gameScreenForTemplate(
