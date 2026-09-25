@@ -131,6 +131,22 @@ export type RentQuote = {
 
 export const PURCHASE_OPTION = 'purchase';
 
+/** Current Monopoly tokens that have a clear emoji. */
+export const PLAYER_TOKENS = [
+  { id: 'car', emoji: '🚗', label: 'Car' },
+  { id: 'dog', emoji: '🐶', label: 'Dog' },
+  { id: 'hat', emoji: '🎩', label: 'Top hat' },
+  { id: 'ship', emoji: '🚢', label: 'Battleship' },
+  { id: 'cat', emoji: '🐱', label: 'Cat' },
+  { id: 'penguin', emoji: '🐧', label: 'Penguin' },
+  { id: 'trex', emoji: '🦖', label: 'T-Rex' },
+  { id: 'duck', emoji: '🦆', label: 'Duck' },
+] as const;
+
+export function playerToken(id: string | null | undefined) {
+  return PLAYER_TOKENS.find((token) => token.id === id) ?? null;
+}
+
 export function quoteRent(input: {
   propertyId: string;
   streetLevel: StreetLevel;

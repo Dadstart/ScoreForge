@@ -3,6 +3,8 @@ export type GameStatus = 'InProgress' | 'Completed';
 export interface Player {
   id: string;
   name: string;
+  /** Monopoly piece id. Absent means the initial circle. */
+  token?: string | null;
 }
 
 export interface ScoreEvent {

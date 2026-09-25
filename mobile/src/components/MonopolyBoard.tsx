@@ -9,7 +9,7 @@ import {
   tokenSpace,
   type BoardSpace,
 } from '../domain/monopolyBoard';
-import { getProperty } from '../domain/monopoly';
+import { getProperty, playerToken } from '../domain/monopoly';
 import { colors, fonts, radii } from '../theme';
 
 const TOKEN_COLORS = ['#e86a5c', '#6fbf8a', '#7eb6ff', '#d4a84b', '#d93a96', '#f7941d', '#c5d0c9', '#f2e3a0'];
@@ -62,6 +62,7 @@ export function MonopolyBoard({ players, tokenSpaces, enabled, onLand, onDraggin
         const cell = size > 0 ? size / 11 : 48;
         const bar = Math.max(10, Math.round(cell * 0.22));
         const label = Math.max(11, Math.round(cell * 0.13));
+        const lane = !isCorner && (col === 0 || col === 10) ? sideLane(cell) : tokenLane(cell);
         const fitted = space.propertyId
           ? fitPropertyLabel(space.name, labelBounds(row, col, cell, bar, isRailroad), label)
           : null;
@@ -71,7 +72,7 @@ export function MonopolyBoard({ players, tokenSpaces, enabled, onLand, onDraggin
             accessibilityLabel={space.name}
             style={[
               styles.cell,
-              labelInset(row, col, isRailroad || isCorner ? 0 : bar),
+              isCorner ? null : spacePadding(row, col, lane, isRailroad ? 0 : bar),
               {
                 left: `${(col * 100) / 11}%`,
                 top: `${(row * 100) / 11}%`,
@@ -80,7 +81,9 @@ export function MonopolyBoard({ players, tokenSpaces, enabled, onLand, onDraggin
             ]}
           >
             {isCorner ? (
-              <CornerArt index={space.index} cell={cell} />
+              <View pointerEvents="none" style={cornerFrame(row, col, cell, lane)}>
+                <CornerArt index={space.index} cell={Math.max(36, cell - lane)} />
+              </View>
             ) : (
               <>
                 {swatch ? (
@@ -121,6 +124,7 @@ export function MonopolyBoard({ players, tokenSpaces, enabled, onLand, onDraggin
               <Piece
                 key={player.id}
                 name={player.name}
+                token={player.token}
                 color={TOKEN_COLORS[index % TOKEN_COLORS.length]}
                 row={row}
                 col={col}
@@ -297,16 +301,15 @@ function trainExtent(cell: number, col: number) {
 
 function labelBounds(row: number, col: number, cell: number, bar: number, railroad: boolean) {
   const border = 2;
-  const pad = 1;
-  let width = cell - border - pad * 2;
-  let height = cell - border - pad * 2;
-  if (railroad) {
-    height -= trainExtent(cell, col).height;
-  } else if (row === 0 || row === 10) {
-    height -= bar - pad;
-  } else {
-    width -= bar - pad;
-  }
+  const lane = row === 0 || row === 10 ? tokenLane(cell) : sideLane(cell);
+  let width = cell - border;
+  let height = cell - border;
+  const horizontal = row === 0 || row === 10;
+  if (horizontal) height -= lane;
+  else width -= lane;
+  if (railroad) height -= trainExtent(cell, col).height;
+  else if (horizontal) height -= bar;
+  else width -= bar;
   return { width: Math.max(8, width), height: Math.max(8, height) };
 }
 
@@ -383,21 +386,84 @@ function barEdge(row: number, col: number, bar: number) {
   return { right: 0, top: 0, bottom: 0, width: bar };
 }
 
-function labelInset(row: number, col: number, bar: number) {
-  if (row === 10) return { paddingBottom: bar };
-  if (row === 0) return { paddingTop: bar };
-  if (col === 0) return { paddingLeft: bar };
-  return { paddingRight: bar };
+function tokenLane(cell: number) {
+  return pieceSize(cell) + Math.max(6, Math.round(cell * 0.05));
+}
+
+function sideLane(cell: number) {
+  return Math.round(pieceSize(cell) * 0.55);
+}
+
+function spacePadding(row: number, col: number, lane: number, bar: number) {
+  if (row === 10) {
+    return { paddingTop: lane, paddingBottom: bar, paddingLeft: 2, paddingRight: 2, justifyContent: 'flex-end' as const };
+  }
+  if (row === 0) {
+    return { paddingBottom: lane, paddingTop: bar, paddingLeft: 2, paddingRight: 2, justifyContent: 'flex-start' as const };
+  }
+  if (col === 0) {
+    return {
+      paddingRight: lane,
+      paddingLeft: bar,
+      paddingTop: 2,
+      paddingBottom: 2,
+      alignItems: 'flex-start' as const,
+      justifyContent: 'center' as const,
+    };
+  }
+  return {
+    paddingLeft: lane,
+    paddingRight: bar,
+    paddingTop: 2,
+    paddingBottom: 2,
+    alignItems: 'flex-end' as const,
+    justifyContent: 'center' as const,
+  };
+}
+
+function cornerFrame(row: number, col: number, cell: number, lane: number) {
+  const box = Math.max(36, cell - lane);
+  const base = { position: 'absolute' as const, width: box, height: box };
+  if (row === 10 && col === 10) return { ...base, right: 1, bottom: 1 };
+  if (row === 10 && col === 0) return { ...base, left: 1, bottom: 1 };
+  if (row === 0 && col === 0) return { ...base, left: 1, top: 1 };
+  return { ...base, right: 1, top: 1 };
 }
 
 function pieceSize(cell: number) {
   return Math.max(28, Math.round(cell * 0.34));
 }
 
-function pieceNudge(slot: number, piece: number) {
+function pieceOffset(row: number, col: number, cell: number, piece: number, slot: number) {
+  const gap = Math.max(3, Math.round(cell * 0.03));
+  const hang = Math.round(piece * 0.28);
+  const shift = slot === 0 ? 0 : (slot % 2 === 0 ? -1 : 1) * Math.round(piece * 0.62 * Math.ceil(slot / 2));
+  const corner = (row === 0 || row === 10) && (col === 0 || col === 10);
+  let x = (cell - piece) / 2;
+  let y = (cell - piece) / 2;
+  if (corner) {
+    x = col === 0 ? cell - piece - gap : gap;
+    y = row === 0 ? cell - piece - gap : gap;
+  } else if (row === 10) {
+    y = gap - hang;
+    x += shift;
+  } else if (row === 0) {
+    y = cell - piece - gap + hang;
+    x += shift;
+  } else if (col === 0) {
+    x = cell - sideLane(cell);
+    y = (cell - piece) / 2 + shift;
+  } else {
+    x = sideLane(cell) - piece;
+    y = (cell - piece) / 2 + shift;
+  }
+  const minX = !corner && col === 10 ? sideLane(cell) - piece : 1;
+  const maxX = !corner && col === 0 ? cell - sideLane(cell) : cell - piece - 1;
+  const minY = !corner && row === 10 ? gap - hang : 1;
+  const maxY = !corner && row === 0 ? cell - piece - gap + hang : cell - piece - 1;
   return {
-    x: (slot % 2 === 0 ? -1 : 1) * Math.round(piece * 0.18),
-    y: slot > 1 ? Math.round(piece * 0.22) : -Math.round(piece * 0.1),
+    x: Math.max(minX, Math.min(maxX, x)),
+    y: Math.max(minY, Math.min(maxY, y)),
   };
 }
 
@@ -410,15 +476,17 @@ function tokenCenter(
   dy = 0,
 ) {
   const cell = board.size / 11;
-  const nudge = pieceNudge(slot, pieceSize(cell));
+  const piece = pieceSize(cell);
+  const offset = pieceOffset(row, col, cell, piece, slot);
   return {
-    x: board.x + col * cell + cell / 2 + nudge.x + dx,
-    y: board.y + row * cell + cell / 2 + nudge.y + dy,
+    x: board.x + col * cell + offset.x + piece / 2 + dx,
+    y: board.y + row * cell + offset.y + piece / 2 + dy,
   };
 }
 
 function Piece({
   name,
+  token,
   color,
   row,
   col,
@@ -431,6 +499,7 @@ function Piece({
   onDragCancel,
 }: {
   name: string;
+  token?: string | null;
   color: string;
   row: number;
   col: number;
@@ -482,31 +551,42 @@ function Piece({
 
   const cell = size / 11;
   const piece = pieceSize(cell);
-  const nudge = pieceNudge(slot, piece);
-  const left = col * cell + cell / 2 - piece / 2 + nudge.x;
-  const top = row * cell + cell / 2 - piece / 2 + nudge.y;
+  const offset = pieceOffset(row, col, cell, piece, slot);
+  const left = col * cell + offset.x;
+  const top = row * cell + offset.y;
+  const emoji = playerToken(token);
 
   return (
     <View
       {...responder.panHandlers}
       accessibilityRole="button"
-      accessibilityLabel={`${name} piece`}
+      accessibilityLabel={emoji ? `${name} ${emoji.label} piece` : `${name} piece`}
       style={[
         styles.token,
+        emoji
+          ? styles.tokenEmoji
+          : {
+              borderRadius: piece / 2,
+              backgroundColor: color,
+            },
         {
           left,
           top,
           width: piece,
           height: piece,
-          borderRadius: piece / 2,
-          backgroundColor: color,
           zIndex: drag ? 30 : 10 + slot,
           transform: drag ? [{ translateX: drag.dx }, { translateY: drag.dy }] : undefined,
         },
       ]}
     >
-      <Text style={[styles.tokenText, { fontSize: Math.round(piece * 0.5) }]}>
-        {name.trim().charAt(0).toUpperCase() || '?'}
+      <Text
+        style={
+          emoji
+            ? [styles.tokenEmojiText, { fontSize: Math.round(piece * 0.78), lineHeight: Math.round(piece * 0.9) }]
+            : [styles.tokenText, { fontSize: Math.round(piece * 0.5) }]
+        }
+      >
+        {emoji?.emoji ?? (name.trim().charAt(0).toUpperCase() || '?')}
       </Text>
     </View>
   );
@@ -626,8 +706,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  tokenEmoji: {
+    borderWidth: 0,
+    backgroundColor: 'transparent',
+  },
   tokenText: {
     color: '#1a1408',
     fontWeight: '800',
+  },
+  tokenEmojiText: {
+    textAlign: 'center',
   },
 });

@@ -14,10 +14,12 @@ import { findLocalPlayerId } from '../domain/localPlayer';
 import { type Game, createScoreEvent } from '../domain/models';
 import {
   BANK_PARTY_ID,
+  PLAYER_TOKENS,
   PURCHASE_OPTION,
   RAILROAD_COUNTS,
   STARTING_CASH,
   STREET_LEVELS,
+  playerToken,
   UTILITY_COUNTS,
   cashFromDelta,
   formatMoney,
@@ -41,6 +43,8 @@ import { colors, radii, space, typography } from '../theme';
 import type { RootStackParamList } from '../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Monopoly'>;
+
+const INITIAL_TOKEN = 'initial';
 
 function parsePositiveAmount(raw: string): number | null {
   const trimmed = raw.trim();
@@ -79,6 +83,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
   const [nameDraft, setNameDraft] = useState('');
   const [cashDraft, setCashDraft] = useState('');
+  const [tokenDraft, setTokenDraft] = useState(INITIAL_TOKEN);
   const {
     showCelebration,
     onSnapshot,
@@ -260,10 +265,11 @@ export function MonopolyScreen({ navigation, route }: Props) {
     setLandNote(`${player.name} moved to ${space.name}.`);
   };
 
-  const beginPlayerEdit = (playerId: string, name: string, cash: number) => {
+  const beginPlayerEdit = (playerId: string, name: string, cash: number, token?: string | null) => {
     setEditingPlayerId(playerId);
     setNameDraft(name);
     setCashDraft(String(cash));
+    setTokenDraft(playerToken(token)?.id ?? INITIAL_TOKEN);
     setError(null);
   };
 
@@ -285,11 +291,12 @@ export function MonopolyScreen({ navigation, route }: Props) {
       return false;
     }
     const name = nameDraft.trim();
+    const token = playerToken(tokenDraft)?.id ?? null;
     const delta = nextCash - cashFromDelta(standing.total);
     await applyGame(
       (g) => {
         g.players = g.players.map((player) =>
-          player.id === playerId ? { ...player, name: name || player.name } : player,
+          player.id === playerId ? { ...player, name: name || player.name, token } : player,
         );
         if (delta !== 0) g.events.push(createScoreEvent(playerId, delta));
         return g;
@@ -339,6 +346,16 @@ export function MonopolyScreen({ navigation, route }: Props) {
         : purchasing
           ? PURCHASE_OPTION
           : String(streetLevel);
+
+  const tokenOptions = [
+    { id: INITIAL_TOKEN, label: 'Initial' },
+    ...PLAYER_TOKENS.filter((token) => {
+      const taken = game.players.some(
+        (player) => player.id !== editingPlayerId && player.token === token.id,
+      );
+      return !taken || token.id === tokenDraft;
+    }).map((token) => ({ id: token.id, label: `${token.emoji} ${token.label}` })),
+  ];
 
   const developmentLabel =
     property.kind === 'railroad'
@@ -449,6 +466,8 @@ export function MonopolyScreen({ navigation, route }: Props) {
             const highestCash = Math.max(...cashTotals);
             const lowestCash = Math.min(...cashTotals);
             const isPoorest = standing.total === lowestCash && lowestCash < highestCash;
+            const player = game.players.find((entry) => entry.id === standing.playerId);
+            const piece = playerToken(player?.token);
             return (
               <View
                 key={standing.playerId}
@@ -467,7 +486,8 @@ export function MonopolyScreen({ navigation, route }: Props) {
                         void savePlayerEdit();
                         return;
                       }
-                      const openNext = () => beginPlayerEdit(standing.playerId, standing.playerName, cash);
+                      const openNext = () =>
+                        beginPlayerEdit(standing.playerId, standing.playerName, cash, player?.token);
                       if (editingPlayerId) {
                         void savePlayerEdit().then((saved) => {
                           if (saved) openNext();
@@ -491,10 +511,21 @@ export function MonopolyScreen({ navigation, route }: Props) {
                   />
                 ) : (
                   <Text style={styles.cardTitle}>
+                    {piece ? `${piece.emoji} ` : ''}
                     {standing.playerName}
                     {isYou ? ' · you' : ''}
                   </Text>
                 )}
+                {editing ? (
+                  <View style={styles.tokenSelect}>
+                    <OptionSelect
+                      label="Token"
+                      value={tokenDraft}
+                      options={tokenOptions}
+                      onChange={setTokenDraft}
+                    />
+                  </View>
+                ) : null}
                 {editing ? (
                   <Field
                     value={cashDraft}
@@ -773,6 +804,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   tileBadge: { alignSelf: 'center' },
+  tokenSelect: { alignSelf: 'stretch' },
   rentPreview: {
     ...typography.label,
     fontSize: 16,
