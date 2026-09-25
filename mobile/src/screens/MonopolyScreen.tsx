@@ -31,6 +31,7 @@ import {
 import { getBoardSpace } from '../domain/monopolyBoard';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
+import { useSettings } from '../hooks/useSettings';
 import { useWinCelebration } from '../hooks/useWinCelebration';
 import { loadDisplayName } from '../storage/displayNameStore';
 import { saveGame, subscribeGame } from '../storage/gameStore';
@@ -68,7 +69,8 @@ export function MonopolyScreen({ navigation, route }: Props) {
   const [railroadsOwned, setRailroadsOwned] = useState<RailroadCount>(1);
   const [utilitiesOwned, setUtilitiesOwned] = useState<UtilityCount>(1);
   const [dice, setDice] = useState('7');
-  const [showBoard, setShowBoard] = useState(false);
+  const [settings, updateSettings] = useSettings();
+  const showBoard = settings.showMonopolyBoard;
   const [boardDragging, setBoardDragging] = useState(false);
   const [landNote, setLandNote] = useState<string | null>(null);
   const {
@@ -353,9 +355,10 @@ export function MonopolyScreen({ navigation, route }: Props) {
           {!complete ? (
             <Button
               label={showBoard ? 'Hide board' : 'Show board'}
-              onPress={() => setShowBoard((open) => !open)}
+              onPress={() => updateSettings({ showMonopolyBoard: !showBoard })}
             />
           ) : null}
+          <Button label="Settings" variant="ghost" onPress={() => navigation.navigate('Settings')} />
           {!complete ? (
             <Button
               label="Mark complete"
