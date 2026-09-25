@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Path } from 'react-native-svg';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AddPlayerModal } from '../components/AddPlayerModal';
 import { MonopolyBoard } from '../components/MonopolyBoard';
@@ -10,7 +11,7 @@ import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Card, Field, Screen } from '../components/ui';
 import { withAddedPlayer, withoutPlayer } from '../domain/addPlayer';
 import { findLocalPlayerId } from '../domain/localPlayer';
-import { type Game } from '../domain/models';
+import { type Game, createScoreEvent } from '../domain/models';
 import {
   BANK_PARTY_ID,
   RAILROAD_COUNTS,
@@ -73,6 +74,9 @@ export function MonopolyScreen({ navigation, route }: Props) {
   const showBoard = settings.showMonopolyBoard;
   const [boardDragging, setBoardDragging] = useState(false);
   const [landNote, setLandNote] = useState<string | null>(null);
+  const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
+  const [nameDraft, setNameDraft] = useState('');
+  const [cashDraft, setCashDraft] = useState('');
   const {
     showCelebration,
     onSnapshot,
@@ -253,6 +257,46 @@ export function MonopolyScreen({ navigation, route }: Props) {
     setLandNote(`${player.name} moved to ${space.name}.`);
   };
 
+  const beginPlayerEdit = (playerId: string, name: string, cash: number) => {
+    setEditingPlayerId(playerId);
+    setNameDraft(name);
+    setCashDraft(String(cash));
+    setError(null);
+  };
+
+  const savePlayerEdit = async (): Promise<boolean> => {
+    if (!editingPlayerId || !canBank) return false;
+    const playerId = editingPlayerId;
+    const standing = snapshot.standings.find((entry) => entry.playerId === playerId);
+    if (!standing) {
+      setEditingPlayerId(null);
+      return false;
+    }
+    if (!/^-?\d+$/.test(cashDraft)) {
+      setError('Enter a whole dollar amount.');
+      return false;
+    }
+    const nextCash = Number(cashDraft);
+    if (!Number.isSafeInteger(nextCash)) {
+      setError('Enter a whole dollar amount.');
+      return false;
+    }
+    const name = nameDraft.trim();
+    const delta = nextCash - cashFromDelta(standing.total);
+    await applyGame(
+      (g) => {
+        g.players = g.players.map((player) =>
+          player.id === playerId ? { ...player, name: name || player.name } : player,
+        );
+        if (delta !== 0) g.events.push(createScoreEvent(playerId, delta));
+        return g;
+      },
+      { suppressWin: true },
+    );
+    setEditingPlayerId(null);
+    return true;
+  };
+
   const banner = complete
     ? snapshot.winnerName
       ? `${snapshot.winnerName} wins with the most cash`
@@ -392,19 +436,74 @@ export function MonopolyScreen({ navigation, route }: Props) {
             const cash = cashFromDelta(standing.total);
             const isYou = standing.playerId === localPlayerId;
             const broke = cash <= 0;
+            const editing = editingPlayerId === standing.playerId;
+            const cashTotals = snapshot.standings.map((entry) => entry.total);
+            const highestCash = Math.max(...cashTotals);
+            const lowestCash = Math.min(...cashTotals);
+            const isPoorest = standing.total === lowestCash && lowestCash < highestCash;
             return (
               <View
                 key={standing.playerId}
-                style={[styles.cashCard, isYou ? styles.cashCardYou : styles.cashCardOther]}
+                style={[
+                  styles.cashCard,
+                  isYou ? styles.cashCardYou : styles.cashCardOther,
+                  canBank && styles.cashCardEditable,
+                ]}
               >
-                <Text style={styles.cardTitle}>
-                  {standing.playerName}
-                  {isYou ? ' · you' : ''}
-                </Text>
-                <Text style={[styles.cash, broke && { color: colors.danger }]}>{formatMoney(cash)}</Text>
-                {broke ? <Badge label="Bankrupt" tone="danger" /> : null}
-                {standing.isLeader && !broke ? <Badge label="Richest" tone="accent" /> : null}
-                {standing.isWinner ? <Badge label="Winner" tone="success" /> : null}
+                {canBank ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={editing ? `Save ${standing.playerName}` : `Edit ${standing.playerName}`}
+                    onPress={() => {
+                      if (editing) {
+                        void savePlayerEdit();
+                        return;
+                      }
+                      const openNext = () => beginPlayerEdit(standing.playerId, standing.playerName, cash);
+                      if (editingPlayerId) {
+                        void savePlayerEdit().then((saved) => {
+                          if (saved) openNext();
+                        });
+                        return;
+                      }
+                      openNext();
+                    }}
+                    style={styles.editBtn}
+                  >
+                    {editing ? <CheckIcon /> : <PencilIcon />}
+                  </Pressable>
+                ) : null}
+                {editing ? (
+                  <Field
+                    value={nameDraft}
+                    onChangeText={setNameDraft}
+                    placeholder="Name"
+                    autoFocus
+                    style={styles.editField}
+                  />
+                ) : (
+                  <Text style={styles.cardTitle}>
+                    {standing.playerName}
+                    {isYou ? ' · you' : ''}
+                  </Text>
+                )}
+                {editing ? (
+                  <Field
+                    value={cashDraft}
+                    onChangeText={(text) => setCashDraft(sanitizeCashInput(text))}
+                    keyboardType="numbers-and-punctuation"
+                    placeholder="Cash"
+                    style={[styles.editField, styles.editCash]}
+                  />
+                ) : (
+                  <Text style={[styles.cash, broke && { color: colors.danger }]}>{formatMoney(cash)}</Text>
+                )}
+                {broke ? <Badge label="Bankrupt" tone="danger" style={styles.tileBadge} /> : null}
+                {standing.isLeader && !broke ? (
+                  <Badge label="Richest" tone="accent" style={styles.tileBadge} />
+                ) : null}
+                {isPoorest ? <Badge label="Poorest" style={styles.tileBadge} /> : null}
+                {standing.isWinner ? <Badge label="Winner" tone="success" style={styles.tileBadge} /> : null}
                 {game.players.length > 1 && !complete ? (
                   <Button
                     label="Remove"
@@ -569,6 +668,31 @@ export function MonopolyScreen({ navigation, route }: Props) {
   );
 }
 
+function sanitizeCashInput(text: string): string {
+  const negative = text.trim().startsWith('-');
+  const digits = text.replace(/\D/g, '');
+  return negative ? `-${digits}` : digits;
+}
+
+function PencilIcon() {
+  return (
+    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"
+        fill={colors.accent}
+      />
+    </Svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+      <Path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" fill={colors.accent} />
+    </Svg>
+  );
+}
+
 const styles = StyleSheet.create({
   content: { paddingHorizontal: space.lg, gap: 12 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
@@ -602,6 +726,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accentSoft,
   },
   cashCardOther: { borderColor: colors.border },
+  cashCardEditable: { paddingTop: 36 },
   cardTitle: {
     ...typography.label,
     fontSize: 15,
@@ -611,6 +736,30 @@ const styles = StyleSheet.create({
     ...typography.score,
     fontSize: 28,
   },
+  editBtn: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  editField: {
+    alignSelf: 'stretch',
+    minHeight: 40,
+    paddingVertical: 8,
+    textAlign: 'center',
+  },
+  editCash: {
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  tileBadge: { alignSelf: 'center' },
   rentPreview: {
     ...typography.label,
     fontSize: 16,
