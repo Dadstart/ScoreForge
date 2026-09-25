@@ -48,6 +48,10 @@ function ensureLoaded(): Promise<void> {
   return loading;
 }
 
+export function getSettings(): Settings {
+  return current;
+}
+
 export function loadSettings(): Promise<Settings> {
   return ensureLoaded().then(() => current);
 }

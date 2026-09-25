@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { StyleSheet, Switch, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Card, Screen } from '../components/ui';
+import { Button, Card, Screen } from '../components/ui';
 import { useSettings } from '../hooks/useSettings';
 import type { Settings } from '../storage/settingsStore';
 import { colors, space, typography } from '../theme';
@@ -25,7 +25,7 @@ const options: SettingOption[] = [
   },
 ];
 
-export function SettingsScreen(_props: Props) {
+export function SettingsScreen({ navigation }: Props) {
   const [settings, update] = useSettings();
   const groups = useMemo(() => [...new Set(options.map((option) => option.group))], []);
 
@@ -62,6 +62,7 @@ export function SettingsScreen(_props: Props) {
             </Card>
           </View>
         ))}
+        <Button label="OK" variant="primary" onPress={() => navigation.goBack()} style={styles.ok} />
       </View>
     </Screen>
   );
@@ -70,6 +71,7 @@ export function SettingsScreen(_props: Props) {
 const styles = StyleSheet.create({
   screen: { flex: 1, padding: space.lg, gap: 14 },
   group: { gap: 8 },
+  ok: { alignSelf: 'flex-start', minWidth: 96 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
