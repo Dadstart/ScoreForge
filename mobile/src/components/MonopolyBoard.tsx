@@ -1,5 +1,15 @@
 import { useRef, useState } from 'react';
-import { PanResponder, StyleSheet, Text, View } from 'react-native';
+import {
+  PanResponder,
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+  type GestureResponderEvent,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import type { Player } from '../domain/models';
 import {
@@ -24,7 +34,246 @@ type Props = {
 
 type Origin = { x: number; y: number; size: number };
 
-export function MonopolyBoard({ players, tokenSpaces, enabled, onLand, onDragging }: Props) {
+const PHONE_LAYOUT = 760;
+const START_ZOOM = 2;
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 3.5;
+
+function clampZoom(zoom: number) {
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
+}
+
+function clampPan(pan: { x: number; y: number }, zoom: number, viewport: number) {
+  const min = Math.min(0, viewport * (1 - zoom));
+  return {
+    x: Math.min(0, Math.max(min, pan.x)),
+    y: Math.min(0, Math.max(min, pan.y)),
+  };
+}
+
+function touchDistance(a: { pageX: number; pageY: number }, b: { pageX: number; pageY: number }) {
+  return Math.hypot(a.pageX - b.pageX, a.pageY - b.pageY);
+}
+
+export function MonopolyBoard(props: Props) {
+  const window = useWindowDimensions();
+  if (Math.min(window.width, window.height) < PHONE_LAYOUT) return <PhoneBoard {...props} />;
+  return <BoardCanvas {...props} />;
+}
+
+function PhoneBoard({ onDragging, ...props }: Props) {
+  const viewportRef = useRef<View>(null);
+  const [viewport, setViewport] = useState(0);
+  const [zoom, setZoom] = useState(START_ZOOM);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const zoomRef = useRef(zoom);
+  const panRef = useRef(pan);
+  const viewportRefSize = useRef(0);
+  const movingPiece = useRef(false);
+  const onDraggingRef = useRef(onDragging);
+  zoomRef.current = zoom;
+  panRef.current = pan;
+  viewportRefSize.current = viewport;
+  onDraggingRef.current = onDragging;
+
+  const gesture = useRef({
+    pan: { x: 0, y: 0 },
+    dx: 0,
+    dy: 0,
+    pinch: null as null | { dist: number; zoom: number; pan: { x: number; y: number }; x: number; y: number },
+    origin: { x: 0, y: 0 },
+  });
+
+  const responder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => !movingPiece.current,
+      onMoveShouldSetPanResponder: (evt, g) => {
+        if (movingPiece.current) return false;
+        return (evt.nativeEvent.touches?.length ?? 0) >= 2 || Math.abs(g.dx) > 6 || Math.abs(g.dy) > 6;
+      },
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: (evt) => {
+        onDraggingRef.current(true);
+        gesture.current.pan = panRef.current;
+        gesture.current.dx = 0;
+        gesture.current.dy = 0;
+        gesture.current.pinch = null;
+        viewportRef.current?.measureInWindow((x, y) => {
+          gesture.current.origin = { x, y };
+        });
+        beginPinch(evt);
+      },
+      onPanResponderMove: (evt, g) => {
+        const touches = evt.nativeEvent.touches ?? [];
+        if (touches.length >= 2) {
+          if (!gesture.current.pinch) beginPinch(evt);
+          applyPinch(touches);
+          return;
+        }
+        if (gesture.current.pinch) {
+          gesture.current.pinch = null;
+          gesture.current.pan = panRef.current;
+          gesture.current.dx = g.dx;
+          gesture.current.dy = g.dy;
+          return;
+        }
+        const next = clampPan(
+          {
+            x: gesture.current.pan.x + g.dx - gesture.current.dx,
+            y: gesture.current.pan.y + g.dy - gesture.current.dy,
+          },
+          zoomRef.current,
+          viewportRefSize.current,
+        );
+        panRef.current = next;
+        setPan(next);
+      },
+      onPanResponderRelease: () => {
+        gesture.current.pinch = null;
+        if (!movingPiece.current) onDraggingRef.current(false);
+      },
+      onPanResponderTerminate: () => {
+        gesture.current.pinch = null;
+        if (!movingPiece.current) onDraggingRef.current(false);
+      },
+    }),
+  ).current;
+
+  const beginPinch = (evt: GestureResponderEvent) => {
+    const touches = evt.nativeEvent.touches ?? [];
+    if (touches.length < 2) return;
+    const [a, b] = touches;
+    const midX = (a.pageX + b.pageX) / 2 - gesture.current.origin.x;
+    const midY = (a.pageY + b.pageY) / 2 - gesture.current.origin.y;
+    gesture.current.pinch = {
+      dist: Math.max(1, touchDistance(a, b)),
+      zoom: zoomRef.current,
+      pan: panRef.current,
+      x: midX,
+      y: midY,
+    };
+  };
+
+  const applyPinch = (touches: ReadonlyArray<{ pageX: number; pageY: number }>) => {
+    const pinch = gesture.current.pinch;
+    const [a, b] = touches;
+    if (!pinch || !a || !b) return;
+    const nextZoom = clampZoom((touchDistance(a, b) / pinch.dist) * pinch.zoom);
+    const midX = (a.pageX + b.pageX) / 2 - gesture.current.origin.x;
+    const midY = (a.pageY + b.pageY) / 2 - gesture.current.origin.y;
+    const ratio = nextZoom / pinch.zoom;
+    const nextPan = clampPan(
+      {
+        x: midX - (pinch.x - pinch.pan.x) * ratio,
+        y: midY - (pinch.y - pinch.pan.y) * ratio,
+      },
+      nextZoom,
+      viewportRefSize.current,
+    );
+    zoomRef.current = nextZoom;
+    panRef.current = nextPan;
+    setZoom(nextZoom);
+    setPan(nextPan);
+  };
+
+  const changeZoom = (delta: number) => {
+    const prev = zoomRef.current;
+    const next = clampZoom(prev + delta);
+    const size = viewportRefSize.current;
+    const focus = size / 2;
+    const current = panRef.current;
+    const nextPan = clampPan(
+      {
+        x: focus - ((focus - current.x) * next) / prev,
+        y: focus - ((focus - current.y) * next) / prev,
+      },
+      next,
+      size,
+    );
+    zoomRef.current = next;
+    panRef.current = nextPan;
+    setZoom(next);
+    setPan(nextPan);
+  };
+
+  const boardSize = viewport * zoom;
+
+  return (
+    <View style={{ gap: 8 }}>
+      <View
+        ref={viewportRef}
+        style={styles.viewport}
+        onLayout={(event) => {
+          const width = event.nativeEvent.layout.width;
+          if (width <= 0 || width === viewportRefSize.current) return;
+          const first = viewportRefSize.current === 0;
+          viewportRefSize.current = width;
+          setViewport(width);
+          if (first) {
+            const origin = width - width * START_ZOOM;
+            const next = { x: origin, y: origin };
+            panRef.current = next;
+            setPan(next);
+          }
+        }}
+        onTouchStart={() => onDraggingRef.current(true)}
+        onTouchEnd={() => {
+          if (!movingPiece.current) onDraggingRef.current(false);
+        }}
+        onTouchCancel={() => {
+          if (!movingPiece.current) onDraggingRef.current(false);
+        }}
+      >
+        {viewport > 0 ? (
+          <BoardCanvas
+            {...props}
+            onDragging={(dragging) => {
+              movingPiece.current = dragging;
+              onDraggingRef.current(dragging);
+            }}
+            panHandlers={responder.panHandlers}
+            showCenter={false}
+            style={{ position: 'absolute', width: boardSize, height: boardSize, left: pan.x, top: pan.y }}
+          />
+        ) : null}
+        <View style={styles.zoomDock} pointerEvents="box-none">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Zoom in"
+            onPress={() => changeZoom(0.5)}
+            style={styles.zoomBtn}
+          >
+            <Text style={styles.zoomLabel}>+</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Zoom out"
+            onPress={() => changeZoom(-0.5)}
+            style={styles.zoomBtn}
+          >
+            <Text style={styles.zoomLabel}>−</Text>
+          </Pressable>
+        </View>
+      </View>
+      <Text style={styles.phoneHint}>Drag the board to look around. Pinch, or use + and −, to zoom.</Text>
+    </View>
+  );
+}
+
+function BoardCanvas({
+  players,
+  tokenSpaces,
+  enabled,
+  onLand,
+  onDragging,
+  style,
+  panHandlers,
+  showCenter = true,
+}: Props & {
+  style?: StyleProp<ViewStyle>;
+  panHandlers?: ReturnType<typeof PanResponder.create>['panHandlers'];
+  showCenter?: boolean;
+}) {
   const boardRef = useRef<View>(null);
   const origin = useRef<Origin>({ x: 0, y: 0, size: 0 });
   const [size, setSize] = useState(0);
@@ -50,8 +299,9 @@ export function MonopolyBoard({ players, tokenSpaces, enabled, onLand, onDraggin
     <View
       ref={boardRef}
       onLayout={rememberOrigin}
-      style={styles.board}
+      style={[styles.board, style]}
       accessibilityLabel="Monopoly board"
+      {...panHandlers}
     >
       {boardSpaces.map((space) => {
         const { row, col } = spaceToCell(space.index);
@@ -109,8 +359,12 @@ export function MonopolyBoard({ players, tokenSpaces, enabled, onLand, onDraggin
         );
       })}
       <View style={styles.center} pointerEvents="none">
-        <Text style={styles.centerTitle}>Board</Text>
-        <Text style={styles.centerHint}>Drag a piece onto a space</Text>
+        {showCenter ? (
+          <>
+            <Text style={styles.centerTitle}>Board</Text>
+            <Text style={styles.centerHint}>Drag a piece onto a space</Text>
+          </>
+        ) : null}
       </View>
       {size > 0
         ? players.map((player, index) => {
@@ -593,6 +847,45 @@ function Piece({
 }
 
 const styles = StyleSheet.create({
+  viewport: {
+    width: '100%',
+    aspectRatio: 1,
+    overflow: 'hidden',
+    borderRadius: radii.md,
+    backgroundColor: colors.woodDark,
+    borderWidth: 2,
+    borderColor: colors.wood,
+    position: 'relative',
+  },
+  zoomDock: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    gap: 8,
+    zIndex: 40,
+  },
+  zoomBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  zoomLabel: {
+    color: colors.accent,
+    fontSize: 24,
+    fontWeight: '700',
+    lineHeight: 28,
+  },
+  phoneHint: {
+    fontFamily: fonts.body,
+    color: colors.textDim,
+    fontSize: 13,
+    textAlign: 'center',
+  },
   board: {
     width: '100%',
     aspectRatio: 1,
