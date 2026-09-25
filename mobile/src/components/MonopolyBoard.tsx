@@ -62,6 +62,9 @@ export function MonopolyBoard({ players, tokenSpaces, enabled, onLand, onDraggin
         const cell = size > 0 ? size / 11 : 48;
         const bar = Math.max(10, Math.round(cell * 0.22));
         const label = Math.max(11, Math.round(cell * 0.13));
+        const fitted = space.propertyId
+          ? fitPropertyLabel(space.name, labelBounds(row, col, cell, bar, isRailroad), label)
+          : null;
         return (
           <View
             key={space.index}
@@ -83,11 +86,15 @@ export function MonopolyBoard({ players, tokenSpaces, enabled, onLand, onDraggin
             <Text
               style={[
                 styles.cellText,
-                { fontSize: label, lineHeight: Math.round(label * 1.15), width: '100%' },
+                {
+                  fontSize: fitted?.fontSize ?? label,
+                  lineHeight: fitted?.lineHeight ?? Math.round(label * 1.15),
+                  width: '100%',
+                },
               ]}
-              numberOfLines={2}
+              numberOfLines={fitted?.lines ?? 2}
             >
-              {space.short}
+              {fitted?.text ?? space.short}
             </Text>
           </View>
         );
@@ -145,10 +152,95 @@ export function MonopolyBoard({ players, tokenSpaces, enabled, onLand, onDraggin
   );
 }
 
-function TrainMark({ row, col, cell }: { row: number; col: number; cell: number }) {
+/** Advances for DM Sans at weight 800 and 17px. */
+const GLYPH_WIDTH: Record<string, number> = {
+  A: 12.04, B: 10.83, C: 12.56, D: 12.05, E: 9.89, F: 9.43, G: 13.21, H: 12.12, I: 4.61,
+  J: 9.18, K: 11.08, L: 9.49, M: 15.08, N: 12.38, O: 13.36, P: 10.42, Q: 13.36, R: 10.71,
+  S: 10.25, T: 10.15, U: 11.64, V: 11.98, W: 17.29, X: 11.37, Y: 10.78, Z: 9.77,
+  a: 9.94, b: 11.13, c: 10.3, d: 11.13, e: 10.23, f: 6.27, g: 10.13, h: 10.47, i: 4.64,
+  j: 4.66, k: 9.83, l: 4.52, m: 16, n: 10.47, o: 10.37, p: 11.13, q: 11.13, r: 6.92,
+  s: 9.03, t: 7.33, u: 10.47, v: 9.57, w: 13.89, x: 9.71, y: 10.27, z: 8.3,
+  '.': 4.27, '&': 13.26, ' ': 3.99,
+};
+
+function textWidth(text: string, fontSize: number) {
+  const scale = fontSize / 17;
+  let width = 0;
+  for (const ch of text) width += (GLYPH_WIDTH[ch] ?? 10.2) * scale;
+  return width;
+}
+
+function wrapWords(name: string, maxWidth: number, fontSize: number) {
+  const words = name.split(/\s+/).filter(Boolean);
+  if (words.length <= 1) return [name];
+  if (textWidth(name, fontSize) <= maxWidth - 16) return [name];
+  const lines = packWords(words, maxWidth, fontSize);
+  if (lines.length === 1) return [words.slice(0, -1).join(' '), words[words.length - 1]];
+  return lines;
+}
+
+function packWords(words: string[], maxWidth: number, fontSize: number) {
+  const lines: string[] = [];
+  let current = '';
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (current && textWidth(next, fontSize) > maxWidth) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = next;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+function trainExtent(cell: number, col: number) {
   const long = Math.max(28, Math.round(cell * 0.5));
   const short = Math.round(long * 0.56);
   const sideways = col === 0 || col === 10;
+  return { long, short, sideways, height: sideways ? long : short };
+}
+
+function labelBounds(row: number, col: number, cell: number, bar: number, railroad: boolean) {
+  const border = 2;
+  const pad = 1;
+  let width = cell - border - pad * 2;
+  let height = cell - border - pad * 2;
+  if (railroad) {
+    height -= trainExtent(cell, col).height;
+  } else if (row === 0 || row === 10) {
+    height -= bar - pad;
+  } else {
+    width -= bar - pad;
+  }
+  return { width: Math.max(8, width), height: Math.max(8, height) };
+}
+
+function fitPropertyLabel(
+  name: string,
+  bounds: { width: number; height: number },
+  startSize: number,
+) {
+  const minSize = 8;
+  let fontSize = startSize;
+  while (fontSize >= minSize) {
+    const lines = wrapWords(name, bounds.width, fontSize);
+    const lineHeight = Math.max(fontSize + 1, Math.round(fontSize * 1.1));
+    const fitsWidth = lines.every((line) => textWidth(line, fontSize) <= bounds.width);
+    const fitsHeight = lines.length * lineHeight <= bounds.height;
+    if (fitsWidth && fitsHeight) {
+      return { text: lines.join('\n'), fontSize, lineHeight, lines: lines.length };
+    }
+    fontSize -= 1;
+  }
+  const lines = wrapWords(name, bounds.width, minSize);
+  const lineHeight = Math.round(minSize * 1.1);
+  return { text: lines.join('\n'), fontSize: minSize, lineHeight, lines: lines.length };
+}
+
+function TrainMark({ row, col, cell }: { row: number; col: number; cell: number }) {
+  const { long, short, sideways } = trainExtent(cell, col);
   const transform =
     row === 10
       ? [{ scaleX: -1 as const }]
