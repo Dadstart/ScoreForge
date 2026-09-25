@@ -14,6 +14,7 @@ import { findLocalPlayerId } from '../domain/localPlayer';
 import { type Game, createScoreEvent } from '../domain/models';
 import {
   BANK_PARTY_ID,
+  PURCHASE_OPTION,
   RAILROAD_COUNTS,
   STARTING_CASH,
   STREET_LEVELS,
@@ -67,6 +68,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
   const [receiverId, setReceiverId] = useState(BANK_PARTY_ID);
   const [propertyId, setPropertyId] = useState(properties[0].id);
   const [streetLevel, setStreetLevel] = useState<StreetLevel>(0);
+  const [purchasing, setPurchasing] = useState(false);
   const [railroadsOwned, setRailroadsOwned] = useState<RailroadCount>(1);
   const [utilitiesOwned, setUtilitiesOwned] = useState<UtilityCount>(1);
   const [dice, setDice] = useState('7');
@@ -131,8 +133,9 @@ export function MonopolyScreen({ navigation, route }: Props) {
         railroadsOwned,
         utilitiesOwned,
         dice: diceTotal ?? 0,
+        purchase: purchasing && property.kind === 'street',
       }),
-    [propertyId, streetLevel, railroadsOwned, utilitiesOwned, diceTotal],
+    [propertyId, streetLevel, railroadsOwned, utilitiesOwned, diceTotal, purchasing, property.kind],
   );
 
   const persist = async (next: Game) => {
@@ -323,14 +326,19 @@ export function MonopolyScreen({ navigation, route }: Props) {
       ? RAILROAD_COUNTS.map((entry) => ({ id: String(entry.id), label: entry.label }))
       : property.kind === 'utility'
         ? UTILITY_COUNTS.map((entry) => ({ id: String(entry.id), label: entry.label }))
-        : STREET_LEVELS.map((entry) => ({ id: String(entry.id), label: entry.label }));
+        : [
+            ...STREET_LEVELS.map((entry) => ({ id: String(entry.id), label: entry.label })),
+            { id: PURCHASE_OPTION, label: 'Purchase' },
+          ];
 
   const developmentValue =
     property.kind === 'railroad'
       ? String(railroadsOwned)
       : property.kind === 'utility'
         ? String(utilitiesOwned)
-        : String(streetLevel);
+        : purchasing
+          ? PURCHASE_OPTION
+          : String(streetLevel);
 
   const developmentLabel =
     property.kind === 'railroad'
@@ -587,7 +595,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
         <Card>
           <Text style={typography.section}>Rent</Text>
           <Text style={typography.body}>
-            Pick the property and how it is built, then charge that rent from the payer to the receiver.
+            Pick the property and how it is built, or choose Purchase, then charge that amount from the payer to the receiver.
           </Text>
           <OptionSelect
             label="Property"
@@ -607,6 +615,11 @@ export function MonopolyScreen({ navigation, route }: Props) {
             disabled={!canBank}
             options={developmentOptions}
             onChange={(id) => {
+              if (property.kind === 'street' && id === PURCHASE_OPTION) {
+                setPurchasing(true);
+                return;
+              }
+              setPurchasing(false);
               const next = Number(id);
               if (property.kind === 'railroad') setRailroadsOwned(next as RailroadCount);
               else if (property.kind === 'utility') setUtilitiesOwned(next as UtilityCount);
