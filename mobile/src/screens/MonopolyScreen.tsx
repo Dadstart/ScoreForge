@@ -447,12 +447,18 @@ export function MonopolyScreen({ navigation, route }: Props) {
             const isPoorest = standing.total === lowestCash && lowestCash < highestCash;
             const player = game.players.find((entry) => entry.id === standing.playerId);
             const piece = playerToken(player?.token);
+            const paying = standing.playerId === resolvedPayer;
             return (
-              <View
+              <Pressable
                 key={standing.playerId}
+                accessibilityRole="button"
+                accessibilityLabel={paying ? `${standing.playerName}, paying` : `Select ${standing.playerName} as paying`}
+                accessibilityState={{ selected: paying, disabled: !canBank }}
+                disabled={!canBank}
+                onPress={() => setPayerId(standing.playerId)}
                 style={[
                   styles.cashCard,
-                  isYou ? styles.cashCardYou : styles.cashCardOther,
+                  paying ? styles.cashCardPaying : styles.cashCardOther,
                   canBank && styles.cashCardEditable,
                 ]}
               >
@@ -547,7 +553,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
                     }}
                   />
                 ) : null}
-              </View>
+              </Pressable>
             );
           })}
         </View>
@@ -733,9 +739,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     gap: 8,
   },
-  cashCardYou: {
+  cashCardPaying: {
     borderColor: colors.accent,
     backgroundColor: colors.accentSoft,
+    borderWidth: 2,
   },
   cashCardOther: { borderColor: colors.border },
   cashCardEditable: { paddingTop: 36 },
