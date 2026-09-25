@@ -14,7 +14,7 @@ import { getTemplate } from '../domain/templates';
 import type { Game } from '../domain/models';
 import { deleteGame, loadGames } from '../storage/gameStore';
 import { colors, space, typography } from '../theme';
-import type { RootStackParamList } from '../navigation/types';
+import { gameScreenForTemplate, type RootStackParamList } from '../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
@@ -45,11 +45,7 @@ export function HomeScreen({ navigation }: Props) {
   }, [navigation, refresh]);
 
   const openGame = (game: Game) => {
-    if (game.templateId === 'cribbage') {
-      navigation.navigate('Cribbage', { gameId: game.id });
-    } else {
-      navigation.navigate('Board', { gameId: game.id });
-    }
+    navigation.navigate(gameScreenForTemplate(game.templateId), { gameId: game.id });
   };
 
   const onDelete = async (id: string) => {

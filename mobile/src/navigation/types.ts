@@ -8,8 +8,17 @@ export type RootStackParamList = {
   Join: { code?: string } | undefined;
   Board: { gameId: string };
   Cribbage: { gameId: string };
-  Settings: undefined;
+  Monopoly: { gameId: string };
+  Settings: { gameId?: string } | undefined;
 };
+
+export function gameScreenForTemplate(
+  templateId: string,
+): 'Board' | 'Cribbage' | 'Monopoly' {
+  if (templateId === 'cribbage') return 'Cribbage';
+  if (templateId === 'monopoly') return 'Monopoly';
+  return 'Board';
+}
 
 export type Nav = NativeStackNavigationProp<RootStackParamList>;
 export type BoardRoute = RouteProp<RootStackParamList, 'Board'>;

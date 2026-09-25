@@ -19,6 +19,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
       Setup: 'setup',
       Board: 'board/:gameId',
       Cribbage: 'cribbage/:gameId',
+      Monopoly: 'monopoly/:gameId',
       Settings: 'settings',
     },
   },

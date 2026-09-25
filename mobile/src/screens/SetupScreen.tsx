@@ -13,7 +13,7 @@ import { getTemplate, templates } from '../domain/templates';
 import { loadDisplayName, saveDisplayName } from '../storage/displayNameStore';
 import { createAndSaveGame } from '../storage/gameStore';
 import { colors, radii, space, typography } from '../theme';
-import type { RootStackParamList } from '../navigation/types';
+import { gameScreenForTemplate, type RootStackParamList } from '../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Setup'>;
 
@@ -66,11 +66,7 @@ export function SetupScreen({ navigation }: Props) {
         maxRounds: showMaxRounds && maxRounds ? Number(maxRounds) : null,
       });
 
-      if (template.id === 'cribbage') {
-        navigation.replace('Cribbage', { gameId: game.id });
-      } else {
-        navigation.replace('Board', { gameId: game.id });
-      }
+      navigation.replace(gameScreenForTemplate(template.id), { gameId: game.id });
     } catch (e) {
       setValidation(e instanceof Error ? e.message : 'Could not create game');
     } finally {

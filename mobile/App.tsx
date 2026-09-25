@@ -8,6 +8,7 @@ import { linking } from './src/navigation/linking';
 import type { RootStackParamList } from './src/navigation/types';
 import { BoardScreen } from './src/screens/BoardScreen';
 import { CribbageScreen } from './src/screens/CribbageScreen';
+import { MonopolyScreen } from './src/screens/MonopolyScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { JoinScreen } from './src/screens/JoinScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
@@ -76,6 +77,11 @@ export default function App() {
             name="Cribbage"
             component={CribbageScreen}
             options={{ title: 'Cribbage', headerShown: false }}
+          />
+          <Stack.Screen
+            name="Monopoly"
+            component={MonopolyScreen}
+            options={{ title: 'Monopoly', headerShown: false }}
           />
           <Stack.Screen name="Settings" component={SettingsScreen} />
         </Stack.Navigator>

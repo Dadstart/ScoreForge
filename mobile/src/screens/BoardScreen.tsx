@@ -9,8 +9,10 @@ import {
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { FireworksOverlay } from '../components/FireworksOverlay';
+import { AddPlayerModal } from '../components/AddPlayerModal';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Field, Screen } from '../components/ui';
+import { withAddedPlayer } from '../domain/addPlayer';
 import { findLocalPlayerId, nextRoundForPlayer } from '../domain/localPlayer';
 import { createScoreEvent, type Game } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
@@ -30,6 +32,7 @@ export function BoardScreen({ navigation, route }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [enteringScore, setEnteringScore] = useState(false);
   const [myRoundScore, setMyRoundScore] = useState('0');
+  const [addingPlayer, setAddingPlayer] = useState(false);
   const {
     showCelebration,
     onSnapshot,
@@ -214,6 +217,9 @@ export function BoardScreen({ navigation, route }: Props) {
                 )
               }
             />
+            {game.players.length < template.maxPlayers ? (
+              <Button label="Add player" onPress={() => setAddingPlayer(true)} />
+            ) : null}
             {!complete ? (
               <Button
                 label="Mark complete"
@@ -332,6 +338,17 @@ export function BoardScreen({ navigation, route }: Props) {
             onDismiss={dismissCelebration}
           />
         ) : null}
+
+        <AddPlayerModal
+          visible={addingPlayer}
+          maxPlayers={template.maxPlayers}
+          currentCount={game.players.length}
+          onCancel={() => setAddingPlayer(false)}
+          onAdd={async (name) => {
+            const next = withAddedPlayer(game, name, template.maxPlayers);
+            await persist(next);
+          }}
+        />
       </View>
     </Screen>
   );

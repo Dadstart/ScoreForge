@@ -96,9 +96,11 @@ export function Card({
 export function Badge({
   label,
   tone = 'neutral',
+  style,
 }: {
   label: string;
   tone?: 'neutral' | 'accent' | 'success' | 'danger';
+  style?: StyleProp<ViewStyle>;
 }) {
   return (
     <View
@@ -107,6 +109,7 @@ export function Badge({
         tone === 'accent' && styles.badgeAccent,
         tone === 'success' && styles.badgeSuccess,
         tone === 'danger' && styles.badgeDanger,
+        style,
       ]}
     >
       <Text
