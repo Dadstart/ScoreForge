@@ -13,7 +13,6 @@ import { getProperty } from '../domain/monopoly';
 import { colors, fonts, radii } from '../theme';
 
 const TOKEN_COLORS = ['#e86a5c', '#6fbf8a', '#7eb6ff', '#d4a84b', '#d93a96', '#f7941d', '#c5d0c9', '#f2e3a0'];
-const TOKEN = 22;
 
 type Props = {
   players: Player[];
@@ -391,6 +390,17 @@ function labelInset(row: number, col: number, bar: number) {
   return { paddingRight: bar };
 }
 
+function pieceSize(cell: number) {
+  return Math.max(28, Math.round(cell * 0.34));
+}
+
+function pieceNudge(slot: number, piece: number) {
+  return {
+    x: (slot % 2 === 0 ? -1 : 1) * Math.round(piece * 0.18),
+    y: slot > 1 ? Math.round(piece * 0.22) : -Math.round(piece * 0.1),
+  };
+}
+
 function tokenCenter(
   board: Origin,
   row: number,
@@ -400,11 +410,10 @@ function tokenCenter(
   dy = 0,
 ) {
   const cell = board.size / 11;
-  const nudgeX = slot % 2 === 0 ? -4 : 4;
-  const nudgeY = slot > 1 ? 6 : -2;
+  const nudge = pieceNudge(slot, pieceSize(cell));
   return {
-    x: board.x + col * cell + cell / 2 + nudgeX + dx,
-    y: board.y + row * cell + cell / 2 + nudgeY + dy,
+    x: board.x + col * cell + cell / 2 + nudge.x + dx,
+    y: board.y + row * cell + cell / 2 + nudge.y + dy,
   };
 }
 
@@ -472,10 +481,10 @@ function Piece({
   ).current;
 
   const cell = size / 11;
-  const nudgeX = slot % 2 === 0 ? -4 : 4;
-  const nudgeY = slot > 1 ? 6 : -2;
-  const left = col * cell + cell / 2 - TOKEN / 2 + nudgeX;
-  const top = row * cell + cell / 2 - TOKEN / 2 + nudgeY;
+  const piece = pieceSize(cell);
+  const nudge = pieceNudge(slot, piece);
+  const left = col * cell + cell / 2 - piece / 2 + nudge.x;
+  const top = row * cell + cell / 2 - piece / 2 + nudge.y;
 
   return (
     <View
@@ -487,13 +496,18 @@ function Piece({
         {
           left,
           top,
+          width: piece,
+          height: piece,
+          borderRadius: piece / 2,
           backgroundColor: color,
           zIndex: drag ? 30 : 10 + slot,
           transform: drag ? [{ translateX: drag.dx }, { translateY: drag.dy }] : undefined,
         },
       ]}
     >
-      <Text style={styles.tokenText}>{name.trim().charAt(0).toUpperCase() || '?'}</Text>
+      <Text style={[styles.tokenText, { fontSize: Math.round(piece * 0.5) }]}>
+        {name.trim().charAt(0).toUpperCase() || '?'}
+      </Text>
     </View>
   );
 }
@@ -607,9 +621,6 @@ const styles = StyleSheet.create({
   },
   token: {
     position: 'absolute',
-    width: TOKEN,
-    height: TOKEN,
-    borderRadius: TOKEN / 2,
     borderWidth: 2,
     borderColor: '#1a1408',
     alignItems: 'center',
@@ -617,7 +628,6 @@ const styles = StyleSheet.create({
   },
   tokenText: {
     color: '#1a1408',
-    fontSize: 11,
     fontWeight: '800',
   },
 });
