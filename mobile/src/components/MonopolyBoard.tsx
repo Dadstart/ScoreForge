@@ -58,6 +58,7 @@ export function MonopolyBoard({ players, tokenSpaces, enabled, onLand, onDraggin
         const { row, col } = spaceToCell(space.index);
         const property = space.propertyId ? getProperty(space.propertyId) : undefined;
         const isRailroad = property?.kind === 'railroad';
+        const isCorner = space.index % 10 === 0;
         const swatch = property && !isRailroad ? property.swatch : undefined;
         const cell = size > 0 ? size / 11 : 48;
         const bar = Math.max(10, Math.round(cell * 0.22));
@@ -71,7 +72,7 @@ export function MonopolyBoard({ players, tokenSpaces, enabled, onLand, onDraggin
             accessibilityLabel={space.name}
             style={[
               styles.cell,
-              labelInset(row, col, isRailroad ? 0 : bar),
+              labelInset(row, col, isRailroad || isCorner ? 0 : bar),
               {
                 left: `${(col * 100) / 11}%`,
                 top: `${(row * 100) / 11}%`,
@@ -79,23 +80,29 @@ export function MonopolyBoard({ players, tokenSpaces, enabled, onLand, onDraggin
               hover === space.index && styles.cellHover,
             ]}
           >
-            {swatch ? (
-              <View style={[styles.swatch, barEdge(row, col, bar), { backgroundColor: swatch }]} />
-            ) : null}
-            {isRailroad ? <TrainMark row={row} col={col} cell={cell} /> : null}
-            <Text
-              style={[
-                styles.cellText,
-                {
-                  fontSize: fitted?.fontSize ?? label,
-                  lineHeight: fitted?.lineHeight ?? Math.round(label * 1.15),
-                  width: '100%',
-                },
-              ]}
-              numberOfLines={fitted?.lines ?? 2}
-            >
-              {fitted?.text ?? space.short}
-            </Text>
+            {isCorner ? (
+              <CornerArt index={space.index} cell={cell} />
+            ) : (
+              <>
+                {swatch ? (
+                  <View style={[styles.swatch, barEdge(row, col, bar), { backgroundColor: swatch }]} />
+                ) : null}
+                {isRailroad ? <TrainMark row={row} col={col} cell={cell} /> : null}
+                <Text
+                  style={[
+                    styles.cellText,
+                    {
+                      fontSize: fitted?.fontSize ?? label,
+                      lineHeight: fitted?.lineHeight ?? Math.round(label * 1.15),
+                      width: '100%',
+                    },
+                  ]}
+                  numberOfLines={fitted?.lines ?? 2}
+                >
+                  {fitted?.text ?? space.short}
+                </Text>
+              </>
+            )}
           </View>
         );
       })}
@@ -148,6 +155,93 @@ export function MonopolyBoard({ players, tokenSpaces, enabled, onLand, onDraggin
             );
           })
         : null}
+    </View>
+  );
+}
+
+function CornerArt({ index, cell }: { index: number; cell: number }) {
+  if (index === 0) return <GoCorner cell={cell} />;
+  if (index === 10) return <JailCorner cell={cell} />;
+  if (index === 20) return <FreeParkingCorner cell={cell} />;
+  return <GoToJailCorner cell={cell} />;
+}
+
+function GoCorner({ cell }: { cell: number }) {
+  const go = Math.round(cell * 0.36);
+  const fine = Math.max(7, Math.round(cell * 0.095));
+  const arrowW = Math.round(cell * 0.62);
+  const arrowH = Math.round(cell * 0.14);
+  return (
+    <View style={styles.corner}>
+      <Text style={[styles.cornerGo, { fontSize: go, lineHeight: go }]}>GO</Text>
+      <Svg width={arrowW} height={arrowH} viewBox="0 0 72 16">
+        <Path d="M72 5H24V1L4 8l20 7V11h48V5z" fill="#ed1b24" />
+      </Svg>
+      <Text style={[styles.cornerFine, { fontSize: fine, lineHeight: fine + 2 }]}>COLLECT $200</Text>
+      <Text style={[styles.cornerFine, { fontSize: fine, lineHeight: fine + 2 }]}>AS YOU PASS</Text>
+    </View>
+  );
+}
+
+function JailCorner({ cell }: { cell: number }) {
+  const title = Math.max(8, Math.round(cell * 0.13));
+  const sub = Math.max(7, Math.round(cell * 0.1));
+  const box = Math.round(cell * 0.62);
+  return (
+    <View style={styles.corner}>
+      <View style={[styles.jail, { width: box, height: Math.round(box * 0.78) }]}>
+        <Text style={[styles.cornerTitle, { fontSize: title, lineHeight: title + 1 }]}>IN JAIL</Text>
+        <View style={styles.jailBars}>
+          <View style={styles.jailBar} />
+          <View style={styles.jailBar} />
+          <View style={styles.jailBar} />
+          <View style={styles.jailBar} />
+        </View>
+      </View>
+      <Text style={[styles.cornerFine, { fontSize: sub, lineHeight: sub + 2 }]}>JUST VISITING</Text>
+    </View>
+  );
+}
+
+function FreeParkingCorner({ cell }: { cell: number }) {
+  const title = Math.max(10, Math.round(cell * 0.16));
+  return (
+    <View style={styles.corner}>
+      <Svg width={Math.round(cell * 0.58)} height={Math.round(cell * 0.26)} viewBox="0 0 64 30">
+        <Path
+          d="M6 18c0-4 3-6 8-7l6-7h18l8 7h8c4 0 8 2 8 6v3H6v-2z"
+          fill="#ed1b24"
+        />
+        <Path d="M22 8h16l6 6H18z" fill="#b9d7ea" />
+        <Circle cx="18" cy="23" r="5" fill="#1a1408" />
+        <Circle cx="46" cy="23" r="5" fill="#1a1408" />
+        <Circle cx="18" cy="23" r="2" fill="#f4efe4" />
+        <Circle cx="46" cy="23" r="2" fill="#f4efe4" />
+      </Svg>
+      <Text style={[styles.cornerTitle, { fontSize: title, lineHeight: title + 1 }]}>FREE</Text>
+      <Text style={[styles.cornerTitle, { fontSize: title, lineHeight: title + 1 }]}>PARKING</Text>
+    </View>
+  );
+}
+
+function GoToJailCorner({ cell }: { cell: number }) {
+  const kicker = Math.max(8, Math.round(cell * 0.12));
+  const title = Math.max(12, Math.round(cell * 0.2));
+  const fine = Math.max(6, Math.round(cell * 0.08));
+  return (
+    <View style={styles.corner}>
+      <Text style={[styles.cornerFine, { fontSize: kicker, lineHeight: kicker + 1 }]}>GO TO</Text>
+      <Text style={[styles.cornerGo, { fontSize: title, lineHeight: title }]}>JAIL</Text>
+      <Svg width={Math.round(cell * 0.34)} height={Math.round(cell * 0.28)} viewBox="0 0 40 36">
+        <Path d="M10 12h20l-2 4H12z" fill="#1d4e89" />
+        <Rect x="6" y="15" width="28" height="3" rx="1" fill="#1d4e89" />
+        <Circle cx="20" cy="22" r="4.5" fill="#f0c9a0" />
+        <Path d="M11 30c1-5 4-7 9-7s8 2 9 7v4H11z" fill="#1d4e89" />
+        <Path d="M13 31 L2 27h11z" fill="#1d4e89" />
+        <Circle cx="24" cy="31" r="1.5" fill="#f2d36b" />
+      </Svg>
+      <Text style={[styles.cornerFine, { fontSize: fine, lineHeight: fine + 1 }]}>Do not pass GO</Text>
+      <Text style={[styles.cornerFine, { fontSize: fine, lineHeight: fine + 1 }]}>Do not collect $200</Text>
     </View>
   );
 }
@@ -436,6 +530,53 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#1a1408',
     textAlign: 'center',
+  },
+  corner: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+    paddingVertical: 2,
+  },
+  cornerGo: {
+    fontFamily: fonts.display,
+    fontWeight: '700',
+    color: '#ed1b24',
+    textAlign: 'center',
+  },
+  cornerTitle: {
+    fontFamily: fonts.display,
+    fontWeight: '700',
+    color: '#1a1408',
+    textAlign: 'center',
+  },
+  cornerFine: {
+    fontFamily: fonts.body,
+    fontWeight: '700',
+    color: '#1a1408',
+    textAlign: 'center',
+    width: '100%',
+  },
+  jail: {
+    borderWidth: 2,
+    borderColor: '#1a1408',
+    backgroundColor: '#f7f1e4',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  jailBars: {
+    flex: 1,
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    justifyContent: 'space-evenly',
+    borderTopWidth: 2,
+    borderColor: '#1a1408',
+    marginTop: 2,
+  },
+  jailBar: {
+    width: 3,
+    backgroundColor: '#1a1408',
   },
   swatch: {
     position: 'absolute',
