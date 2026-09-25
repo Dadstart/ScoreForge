@@ -24,6 +24,8 @@ export interface Game {
   status: GameStatus;
   targetScore?: number | null;
   maxRounds?: number | null;
+  /** Board space index (0 is Go) for each player id. */
+  tokenSpaces?: Record<string, number>;
   createdAt: string;
   updatedAt: string;
 }

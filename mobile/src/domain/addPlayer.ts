@@ -21,3 +21,22 @@ export function withAddedPlayer(game: Game, rawName: string, maxPlayers: number)
     updatedAt: new Date().toISOString(),
   };
 }
+
+/** Remove a player and any cash events recorded for them. */
+export function withoutPlayer(game: Game, playerId: string): Game {
+  if (game.players.length <= 1) {
+    throw new Error('A game needs at least one player.');
+  }
+  if (!game.players.some((player) => player.id === playerId)) {
+    throw new Error('That player is not in this game.');
+  }
+  const tokenSpaces = { ...(game.tokenSpaces ?? {}) };
+  delete tokenSpaces[playerId];
+  return {
+    ...game,
+    players: game.players.filter((player) => player.id !== playerId),
+    events: game.events.filter((event) => event.playerId !== playerId),
+    tokenSpaces,
+    updatedAt: new Date().toISOString(),
+  };
+}

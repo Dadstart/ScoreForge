@@ -11,7 +11,7 @@ import { getTemplate } from '../domain/templates';
 import { loadDisplayName, saveDisplayName } from '../storage/displayNameStore';
 import { findGameByShareCode, joinGameByShareCode } from '../storage/gameStore';
 import { colors, space, typography } from '../theme';
-import type { RootStackParamList } from '../navigation/types';
+import { gameScreenForTemplate, type RootStackParamList } from '../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Join'>;
 
@@ -51,11 +51,7 @@ export function JoinScreen({ navigation, route }: Props) {
         ? (getTemplate(existing.templateId)?.maxPlayers ?? 12)
         : 12;
       const game = await joinGameByShareCode(normalized, name, maxPlayers);
-      if (game.templateId === 'cribbage') {
-        navigation.replace('Cribbage', { gameId: game.id });
-      } else {
-        navigation.replace('Board', { gameId: game.id });
-      }
+      navigation.replace(gameScreenForTemplate(game.templateId), { gameId: game.id });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not join game');
     } finally {

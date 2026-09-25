@@ -67,6 +67,16 @@ export const templates: GameTemplate[] = [
     minPlayers: 1,
     maxPlayers: 3,
   },
+  {
+    id: 'monopoly',
+    name: 'Monopoly',
+    description:
+      'Track cash from $1,500. Add or subtract any amount, or look up rent from the property and its houses or hotel.',
+    scoringMode: 'Instant',
+    winCondition: 'HighestTotal',
+    minPlayers: 1,
+    maxPlayers: 8,
+  },
 ];
 
 export function getTemplate(id: string): GameTemplate | undefined {
