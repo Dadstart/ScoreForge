@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -79,6 +79,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
   const [boardDragging, setBoardDragging] = useState(false);
   const [landNote, setLandNote] = useState<string | null>(null);
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
+  const [confirmingRemoveId, setConfirmingRemoveId] = useState<string | null>(null);
   const [nameDraft, setNameDraft] = useState('');
   const [cashDraft, setCashDraft] = useState('');
   const [tokenDraft, setTokenDraft] = useState(INITIAL_TOKEN);
@@ -268,6 +269,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
     setNameDraft(name);
     setCashDraft(String(cash));
     setTokenDraft(playerToken(token)?.id ?? INITIAL_TOKEN);
+    setConfirmingRemoveId(null);
     setError(null);
   };
 
@@ -302,6 +304,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
       { suppressWin: true },
     );
     setEditingPlayerId(null);
+    setConfirmingRemoveId(null);
     return true;
   };
 
@@ -528,30 +531,39 @@ export function MonopolyScreen({ navigation, route }: Props) {
                 ) : null}
                 {isPoorest ? <Badge label="Poorest" style={styles.tileBadge} /> : null}
                 {standing.isWinner ? <Badge label="Winner" tone="success" style={styles.tileBadge} /> : null}
-                {game.players.length > 1 && !complete ? (
-                  <Button
-                    label="Remove"
-                    variant="ghost"
-                    onPress={() => {
-                      Alert.alert(
-                        'Remove player',
-                        `Remove ${standing.playerName} from this game?`,
-                        [
-                          { text: 'Cancel', style: 'cancel' },
-                          {
-                            text: 'Remove',
-                            style: 'destructive',
-                            onPress: () => {
-                              void applyGame(
-                                (g) => withoutPlayer(g, standing.playerId),
-                                { suppressWin: true },
-                              );
-                            },
-                          },
-                        ],
-                      );
-                    }}
-                  />
+                {editing && game.players.length > 1 ? (
+                  confirmingRemoveId === standing.playerId ? (
+                    <View style={styles.removeConfirm}>
+                      <Text style={styles.removePrompt}>Remove {standing.playerName}?</Text>
+                      <Button
+                        label="Cancel"
+                        variant="ghost"
+                        onPress={() => setConfirmingRemoveId(null)}
+                        style={styles.removeBtn}
+                      />
+                      <Button
+                        label="Remove"
+                        variant="danger"
+                        onPress={() => {
+                          setEditingPlayerId((current) =>
+                            current === standing.playerId ? null : current,
+                          );
+                          setConfirmingRemoveId(null);
+                          void applyGame((g) => withoutPlayer(g, standing.playerId), {
+                            suppressWin: true,
+                          });
+                        }}
+                        style={styles.removeBtn}
+                      />
+                    </View>
+                  ) : (
+                    <Button
+                      label="Remove"
+                      variant="danger"
+                      onPress={() => setConfirmingRemoveId(standing.playerId)}
+                      style={styles.removeBtn}
+                    />
+                  )
                 ) : null}
               </Pressable>
             );
@@ -780,6 +792,14 @@ const styles = StyleSheet.create({
   },
   tileBadge: { alignSelf: 'center' },
   tokenSelect: { alignSelf: 'stretch' },
+  removeBtn: { alignSelf: 'stretch' },
+  removeConfirm: { alignSelf: 'stretch', gap: 6 },
+  removePrompt: {
+    ...typography.label,
+    fontSize: 13,
+    textAlign: 'center',
+    color: colors.danger,
+  },
   rentPreview: {
     ...typography.label,
     fontSize: 16,
