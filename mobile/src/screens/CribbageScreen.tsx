@@ -8,10 +8,12 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { AddPlayerModal } from '../components/AddPlayerModal';
 import { CribbageBoard, type CribbagePegPlayer } from '../components/CribbageBoard';
 import { FireworksOverlay } from '../components/FireworksOverlay';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Screen } from '../components/ui';
+import { withAddedPlayer } from '../domain/addPlayer';
 import { findLocalPlayerId } from '../domain/localPlayer';
 import { createScoreEvent, type Game } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
@@ -33,6 +35,7 @@ export function CribbageScreen({ navigation, route }: Props) {
   const [game, setGame] = useState<Game | null>(null);
   const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [addingPlayer, setAddingPlayer] = useState(false);
   const {
     showCelebration,
     onSnapshot,
@@ -205,6 +208,9 @@ export function CribbageScreen({ navigation, route }: Props) {
         <View style={styles.row}>
           <Button label="Undo peg" onPress={() => void undo()} disabled={!localPlayerId} />
           <Button label="Reset board" onPress={() => void reset()} />
+          {game.players.length < template.maxPlayers ? (
+            <Button label="Add player" onPress={() => setAddingPlayer(true)} />
+          ) : null}
         </View>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -254,6 +260,18 @@ export function CribbageScreen({ navigation, route }: Props) {
             onDismiss={dismissCelebration}
           />
         ) : null}
+
+        <AddPlayerModal
+          visible={addingPlayer}
+          maxPlayers={template.maxPlayers}
+          currentCount={game.players.length}
+          onCancel={() => setAddingPlayer(false)}
+          onAdd={async (name) => {
+            const next = withAddedPlayer(game, name, template.maxPlayers);
+            await persist(next);
+            setError(null);
+          }}
+        />
       </View>
     </Screen>
   );
