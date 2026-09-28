@@ -52,6 +52,8 @@ npm run deploy:rules
 | Rummy | Add my score per round | First to target (default 500) |
 | Golf | Add my score per hole | Lowest total after 9 or 18 holes |
 | Cribbage | Peg own track only | First to 121 (or 61) |
+| Monopoly | Track own cash, optional board | Highest total |
+| Yahtzee | Fill any score-card column | Highest total |
 
 ## Project layout
 

@@ -9,6 +9,7 @@ import type { RootStackParamList } from './src/navigation/types';
 import { BoardScreen } from './src/screens/BoardScreen';
 import { CribbageScreen } from './src/screens/CribbageScreen';
 import { MonopolyScreen } from './src/screens/MonopolyScreen';
+import { YahtzeeScreen } from './src/screens/YahtzeeScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { JoinScreen } from './src/screens/JoinScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
@@ -82,6 +83,11 @@ export default function App() {
             name="Monopoly"
             component={MonopolyScreen}
             options={{ title: 'Monopoly', headerShown: false }}
+          />
+          <Stack.Screen
+            name="Yahtzee"
+            component={YahtzeeScreen}
+            options={{ title: 'Yahtzee', headerShown: false }}
           />
           <Stack.Screen name="Settings" component={SettingsScreen} />
         </Stack.Navigator>

@@ -17,8 +17,8 @@ mobile/
 │   ├── storage/               # Firestore game store + known codes + displayName
 │   ├── linking/               # share URL create/parse for QR + deep links
 │   ├── navigation/            # types + React Navigation linking config
-│   ├── screens/               # Home, Setup, Join, Board, Cribbage, Settings
-│   └── components/            # CribbageBoard, FireworksOverlay, ShareCodePanel
+│   ├── screens/               # Home, Setup, Join, Board, Cribbage, Monopoly, Yahtzee, Settings
+│   └── components/            # CribbageBoard, MonopolyBoard, YahtzeeScoreboard, FireworksOverlay, ShareCodePanel
 ```
 
 ### Startup / navigation
@@ -32,6 +32,8 @@ React Navigation native stack with `expo-linking` prefixes (`scoreforge://` and 
 | **Join** | Display name + code → fetch cloud game, add player |
 | **Board** | Live subscribe; Free Play / Rounds / Rummy / Golf |
 | **Cribbage** | Live subscribe; own-peg scoring + fireworks |
+| **Monopoly** | Live subscribe; own cash, optional board |
+| **Yahtzee** | Live subscribe; score any column |
 | **Settings** | Notes / future theme |
 
 Deep link: `join?code=XXXXXX`. QR encodes `Linking.createURL('join', { queryParams: { code } })`.
@@ -79,6 +81,8 @@ All templates start with `minPlayers: 1`; others join via code.
 | Rummy | Per-player round scores | First to target (500) |
 | Golf | Per-player hole scores | Lowest after N holes |
 | Cribbage | Instant pegging | First to 121 |
+| Monopoly | Instant cash | Highest |
+| Yahtzee | Score-card boxes | Highest |
 
 ### Platforms
 

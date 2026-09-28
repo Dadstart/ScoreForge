@@ -1,5 +1,6 @@
 import type { Game, Player } from './models';
 import type { GameTemplate, WinCondition } from './templates';
+import { grandTotal, isScorecardComplete } from './yahtzee';
 
 export interface PlayerStanding {
   playerId: string;
@@ -20,10 +21,7 @@ export interface GameSnapshot {
 export function calculate(game: Game, template: GameTemplate): GameSnapshot {
   const totals = new Map<string, number>();
   for (const player of game.players) {
-    totals.set(
-      player.id,
-      game.events.filter((e) => e.playerId === player.id).reduce((sum, e) => sum + e.points, 0),
-    );
+    totals.set(player.id, pointsForPlayer(game, player.id, template));
   }
 
   const currentRound = game.events
@@ -86,12 +84,21 @@ function orderPlayers(
   );
 }
 
+function pointsForPlayer(game: Game, playerId: string, template: GameTemplate): number {
+  if (template.id === 'yahtzee') return grandTotal(game.events, playerId);
+  return game.events
+    .filter((e) => e.playerId === playerId)
+    .reduce((sum, e) => sum + e.points, 0);
+}
+
 function detectCompletion(
   game: Game,
   template: GameTemplate,
   totals: Map<string, number>,
   currentRound: number,
 ): boolean {
+  if (template.id === 'yahtzee') return isScorecardComplete(game);
+
   if (template.winCondition === 'FirstToTarget') {
     const target = game.targetScore ?? template.defaultTargetScore;
     if (target != null && [...totals.values()].some((v) => v >= target)) return true;

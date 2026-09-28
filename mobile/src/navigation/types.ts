@@ -9,14 +9,16 @@ export type RootStackParamList = {
   Board: { gameId: string };
   Cribbage: { gameId: string };
   Monopoly: { gameId: string };
+  Yahtzee: { gameId: string };
   Settings: { gameId?: string } | undefined;
 };
 
 export function gameScreenForTemplate(
   templateId: string,
-): 'Board' | 'Cribbage' | 'Monopoly' {
+): 'Board' | 'Cribbage' | 'Monopoly' | 'Yahtzee' {
   if (templateId === 'cribbage') return 'Cribbage';
   if (templateId === 'monopoly') return 'Monopoly';
+  if (templateId === 'yahtzee') return 'Yahtzee';
   return 'Board';
 }
 
