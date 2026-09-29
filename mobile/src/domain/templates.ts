@@ -108,6 +108,16 @@ export const templates: GameTemplate[] = [
     minPlayers: 1,
     maxPlayers: 2,
   },
+  {
+    id: 'chinese-checkers',
+    name: 'Chinese Checkers',
+    description:
+      'Race across the star. Two to six players, each with one or more colors, alone or in teams. Step or jump into the opposite corner. Later places keep playing.',
+    scoringMode: 'Instant',
+    winCondition: 'HighestTotal',
+    minPlayers: 1,
+    maxPlayers: 6,
+  },
 ];
 
 export function getTemplate(id: string): GameTemplate | undefined {

@@ -1,4 +1,5 @@
 import type { CheckersState } from './checkers';
+import type { ChineseState } from './chineseCheckers';
 import type { SorryState } from './sorry';
 
 export type GameStatus = 'InProgress' | 'Completed';
@@ -37,6 +38,8 @@ export interface Game {
   sorry?: SorryState | null;
   /** Shared checkers board and turn. */
   checkers?: CheckersState | null;
+  /** Shared Chinese checkers star, seats, and turn. */
+  chinese?: ChineseState | null;
   createdAt: string;
   updatedAt: string;
 }

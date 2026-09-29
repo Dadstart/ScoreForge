@@ -16,6 +16,7 @@ import {
   type ScoreEvent,
 } from '../domain/models';
 import { createCheckersState, ensureCheckersState } from '../domain/checkers';
+import { createChineseState, ensureChineseState, playerCap, type ChineseSetup } from '../domain/chineseCheckers';
 import { createSorryState, ensureSorryState } from '../domain/sorry';
 import { db, ensureAnonymousAuth } from '../firebase/app';
 import {
@@ -135,6 +136,7 @@ export async function createAndSaveGame(partial: {
   targetScore?: number | null;
   maxRounds?: number | null;
   requireJumps?: boolean;
+  chinese?: ChineseSetup;
 }): Promise<Game> {
   await ensureAnonymousAuth();
   const shareCode = await allocateShareCode();
@@ -155,6 +157,9 @@ export async function createAndSaveGame(partial: {
   if (partial.templateId === 'sorry') game.sorry = createSorryState(partial.players);
   if (partial.templateId === 'checkers') {
     game.checkers = createCheckersState(partial.players, { requireJumps: partial.requireJumps !== false });
+  }
+  if (partial.templateId === 'chinese-checkers') {
+    game.chinese = createChineseState(partial.players, partial.chinese);
   }
   await setDoc(gameRef(shareCode), toGameDoc(game));
   await rememberShareCode(shareCode);
@@ -200,16 +205,19 @@ export async function joinGameByShareCode(
     await rememberShareCode(normalized);
     return game;
   }
-  if (game.players.length >= maxPlayers) {
-    throw new Error(`This game already has the maximum of ${maxPlayers} players.`);
+  const cap = playerCap(game, maxPlayers);
+  if (game.players.length >= cap) {
+    throw new Error(`This game already has the maximum of ${cap} players.`);
   }
 
-  const updated = ensureCheckersState(
-    ensureSorryState({
-      ...game,
-      players: [...game.players, createPlayer(name)],
-      updatedAt: new Date().toISOString(),
-    }),
+  const updated = ensureChineseState(
+    ensureCheckersState(
+      ensureSorryState({
+        ...game,
+        players: [...game.players, createPlayer(name)],
+        updatedAt: new Date().toISOString(),
+      }),
+    ),
   );
   await setDoc(gameRef(normalized), toGameDoc(updated), { merge: true });
   await rememberShareCode(normalized);
