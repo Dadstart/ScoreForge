@@ -18,6 +18,7 @@ import {
   pieceAt,
   playHop,
   resign,
+  setRequireJumps,
   type CheckersSquare,
   type CheckersState,
 } from '../domain/checkers';
@@ -101,7 +102,7 @@ export function CheckersScreen({ navigation, route }: Props) {
     setSelection(null);
     setConfirmReset(false);
     setConfirmResign(false);
-  }, [turnKey, chainKey, moveKey, checkers?.winnerSide, checkers?.draw]);
+  }, [turnKey, chainKey, moveKey, checkers?.winnerSide, checkers?.draw, checkers?.requireJumps]);
 
   const hops = useMemo(() => (checkers ? legalHops(checkers) : []), [checkers]);
   const origins = useMemo(() => {
@@ -152,7 +153,8 @@ export function CheckersScreen({ navigation, route }: Props) {
   const winnerPlayer = checkers.winnerSide
     ? game.players.find((player) => checkers.sides[player.id] === checkers.winnerSide)
     : null;
-  const mustJump = hops.some((hop) => hop.captureRow != null);
+  const jumpsRequired = checkers.requireJumps !== false;
+  const mustJump = jumpsRequired && hops.some((hop) => hop.captureRow != null);
 
   const actor = yourTurn ? 'Your turn' : currentPlayer ? `${currentPlayer.name}'s turn` : null;
   const turnLine = actor ? `${actor} · ${currentSide.name}` : `${currentSide.name}'s turn`;
@@ -215,7 +217,7 @@ export function CheckersScreen({ navigation, route }: Props) {
     }
     const next: Game = {
       ...game,
-      checkers: createCheckersState(game.players),
+      checkers: createCheckersState(game.players, { requireJumps: checkers.requireJumps }),
       events: [],
       status: 'InProgress',
       updatedAt: new Date().toISOString(),
@@ -228,6 +230,17 @@ export function CheckersScreen({ navigation, route }: Props) {
     } finally {
       endSuppress(false);
     }
+  };
+
+  const onRequireJumps = async (requireJumps: boolean) => {
+    const nextCheckers = setRequireJumps(checkers, requireJumps);
+    if (!nextCheckers) return;
+    const next: Game = {
+      ...game,
+      checkers: nextCheckers,
+      updatedAt: new Date().toISOString(),
+    };
+    await persist(next, false);
   };
 
   const onResign = async () => {
@@ -280,12 +293,29 @@ export function CheckersScreen({ navigation, route }: Props) {
               onDrop={playBetween}
             />
             <Text style={styles.hint}>
-              Drag a piece onto a highlighted square, or tap the piece and then the square. Jumps are required, and a crowned piece keeps jumping.
+              Drag a piece onto a highlighted square, or tap the piece and then the square.{' '}
+              {jumpsRequired
+                ? 'Jumps are required, and a crowned piece keeps jumping.'
+                : 'Jumps are optional. A piece that jumps still keeps jumping.'}
               {localSide ? ` Your ${CHECKERS_SIDES[localSide].name} pieces sit at the bottom.` : ' Black sits at the bottom.'}
             </Text>
           </View>
 
           <View style={styles.panel}>
+            <Text style={[typography.section, styles.section]}>Jumps</Text>
+            <View style={styles.actions}>
+              <Button
+                label="Required"
+                variant={jumpsRequired ? 'primary' : 'secondary'}
+                onPress={() => void onRequireJumps(true)}
+              />
+              <Button
+                label="Optional"
+                variant={jumpsRequired ? 'secondary' : 'primary'}
+                onPress={() => void onRequireJumps(false)}
+              />
+            </View>
+
             <Text style={[typography.section, styles.section]}>Players</Text>
             <View style={styles.playerRow}>
               {game.players.map((player) => {

@@ -4,10 +4,10 @@ import type { Game, Player } from './models';
  * American checkers (English draughts) on the dark squares of an 8×8 board.
  *
  * Black moves first. Men move and jump diagonally forward. Kings move and jump
- * one square in any diagonal direction. A jump is required when one is available;
- * if several jumps are open, the player may choose any of them. A piece that
- * jumps must keep jumping. A man that reaches the back rank by a jump is crowned
- * immediately and continues as a king when another jump is open.
+ * one square in any diagonal direction. Jumps are required unless the game turns
+ * that off; if several jumps are open, the player may choose any of them. A piece
+ * that jumps must keep jumping. A man that reaches the back rank by a jump is
+ * crowned immediately and continues as a king when another jump is open.
  */
 
 export const BOARD_SIZE = 8;
@@ -43,6 +43,8 @@ export type CheckersState = {
   pieces: CheckersPiece[];
   sides: Record<string, Side>;
   turn: Side;
+  /** When false, a quiet move is legal even if a jump is available. */
+  requireJumps: boolean;
   /** Set while the piece that just jumped must jump again. */
   chain: CheckersSquare | null;
   winnerSide: Side | null;
@@ -75,11 +77,15 @@ export function isDarkSquare(row: number, col: number): boolean {
   );
 }
 
-export function createCheckersState(players: { id: string }[]): CheckersState {
+export function createCheckersState(
+  players: { id: string }[],
+  options?: { requireJumps?: boolean },
+): CheckersState {
   return {
     pieces: startingPieces(),
     sides: assignSides(players, undefined),
     turn: 'dark',
+    requireJumps: options?.requireJumps !== false,
     chain: null,
     winnerSide: null,
     draw: false,
@@ -116,8 +122,18 @@ export function legalHops(state: CheckersState): CheckersHop[] {
   }
   const mine = state.pieces.filter((piece) => piece.side === state.turn);
   const jumps = mine.flatMap((piece) => jumpsFrom(state.pieces, piece));
-  if (jumps.length > 0) return jumps;
-  return mine.flatMap((piece) => stepsFrom(state.pieces, piece));
+  const steps = mine.flatMap((piece) => stepsFrom(state.pieces, piece));
+  if (state.requireJumps !== false && jumps.length > 0) return jumps;
+  return jumps.concat(steps);
+}
+
+export function setRequireJumps(state: CheckersState, requireJumps: boolean): CheckersState | null {
+  if ((state.requireJumps !== false) === requireJumps) return null;
+  return {
+    ...state,
+    requireJumps,
+    lastAction: requireJumps ? 'Jumps are required.' : 'Jumps are optional.',
+  };
 }
 
 export function playHop(
@@ -408,6 +424,7 @@ function repairCheckersState(game: Game): CheckersState {
   const kept = cleaned != null;
   const sides = assignSides(game.players, previous?.sides);
   const turn: Side = kept && (previous?.turn === 'dark' || previous?.turn === 'light') ? previous.turn : 'dark';
+  const requireJumps = previous?.requireJumps === false ? false : true;
   let chain = kept ? cleanSquare(previous?.chain) : null;
   let winnerSide: Side | null =
     kept && (previous?.winnerSide === 'dark' || previous?.winnerSide === 'light') ? previous.winnerSide : null;
@@ -434,6 +451,7 @@ function repairCheckersState(game: Game): CheckersState {
     pieces,
     sides,
     turn,
+    requireJumps,
     chain,
     winnerSide,
     draw,
@@ -463,6 +481,7 @@ function isHealthy(state: CheckersState, players: Player[]): boolean {
 function sameState(a: CheckersState, b: CheckersState): boolean {
   return (
     a.turn === b.turn &&
+    (a.requireJumps !== false) === (b.requireJumps !== false) &&
     a.winnerSide === b.winnerSide &&
     a.draw === b.draw &&
     a.drawOffer === b.drawOffer &&

@@ -134,6 +134,7 @@ export async function createAndSaveGame(partial: {
   players: Game['players'];
   targetScore?: number | null;
   maxRounds?: number | null;
+  requireJumps?: boolean;
 }): Promise<Game> {
   await ensureAnonymousAuth();
   const shareCode = await allocateShareCode();
@@ -152,7 +153,9 @@ export async function createAndSaveGame(partial: {
     updatedAt: now,
   };
   if (partial.templateId === 'sorry') game.sorry = createSorryState(partial.players);
-  if (partial.templateId === 'checkers') game.checkers = createCheckersState(partial.players);
+  if (partial.templateId === 'checkers') {
+    game.checkers = createCheckersState(partial.players, { requireJumps: partial.requireJumps !== false });
+  }
   await setDoc(gameRef(shareCode), toGameDoc(game));
   await rememberShareCode(shareCode);
   return game;

@@ -24,6 +24,7 @@ export function SetupScreen({ navigation }: Props) {
   const [hostName, setHostName] = useState('Player 1');
   const [targetScore, setTargetScore] = useState(String(templates[0].defaultTargetScore ?? ''));
   const [maxRounds, setMaxRounds] = useState(String(templates[0].defaultMaxRounds ?? '18'));
+  const [requireJumps, setRequireJumps] = useState(true);
   const [validation, setValidation] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -43,6 +44,7 @@ export function SetupScreen({ navigation }: Props) {
     setName(t.name);
     setTargetScore(t.defaultTargetScore != null ? String(t.defaultTargetScore) : '');
     setMaxRounds(String(t.defaultMaxRounds ?? 18));
+    setRequireJumps(true);
     setValidation(null);
   };
 
@@ -64,6 +66,7 @@ export function SetupScreen({ navigation }: Props) {
         players: [createPlayer(host)],
         targetScore: showTarget && targetScore ? Number(targetScore) : null,
         maxRounds: showMaxRounds && maxRounds ? Number(maxRounds) : null,
+        requireJumps: template.id === 'checkers' ? requireJumps : undefined,
       });
 
       navigation.replace(gameScreenForTemplate(template.id), { gameId: game.id });
@@ -126,6 +129,28 @@ export function SetupScreen({ navigation }: Props) {
           </>
         ) : null}
 
+        {template.id === 'checkers' ? (
+          <>
+            <Text style={[typography.section, styles.section]}>Jumps</Text>
+            <View style={styles.choiceRow}>
+              <Pressable
+                onPress={() => setRequireJumps(true)}
+                style={[styles.choice, requireJumps && styles.choiceActive]}
+              >
+                <Text style={[styles.choiceLabel, requireJumps && { color: colors.accent }]}>Required</Text>
+                <Text style={typography.body}>You must jump when you can.</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setRequireJumps(false)}
+                style={[styles.choice, !requireJumps && styles.choiceActive]}
+              >
+                <Text style={[styles.choiceLabel, !requireJumps && { color: colors.accent }]}>Optional</Text>
+                <Text style={typography.body}>You may move without capturing.</Text>
+              </Pressable>
+            </View>
+          </>
+        ) : null}
+
         <Text style={[typography.section, styles.section]}>Your name</Text>
         <Text style={[typography.body, { marginBottom: 8 }]}>
           Start alone. Share the game code so others can join.
@@ -176,6 +201,24 @@ const styles = StyleSheet.create({
   templateName: {
     ...typography.label,
     fontSize: 17,
+    fontWeight: '700',
+  },
+  choiceRow: { flexDirection: 'row', gap: 8 },
+  choice: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.lg,
+    padding: space.md,
+    gap: 4,
+  },
+  choiceActive: {
+    borderColor: colors.accent,
+    backgroundColor: colors.accentSoft,
+  },
+  choiceLabel: {
+    ...typography.label,
     fontWeight: '700',
   },
   row: { flexDirection: 'row', gap: 10, marginTop: 16 },
