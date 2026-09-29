@@ -1,3 +1,4 @@
+import type { LifeState } from './life';
 import type { SorryState } from './sorry';
 
 export type GameStatus = 'InProgress' | 'Completed';
@@ -34,6 +35,8 @@ export interface Game {
   tokenSpaces?: Record<string, number>;
   /** Shared Sorry board, deck, and turn. */
   sorry?: SorryState | null;
+  /** Shared Life track, careers, and turn. */
+  life?: LifeState | null;
   createdAt: string;
   updatedAt: string;
 }

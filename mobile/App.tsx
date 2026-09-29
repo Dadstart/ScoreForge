@@ -10,6 +10,7 @@ import { BoardScreen } from './src/screens/BoardScreen';
 import { CribbageScreen } from './src/screens/CribbageScreen';
 import { MonopolyScreen } from './src/screens/MonopolyScreen';
 import { YahtzeeScreen } from './src/screens/YahtzeeScreen';
+import { LifeScreen } from './src/screens/LifeScreen';
 import { SorryScreen } from './src/screens/SorryScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { JoinScreen } from './src/screens/JoinScreen';
@@ -94,6 +95,11 @@ export default function App() {
             name="Sorry"
             component={SorryScreen}
             options={{ title: 'Sorry', headerShown: false }}
+          />
+          <Stack.Screen
+            name="Life"
+            component={LifeScreen}
+            options={{ title: 'Life', headerShown: false }}
           />
           <Stack.Screen name="Settings" component={SettingsScreen} />
         </Stack.Navigator>

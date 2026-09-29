@@ -1,4 +1,5 @@
 import { createPlayer, type Game } from './models';
+import { ensureLifeState } from './life';
 import { ensureSorryState } from './sorry';
 
 /** Add a named player to a game, enforcing uniqueness and max capacity. */
@@ -16,11 +17,13 @@ export function withAddedPlayer(game: Game, rawName: string, maxPlayers: number)
   if (taken) {
     throw new Error('A player with that name is already in the game.');
   }
-  return ensureSorryState({
-    ...game,
-    players: [...game.players, createPlayer(name)],
-    updatedAt: new Date().toISOString(),
-  });
+  return ensureLifeState(
+    ensureSorryState({
+      ...game,
+      players: [...game.players, createPlayer(name)],
+      updatedAt: new Date().toISOString(),
+    }),
+  );
 }
 
 /** Remove a player and any cash events recorded for them. */
@@ -33,11 +36,13 @@ export function withoutPlayer(game: Game, playerId: string): Game {
   }
   const tokenSpaces = { ...(game.tokenSpaces ?? {}) };
   delete tokenSpaces[playerId];
-  return ensureSorryState({
-    ...game,
-    players: game.players.filter((player) => player.id !== playerId),
-    events: game.events.filter((event) => event.playerId !== playerId),
-    tokenSpaces,
-    updatedAt: new Date().toISOString(),
-  });
+  return ensureLifeState(
+    ensureSorryState({
+      ...game,
+      players: game.players.filter((player) => player.id !== playerId),
+      events: game.events.filter((event) => event.playerId !== playerId),
+      tokenSpaces,
+      updatedAt: new Date().toISOString(),
+    }),
+  );
 }

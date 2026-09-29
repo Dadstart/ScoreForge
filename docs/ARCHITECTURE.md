@@ -17,8 +17,8 @@ mobile/
 │   ├── storage/               # Firestore game store + known codes + displayName
 │   ├── linking/               # share URL create/parse for QR + deep links
 │   ├── navigation/            # types + React Navigation linking config
-│   ├── screens/               # Home, Setup, Join, Board, Cribbage, Monopoly, Yahtzee, Sorry, Settings
-│   └── components/            # CribbageBoard, MonopolyBoard, YahtzeeScoreboard, SorryBoard, FireworksOverlay, ShareCodePanel
+│   ├── screens/               # Home, Setup, Join, Board, Cribbage, Monopoly, Yahtzee, Sorry, Life, Settings
+│   └── components/            # CribbageBoard, MonopolyBoard, YahtzeeScoreboard, SorryBoard, LifeBoard, FireworksOverlay, ShareCodePanel
 ```
 
 ### Startup / navigation
@@ -35,6 +35,7 @@ React Navigation native stack with `expo-linking` prefixes (`scoreforge://` and 
 | **Monopoly** | Live subscribe; own cash, optional board |
 | **Yahtzee** | Live subscribe; score any column |
 | **Sorry** | Live subscribe; shared board, deck, and turn |
+| **Life** | Live subscribe; shared track, spin, and retirement |
 | **Settings** | Notes / future theme |
 
 Deep link: `join?code=XXXXXX`. QR encodes `Linking.createURL('join', { queryParams: { code } })`.
@@ -85,6 +86,7 @@ All templates start with `minPlayers: 1`; others join via code.
 | Monopoly | Instant cash | Highest |
 | Yahtzee | Score-card boxes | Highest |
 | Sorry | Board pawns home | First to 4 |
+| Life | Cash, house, and children | Richest life |
 
 ### Platforms
 

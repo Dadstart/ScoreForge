@@ -1,5 +1,6 @@
 import type { Game, Player } from './models';
 import type { GameTemplate, WinCondition } from './templates';
+import { allRetired, netWorth } from './life';
 import { homeCount } from './sorry';
 import { grandTotal, isScorecardComplete } from './yahtzee';
 
@@ -88,6 +89,10 @@ function orderPlayers(
 function pointsForPlayer(game: Game, playerId: string, template: GameTemplate): number {
   if (template.id === 'yahtzee') return grandTotal(game.events, playerId);
   if (template.id === 'sorry' && game.sorry) return homeCount(game.sorry, playerId);
+  if (template.id === 'life') {
+    const life = game.life?.players[playerId];
+    return life ? netWorth(life) : 0;
+  }
   return game.events
     .filter((e) => e.playerId === playerId)
     .reduce((sum, e) => sum + e.points, 0);
@@ -100,6 +105,7 @@ function detectCompletion(
   currentRound: number,
 ): boolean {
   if (template.id === 'yahtzee') return isScorecardComplete(game);
+  if (template.id === 'life') return Boolean(game.life && allRetired(game.life, game.players));
 
   if (template.winCondition === 'FirstToTarget') {
     const target = game.targetScore ?? template.defaultTargetScore;

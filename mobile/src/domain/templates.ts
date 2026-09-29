@@ -88,6 +88,16 @@ export const templates: GameTemplate[] = [
     maxPlayers: 6,
   },
   {
+    id: 'life',
+    name: 'Life',
+    description:
+      'Spin 1–10 on a shared track. Collect payday, raise a family, buy a house, then retire. The richest life wins.',
+    scoringMode: 'Instant',
+    winCondition: 'HighestTotal',
+    minPlayers: 1,
+    maxPlayers: 6,
+  },
+  {
     id: 'sorry',
     name: 'Sorry',
     description:

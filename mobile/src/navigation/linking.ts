@@ -22,6 +22,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
       Monopoly: 'monopoly/:gameId',
       Yahtzee: 'yahtzee/:gameId',
       Sorry: 'sorry/:gameId',
+      Life: 'life/:gameId',
       Settings: 'settings',
     },
   },
