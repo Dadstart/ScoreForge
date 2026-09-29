@@ -77,6 +77,16 @@ export const templates: GameTemplate[] = [
     minPlayers: 1,
     maxPlayers: 8,
   },
+  {
+    id: 'yahtzee',
+    name: 'Yahtzee',
+    description:
+      'Fill any column on the score card. Upper bonus at 63, Yahtzee bonus +100. Highest total wins.',
+    scoringMode: 'Rounds',
+    winCondition: 'HighestTotal',
+    minPlayers: 1,
+    maxPlayers: 6,
+  },
 ];
 
 export function getTemplate(id: string): GameTemplate | undefined {

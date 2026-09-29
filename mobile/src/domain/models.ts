@@ -12,6 +12,8 @@ export interface ScoreEvent {
   playerId: string;
   points: number;
   roundNumber?: number | null;
+  /** Yahtzee score-card box id. The latest event for a player and box is the score. */
+  box?: string | null;
   timestamp: string;
 }
 
@@ -40,14 +42,17 @@ export function createScoreEvent(
   playerId: string,
   points: number,
   roundNumber?: number | null,
+  box?: string | null,
 ): ScoreEvent {
-  return {
+  const event: ScoreEvent = {
     id: cryptoRandomId(),
     playerId,
     points,
     roundNumber: roundNumber ?? null,
     timestamp: new Date().toISOString(),
   };
+  if (box) event.box = box;
+  return event;
 }
 
 export function createGame(partial: {
