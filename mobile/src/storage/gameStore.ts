@@ -15,6 +15,7 @@ import {
   type Game,
   type ScoreEvent,
 } from '../domain/models';
+import { createCheckersState, ensureCheckersState } from '../domain/checkers';
 import { createSorryState, ensureSorryState } from '../domain/sorry';
 import { db, ensureAnonymousAuth } from '../firebase/app';
 import {
@@ -133,6 +134,7 @@ export async function createAndSaveGame(partial: {
   players: Game['players'];
   targetScore?: number | null;
   maxRounds?: number | null;
+  requireJumps?: boolean;
 }): Promise<Game> {
   await ensureAnonymousAuth();
   const shareCode = await allocateShareCode();
@@ -151,6 +153,9 @@ export async function createAndSaveGame(partial: {
     updatedAt: now,
   };
   if (partial.templateId === 'sorry') game.sorry = createSorryState(partial.players);
+  if (partial.templateId === 'checkers') {
+    game.checkers = createCheckersState(partial.players, { requireJumps: partial.requireJumps !== false });
+  }
   await setDoc(gameRef(shareCode), toGameDoc(game));
   await rememberShareCode(shareCode);
   return game;
@@ -199,11 +204,13 @@ export async function joinGameByShareCode(
     throw new Error(`This game already has the maximum of ${maxPlayers} players.`);
   }
 
-  const updated = ensureSorryState({
-    ...game,
-    players: [...game.players, createPlayer(name)],
-    updatedAt: new Date().toISOString(),
-  });
+  const updated = ensureCheckersState(
+    ensureSorryState({
+      ...game,
+      players: [...game.players, createPlayer(name)],
+      updatedAt: new Date().toISOString(),
+    }),
+  );
   await setDoc(gameRef(normalized), toGameDoc(updated), { merge: true });
   await rememberShareCode(normalized);
   return updated;

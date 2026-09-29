@@ -11,6 +11,7 @@ import { CribbageScreen } from './src/screens/CribbageScreen';
 import { MonopolyScreen } from './src/screens/MonopolyScreen';
 import { YahtzeeScreen } from './src/screens/YahtzeeScreen';
 import { SorryScreen } from './src/screens/SorryScreen';
+import { CheckersScreen } from './src/screens/CheckersScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { JoinScreen } from './src/screens/JoinScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
@@ -94,6 +95,11 @@ export default function App() {
             name="Sorry"
             component={SorryScreen}
             options={{ title: 'Sorry', headerShown: false }}
+          />
+          <Stack.Screen
+            name="Checkers"
+            component={CheckersScreen}
+            options={{ title: 'Checkers', headerShown: false }}
           />
           <Stack.Screen name="Settings" component={SettingsScreen} />
         </Stack.Navigator>

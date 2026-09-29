@@ -98,6 +98,16 @@ export const templates: GameTemplate[] = [
     minPlayers: 1,
     maxPlayers: 4,
   },
+  {
+    id: 'checkers',
+    name: 'Checkers',
+    description:
+      'American checkers on a shared board. Black moves first. Jumps can be required or optional. You win by taking every piece or leaving no move.',
+    scoringMode: 'Instant',
+    winCondition: 'HighestTotal',
+    minPlayers: 1,
+    maxPlayers: 2,
+  },
 ];
 
 export function getTemplate(id: string): GameTemplate | undefined {
