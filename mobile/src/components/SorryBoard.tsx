@@ -14,6 +14,7 @@ import {
   homePoint,
   safetyHouse,
   safetyPoint,
+  sideLabelAngle,
   slideTaper,
   slideTriangle,
   startCircleCenter,
@@ -165,16 +166,18 @@ export function SorryBoard({ players, state, selectedPawn, movablePawns }: Props
 
         {SORRY_COLORS.map((color, colorIndex) => {
           const point = startCircleCenter(colorIndex);
+          const x = 15 - point.x;
           return (
             <SvgText
               key={`start-label-${color.id}`}
-              x={15 - point.x}
-              y={point.y + 0.16}
-              fontSize={0.48}
+              x={x}
+              y={point.y + 0.12}
+              fontSize={0.36}
               fontFamily="sans-serif"
               fontWeight="700"
               textAnchor="middle"
               fill={color.fill}
+              transform={`rotate(${sideLabelAngle(colorIndex)} ${x} ${point.y})`}
             >
               START
             </SvgText>
@@ -201,16 +204,18 @@ export function SorryBoard({ players, state, selectedPawn, movablePawns }: Props
 
         {SORRY_COLORS.map((color, colorIndex) => {
           const point = homePoint(colorIndex);
+          const x = 15 - point.x;
           return (
             <SvgText
               key={`home-label-${color.id}`}
-              x={15 - point.x}
-              y={point.y + 0.16}
-              fontSize={0.48}
+              x={x}
+              y={point.y + 0.12}
+              fontSize={0.36}
               fontFamily="sans-serif"
               fontWeight="700"
               textAnchor="middle"
               fill={color.fill}
+              transform={`rotate(${sideLabelAngle(colorIndex)} ${x} ${point.y})`}
             >
               HOME
             </SvgText>

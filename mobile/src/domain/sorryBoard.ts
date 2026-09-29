@@ -55,6 +55,11 @@ export function homePoint(colorIndex: number): Point {
   return { x: gate.x + dir.x * (SAFETY_SPACES + 1.6), y: gate.y + dir.y * (SAFETY_SPACES + 1.6) };
 }
 
+/** Degrees so each label's baseline faces that color's side. Red bottom, blue left, yellow top, green right. */
+export function sideLabelAngle(colorIndex: number): number {
+  return [0, 90, 180, -90][colorIndex] ?? 0;
+}
+
 export function gateChevron(colorIndex: number): string {
   const gate = trackPoint(safetyGate(colorIndex));
   const dir = INWARD[colorIndex] ?? INWARD[0];
