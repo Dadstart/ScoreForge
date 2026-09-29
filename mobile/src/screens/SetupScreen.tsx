@@ -104,7 +104,9 @@ export function SetupScreen({ navigation }: Props) {
 
         {showTarget ? (
           <>
-            <Text style={[typography.section, styles.section]}>Target score</Text>
+            <Text style={[typography.section, styles.section]}>
+              {template.id === 'sorry' ? 'Pawns home to win' : 'Target score'}
+            </Text>
             <Field
               value={targetScore}
               onChangeText={setTargetScore}

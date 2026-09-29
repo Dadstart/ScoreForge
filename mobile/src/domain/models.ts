@@ -1,3 +1,5 @@
+import type { SorryState } from './sorry';
+
 export type GameStatus = 'InProgress' | 'Completed';
 
 export interface Player {
@@ -30,6 +32,8 @@ export interface Game {
   maxRounds?: number | null;
   /** Board space index (0 is Go) for each player id. */
   tokenSpaces?: Record<string, number>;
+  /** Shared Sorry board, deck, and turn. */
+  sorry?: SorryState | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -87,6 +87,17 @@ export const templates: GameTemplate[] = [
     minPlayers: 1,
     maxPlayers: 6,
   },
+  {
+    id: 'sorry',
+    name: 'Sorry',
+    description:
+      'Race four pawns home on a shared board. Draw a card, slide on another color’s triangle, or bump someone back to Start.',
+    scoringMode: 'Instant',
+    winCondition: 'FirstToTarget',
+    defaultTargetScore: 4,
+    minPlayers: 1,
+    maxPlayers: 4,
+  },
 ];
 
 export function getTemplate(id: string): GameTemplate | undefined {

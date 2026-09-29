@@ -15,6 +15,7 @@ import {
   type Game,
   type ScoreEvent,
 } from '../domain/models';
+import { createSorryState, ensureSorryState } from '../domain/sorry';
 import { db, ensureAnonymousAuth } from '../firebase/app';
 import {
   forgetShareCode,
@@ -34,11 +35,15 @@ function eventsCol(shareCode: string) {
 
 function toGameDoc(game: Game): GameDoc {
   const { events: _events, ...meta } = game;
-  return {
+  const doc: GameDoc = {
     ...meta,
     shareCode: normalizeShareCode(game.shareCode),
     updatedAt: new Date().toISOString(),
   };
+  for (const key of Object.keys(doc) as (keyof GameDoc)[]) {
+    if (doc[key] === undefined) delete doc[key];
+  }
+  return doc;
 }
 
 function fromGameDoc(data: GameDoc, events: ScoreEvent[]): Game {
@@ -145,6 +150,7 @@ export async function createAndSaveGame(partial: {
     createdAt: now,
     updatedAt: now,
   };
+  if (partial.templateId === 'sorry') game.sorry = createSorryState(partial.players);
   await setDoc(gameRef(shareCode), toGameDoc(game));
   await rememberShareCode(shareCode);
   return game;
@@ -193,11 +199,11 @@ export async function joinGameByShareCode(
     throw new Error(`This game already has the maximum of ${maxPlayers} players.`);
   }
 
-  const updated: Game = {
+  const updated = ensureSorryState({
     ...game,
     players: [...game.players, createPlayer(name)],
     updatedAt: new Date().toISOString(),
-  };
+  });
   await setDoc(gameRef(normalized), toGameDoc(updated), { merge: true });
   await rememberShareCode(normalized);
   return updated;
