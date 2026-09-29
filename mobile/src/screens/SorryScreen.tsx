@@ -216,7 +216,14 @@ export function SorryScreen({ navigation, route }: Props) {
   const otherMoves = visibleMoves.filter((move) => move.type !== 'sorry');
 
   const boardAction = finished ? null : !sorry.drawn ? (
-    <Button label={`Draw for ${current?.name ?? 'this turn'}`} variant="primary" onPress={() => void onDraw()} />
+    <Button
+      label={`Draw for ${current?.name ?? 'this turn'}`}
+      variant="primary"
+      textColor={currentColor?.ink}
+      uppercase
+      style={currentColor ? { backgroundColor: currentColor.fill } : undefined}
+      onPress={() => void onDraw()}
+    />
   ) : moves.length === 0 ? (
     <Button label="Can't move" variant="primary" onPress={() => void onPass()} />
   ) : (

@@ -37,6 +37,8 @@ export function Button({
   disabled,
   busy,
   style,
+  textColor,
+  uppercase,
 }: {
   label: string;
   onPress: () => void;
@@ -44,6 +46,8 @@ export function Button({
   disabled?: boolean;
   busy?: boolean;
   style?: StyleProp<ViewStyle>;
+  textColor?: string;
+  uppercase?: boolean;
 }) {
   const isPrimary = variant === 'primary';
   return (
@@ -63,13 +67,15 @@ export function Button({
       ]}
     >
       {busy ? (
-        <ActivityIndicator color={isPrimary ? colors.accentText : colors.text} />
+        <ActivityIndicator color={textColor ?? (isPrimary ? colors.accentText : colors.text)} />
       ) : (
         <Text
           style={[
             typography.button,
             isPrimary && { color: colors.accentText },
             variant === 'danger' && { color: colors.danger },
+            textColor ? { color: textColor } : null,
+            uppercase && styles.btnUppercase,
           ]}
         >
           {label}
@@ -174,6 +180,10 @@ const styles = StyleSheet.create({
   },
   btnPrimary: {
     backgroundColor: colors.accent,
+  },
+  btnUppercase: {
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
   },
   btnSecondary: {
     backgroundColor: colors.surfaceAlt,
