@@ -116,9 +116,6 @@ export function CheckersScreen({ navigation, route }: Props) {
     return squares;
   }, [hops]);
   const selected = checkers?.chain ?? selection ?? (origins.length === 1 ? origins[0] : null);
-  const destinations = selected
-    ? hops.filter((hop) => hop.fromRow === selected.row && hop.fromCol === selected.col)
-    : [];
 
   const persist = async (next: Game, celebrate: boolean) => {
     if (!template || saving.current) return;
@@ -177,26 +174,28 @@ export function CheckersScreen({ navigation, route }: Props) {
     await persist(next, true);
   };
 
+  const playBetween = (fromRow: number, fromCol: number, toRow: number, toCol: number) => {
+    if (finished || saving.current) return false;
+    const hop = hops.find(
+      (candidate) =>
+        candidate.fromRow === fromRow &&
+        candidate.fromCol === fromCol &&
+        candidate.toRow === toRow &&
+        candidate.toCol === toCol,
+    );
+    if (!hop) return false;
+    const next = playHop(checkers, game.players, hop);
+    if (!next) {
+      setError('That move is no longer legal.');
+      return false;
+    }
+    void apply(next);
+    return true;
+  };
+
   const onSquare = (row: number, col: number) => {
     if (finished || saving.current) return;
-    if (selected) {
-      const hop = hops.find(
-        (candidate) =>
-          candidate.fromRow === selected.row &&
-          candidate.fromCol === selected.col &&
-          candidate.toRow === row &&
-          candidate.toCol === col,
-      );
-      if (hop) {
-        const next = playHop(checkers, game.players, hop);
-        if (!next) {
-          setError('That move is no longer legal.');
-          return;
-        }
-        void apply(next);
-        return;
-      }
-    }
+    if (selected && playBetween(selected.row, selected.col, row, col)) return;
     const piece = pieceAt(checkers.pieces, row, col);
     if (
       piece &&
@@ -272,15 +271,16 @@ export function CheckersScreen({ navigation, route }: Props) {
           <View style={[styles.boardPane, wide && styles.boardPaneWide]}>
             <CheckersBoard
               pieces={checkers.pieces}
+              hops={finished ? [] : hops}
               selected={selected}
-              destinations={finished ? [] : destinations}
               lastMove={checkers.lastMove}
               flip={localSide === 'light'}
               disabled={finished}
               onSquare={onSquare}
+              onDrop={playBetween}
             />
             <Text style={styles.hint}>
-              Tap a piece, then a highlighted square. Jumps are required, and a crowned piece keeps jumping.
+              Drag a piece onto a highlighted square, or tap the piece and then the square. Jumps are required, and a crowned piece keeps jumping.
               {localSide ? ` Your ${CHECKERS_SIDES[localSide].name} pieces sit at the bottom.` : ' Black sits at the bottom.'}
             </Text>
           </View>
