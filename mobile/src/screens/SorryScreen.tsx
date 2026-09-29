@@ -13,7 +13,6 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AddPlayerModal } from '../components/AddPlayerModal';
 import { FireworksOverlay } from '../components/FireworksOverlay';
 import { ShareCodePanel } from '../components/ShareCodePanel';
-import { OptionSelect } from '../components/OptionSelect';
 import { SorryBoard } from '../components/SorryBoard';
 import { Badge, Button, Screen } from '../components/ui';
 import { withAddedPlayer } from '../domain/addPlayer';
@@ -53,6 +52,7 @@ export function SorryScreen({ navigation, route }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [addingPlayer, setAddingPlayer] = useState(false);
   const [selectedPawn, setSelectedPawn] = useState<number | null>(null);
+  const [sorryMenu, setSorryMenu] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const saving = useRef(false);
   const {
@@ -106,6 +106,7 @@ export function SorryScreen({ navigation, route }: Props) {
   const drawnKey = sorry?.drawn ?? null;
   useEffect(() => {
     setSelectedPawn(null);
+    setSorryMenu(false);
   }, [drawnKey, sorry?.currentPlayerId]);
 
   const moves = useMemo(
@@ -236,24 +237,39 @@ export function SorryScreen({ navigation, route }: Props) {
       ) : (
         <>
           {sorryMoves.length > 0 ? (
-            <OptionSelect
-              label="Sorry"
-              value=""
-              options={sorryMoves.map((move) => {
-                const color = SORRY_COLORS[colorIndexFor(sorry, move.targetPlayerId)];
-                const name = game.players.find((player) => player.id === move.targetPlayerId)?.name ?? 'Opponent';
-                return {
-                  id: `${move.targetPlayerId}:${move.targetPawn}`,
-                  label: `Replace ${name}'s pawn ${move.targetPawn + 1}`,
-                  fill: color.fill,
-                  ink: color.ink,
-                };
-              })}
-              onChange={(id) => {
-                const move = sorryMoves.find((item) => `${item.targetPlayerId}:${item.targetPawn}` === id);
-                if (move) void onPlay(move);
-              }}
-            />
+            <View style={styles.sorryMenu}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Choose a pawn to replace"
+                onPress={() => setSorryMenu((open) => !open)}
+                style={styles.sorryTrigger}
+              >
+                <Text style={styles.sorryTriggerText}>Choose</Text>
+                <Text style={styles.sorryChevron}>{sorryMenu ? '▴' : '▾'}</Text>
+              </Pressable>
+              {sorryMenu
+                ? sorryMoves.map((move) => {
+                    const color = SORRY_COLORS[colorIndexFor(sorry, move.targetPlayerId)];
+                    const name =
+                      game.players.find((player) => player.id === move.targetPlayerId)?.name ?? 'Opponent';
+                    return (
+                      <Pressable
+                        key={`${move.targetPlayerId}:${move.targetPawn}`}
+                        accessibilityRole="button"
+                        onPress={() => {
+                          setSorryMenu(false);
+                          void onPlay(move);
+                        }}
+                        style={[styles.sorryChoice, { backgroundColor: color.fill }]}
+                      >
+                        <Text style={[styles.sorryChoiceText, { color: color.ink }]}>
+                          Replace {name}'s pawn {move.targetPawn + 1}
+                        </Text>
+                      </Pressable>
+                    );
+                  })
+                : null}
+            </View>
           ) : null}
           {otherMoves.map((move) => (
             <Pressable key={moveKey(move)} style={styles.move} onPress={() => void onPlay(move)}>
@@ -448,6 +464,28 @@ const styles = StyleSheet.create({
   },
   deckCount: { ...typography.body, fontSize: 13 },
   boardMoves: { width: 260, gap: 8 },
+  sorryMenu: { gap: 6, pointerEvents: 'auto' },
+  sorryTrigger: {
+    minHeight: 44,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.bgElevated,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sorryTriggerText: { ...typography.body, fontWeight: '600' },
+  sorryChevron: { color: colors.muted, fontSize: 16 },
+  sorryChoice: {
+    minHeight: 44,
+    borderRadius: radii.md,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sorryChoiceText: { fontSize: 15, fontWeight: '700' },
   boardMoveEmpty: { ...typography.body, textAlign: 'center', fontSize: 13 },
   pawns: { flexDirection: 'row', gap: 8 },
   chip: {

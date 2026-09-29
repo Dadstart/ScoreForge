@@ -268,7 +268,7 @@ export function SorryBoard({ players, state, selectedPawn, movablePawns, action 
               {state.drawn ? <SorryCard card={state.drawn} mini /> : <View style={styles.cardHole} />}
             </View>
           </View>
-          {action}
+          <View style={styles.actionHit}>{action}</View>
         </View>
       </View>
     </View>
@@ -314,6 +314,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   stackColumn: { alignItems: 'center', gap: 12 },
+  actionHit: { pointerEvents: 'auto' },
   cardPair: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   stackUnder: { position: 'absolute', top: 7, left: 7 },
   cardHole: {
