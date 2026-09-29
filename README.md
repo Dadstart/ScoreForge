@@ -54,6 +54,7 @@ npm run deploy:rules
 | Cribbage | Peg own track only | First to 121 (or 61) |
 | Monopoly | Track own cash, optional board | Highest total |
 | Yahtzee | Fill any score-card column | Highest total |
+| Sorry | Shared board and card deck | First to get 4 pawns home |
 
 ## Project layout
 

@@ -1,5 +1,6 @@
 import type { Game, Player } from './models';
 import type { GameTemplate, WinCondition } from './templates';
+import { homeCount } from './sorry';
 import { grandTotal, isScorecardComplete } from './yahtzee';
 
 export interface PlayerStanding {
@@ -86,6 +87,7 @@ function orderPlayers(
 
 function pointsForPlayer(game: Game, playerId: string, template: GameTemplate): number {
   if (template.id === 'yahtzee') return grandTotal(game.events, playerId);
+  if (template.id === 'sorry' && game.sorry) return homeCount(game.sorry, playerId);
   return game.events
     .filter((e) => e.playerId === playerId)
     .reduce((sum, e) => sum + e.points, 0);
