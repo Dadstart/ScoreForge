@@ -15,7 +15,6 @@ import { FireworksOverlay } from '../components/FireworksOverlay';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { SorryBoard } from '../components/SorryBoard';
 import { Badge, Button, Screen } from '../components/ui';
-import { withAddedPlayer } from '../domain/addPlayer';
 import { findLocalPlayerId } from '../domain/localPlayer';
 import type { Game } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
@@ -36,7 +35,7 @@ import {
 import { getTemplate } from '../domain/templates';
 import { useWinCelebration } from '../hooks/useWinCelebration';
 import { loadDisplayName } from '../storage/displayNameStore';
-import { saveGame, subscribeGame } from '../storage/gameStore';
+import { addPlayerToGame, preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
 import { colors, radii, space, typography } from '../theme';
 import type { RootStackParamList } from '../navigation/types';
 
@@ -72,7 +71,7 @@ export function SorryScreen({ navigation, route }: Props) {
     const unsub = subscribeGame(
       gameId,
       (found) => {
-        setGame(found);
+        setGame((current) => (found ? preferNewerGame(current, found) : null));
         if (found) {
           const tmpl = getTemplate(found.templateId);
           if (tmpl) onSnapshot(calculate(found, tmpl));
@@ -97,9 +96,11 @@ export function SorryScreen({ navigation, route }: Props) {
     if (!game) return;
     const next = ensureSorryState(game);
     if (next === game) return;
-    void saveGame(next).catch((err: unknown) => {
-      setError(err instanceof Error ? err.message : 'Could not set up the board');
-    });
+    void saveGame(next)
+      .then((saved) => setGame((current) => preferNewerGame(current, saved)))
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : 'Could not set up the board');
+      });
   }, [game]);
 
   const sorry = game?.sorry ?? null;
@@ -107,6 +108,7 @@ export function SorryScreen({ navigation, route }: Props) {
   useEffect(() => {
     setSelectedPawn(null);
     setSorryMenu(false);
+    setConfirmReset(false);
   }, [drawnKey, sorry?.currentPlayerId]);
 
   const moves = useMemo(
@@ -124,8 +126,8 @@ export function SorryScreen({ navigation, route }: Props) {
     const snap = calculate(next, template);
     if (celebrate) noteLocalResult(snap);
     try {
-      await saveGame(next);
-      setGame(next);
+      const saved = await saveGame(next);
+      setGame((current) => preferNewerGame(current, saved));
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Autosave failed');
@@ -388,9 +390,8 @@ export function SorryScreen({ navigation, route }: Props) {
           currentCount={game.players.length}
           onCancel={() => setAddingPlayer(false)}
           onAdd={async (name) => {
-            const next = withAddedPlayer(game, name, template.maxPlayers);
-            await saveGame(next);
-            setGame(next);
+            const saved = await addPlayerToGame(game.shareCode, name, template.maxPlayers);
+            setGame((current) => preferNewerGame(current, saved));
             setError(null);
           }}
         />

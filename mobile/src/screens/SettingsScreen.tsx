@@ -3,11 +3,10 @@ import { StyleSheet, Switch, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AddPlayerModal } from '../components/AddPlayerModal';
 import { Button, Card, Screen } from '../components/ui';
-import { withAddedPlayer } from '../domain/addPlayer';
 import type { Game } from '../domain/models';
 import { getTemplate } from '../domain/templates';
 import { useSettings } from '../hooks/useSettings';
-import { saveGame, subscribeGame } from '../storage/gameStore';
+import { addPlayerToGame, preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
 import type { Settings } from '../storage/settingsStore';
 import { colors, space, typography } from '../theme';
 import type { RootStackParamList } from '../navigation/types';
@@ -41,19 +40,24 @@ export function SettingsScreen({ navigation, route }: Props) {
 
   useEffect(() => {
     if (!gameId) return;
-    return subscribeGame(gameId, setGame, (err) => setActionError(err.message));
+    return subscribeGame(
+      gameId,
+      (found) => setGame((current) => (found ? preferNewerGame(current, found) : null)),
+      (err) => setActionError(err.message),
+    );
   }, [gameId]);
 
   const resetGame = async () => {
     if (!game) return;
     try {
-      await saveGame({
+      const saved = await saveGame({
         ...game,
         events: [],
         status: 'InProgress',
         tokenSpaces: {},
         updatedAt: new Date().toISOString(),
       });
+      setGame((current) => preferNewerGame(current, saved));
       setActionError(null);
     } catch (e) {
       setActionError(e instanceof Error ? e.message : 'Could not reset the game');
@@ -113,7 +117,8 @@ export function SettingsScreen({ navigation, route }: Props) {
           currentCount={game.players.length}
           onCancel={() => setAddingPlayer(false)}
           onAdd={async (name) => {
-            await saveGame(withAddedPlayer(game, name, template.maxPlayers));
+            const saved = await addPlayerToGame(game.shareCode, name, template.maxPlayers);
+            setGame((current) => preferNewerGame(current, saved));
             setActionError(null);
           }}
         />

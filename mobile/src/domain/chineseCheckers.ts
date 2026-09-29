@@ -672,7 +672,12 @@ function settle(state: ChineseState, players: readonly { id: string; name: strin
       const team = teamId(state, seat);
       if (!team || finishedTeams.includes(team)) continue;
       const members = seatsOnTeam(state, team);
-      if (members.length === 0 || !members.every((index) => finished.includes(index))) continue;
+      if (members.length === 0) continue;
+      const settled = members.every(
+        (index) => finished.includes(index) || state.resignedSeats.includes(index),
+      );
+      const anyHome = members.some((index) => finished.includes(index));
+      if (!settled || !anyHome) continue;
       finishedTeams.push(team);
       const names = members.map((index) => seatLabel(state, players, index)).join(' and ');
       notes.push(`${names} take ${ordinal(finishedTeams.length)}.`);

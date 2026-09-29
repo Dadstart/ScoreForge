@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Button, Field, Screen } from '../components/ui';
-import { normalizeShareCode } from '../domain/models';
+import { isShareCode, normalizeShareCode } from '../domain/models';
 import { playerCap } from '../domain/chineseCheckers';
 import { getTemplate } from '../domain/templates';
 import { loadDisplayName, saveDisplayName } from '../storage/displayNameStore';
@@ -39,8 +39,8 @@ export function JoinScreen({ navigation, route }: Props) {
       setError('Enter a display name.');
       return;
     }
-    if (normalized.length < 4) {
-      setError('Enter the full share code from the host.');
+    if (!isShareCode(normalized)) {
+      setError('Enter the full 6-character share code.');
       return;
     }
     setBusy(true);

@@ -76,17 +76,30 @@ export function scoreForBox(events: ScoreEvent[], playerId: string, boxId: strin
   return score;
 }
 
+function latestBoxEvent(events: ScoreEvent[], playerId: string, boxId: string): ScoreEvent | null {
+  let found: ScoreEvent | null = null;
+  for (const event of events) {
+    if (event.playerId === playerId && event.box === boxId) found = event;
+  }
+  return found;
+}
+
 /**
  * Extra Yahtzees after the 50-point box. A five-of-a-kind shows up as a full upper
  * box, or as 5 or 30 in 3 of a Kind, 4 of a Kind, or Chance. Each one is 100 points.
+ * Only boxes scored after the Yahtzee box count, so an earlier five-of-a-kind does not.
  */
 export function yahtzeeBonusCount(events: ScoreEvent[], playerId: string): number {
-  if (scoreForBox(events, playerId, 'yahtzee') !== 50) return 0;
+  const yahtzee = latestBoxEvent(events, playerId, 'yahtzee');
+  if (!yahtzee || yahtzee.points !== 50) return 0;
+  const explicit = events.filter((event) => event.playerId === playerId && event.box === YAHTZEE_BONUS_BOX).length;
+  if (explicit > 0) return explicit;
   let extras = 0;
   for (const box of YAHTZEE_BOXES) {
     if (box.id === 'yahtzee') continue;
-    const score = scoreForBox(events, playerId, box.id);
-    if (score == null) continue;
+    const scoring = latestBoxEvent(events, playerId, box.id);
+    if (!scoring || scoring.timestamp <= yahtzee.timestamp) continue;
+    const score = scoring.points;
     if (box.kind === 'face' && box.face != null && score === box.face * 5) extras += 1;
     else if (
       (box.id === 'threeKind' || box.id === 'fourKind' || box.id === 'chance') &&
