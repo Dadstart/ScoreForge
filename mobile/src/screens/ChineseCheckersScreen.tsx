@@ -343,9 +343,10 @@ export function ChineseCheckersScreen({ navigation, route }: Props) {
               rotation={rotation}
               disabled={finished}
               onCell={onCell}
+              onDrop={playBetween}
             />
             <Text style={styles.hint}>
-              Tap a piece, then a highlighted hole. Jump in a straight line and keep going, or tap the piece again to stop.
+              Drag a piece onto a highlighted hole, or tap the piece and then the hole. Jump in a straight line and keep going, or tap the piece again to stop.
               Pieces are not captured. You can rest in the center, your own camp, or the opposite camp.
               {localSeat >= 0 ? ' Your camp is at the bottom.' : ''}
             </Text>
