@@ -1,5 +1,7 @@
 import { StyleSheet, View } from 'react-native';
+import type { ReactNode } from 'react';
 import Svg, { Circle, G, Polygon, Rect, Text as SvgText } from 'react-native-svg';
+import { SorryCard } from './SorryCard';
 import type { Player } from '../domain/models';
 import {
   SORRY_COLORS,
@@ -30,6 +32,7 @@ type Props = {
   state: SorryState;
   selectedPawn: number | null;
   movablePawns: number[];
+  action?: ReactNode;
 };
 
 type Piece = {
@@ -42,7 +45,7 @@ type Piece = {
   mine: boolean;
 };
 
-export function SorryBoard({ players, state, selectedPawn, movablePawns }: Props) {
+export function SorryBoard({ players, state, selectedPawn, movablePawns, action }: Props) {
   const currentColor = colorIndexFor(state, state.currentPlayerId);
   const slides = slideSpans();
   const pieces = players.flatMap((player) => piecesFor(player, state));
@@ -250,6 +253,24 @@ export function SorryBoard({ players, state, selectedPawn, movablePawns }: Props
           </SvgText>
         ))}
       </Svg>
+      <View style={styles.stacks} pointerEvents="box-none">
+        <View style={styles.stackColumn} pointerEvents="box-none">
+          <View style={styles.cardPair} pointerEvents="none">
+            <View>
+              {state.deck.length > 1 ? (
+                <View style={styles.stackUnder}>
+                  <SorryCard card="back" mini />
+                </View>
+              ) : null}
+              <SorryCard card="back" mini />
+            </View>
+            <View>
+              {state.drawn ? <SorryCard card={state.drawn} mini /> : <View style={styles.cardHole} />}
+            </View>
+          </View>
+          {action}
+        </View>
+      </View>
     </View>
   );
 }
@@ -283,6 +304,26 @@ function piecePoint(colorIndex: number, spot: PawnSpot, pawnIndex: number): Poin
 
 const styles = StyleSheet.create({
   frame: { width: '100%', aspectRatio: 1 },
+  stacks: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stackColumn: { alignItems: 'center', gap: 12 },
+  cardPair: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  stackUnder: { position: 'absolute', top: 7, left: 7 },
+  cardHole: {
+    width: 118,
+    height: 162,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#c4b08a',
+  },
 });
 
 function OutlinedText({

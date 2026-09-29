@@ -13,8 +13,8 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AddPlayerModal } from '../components/AddPlayerModal';
 import { FireworksOverlay } from '../components/FireworksOverlay';
 import { ShareCodePanel } from '../components/ShareCodePanel';
+import { OptionSelect } from '../components/OptionSelect';
 import { SorryBoard } from '../components/SorryBoard';
-import { SorryCard } from '../components/SorryCard';
 import { Badge, Button, Screen } from '../components/ui';
 import { withAddedPlayer } from '../domain/addPlayer';
 import { findLocalPlayerId } from '../domain/localPlayer';
@@ -211,6 +211,60 @@ export function SorryScreen({ navigation, route }: Props) {
     }
   };
 
+  const sorryMoves = uniqueSorryTargets(visibleMoves);
+  const otherMoves = visibleMoves.filter((move) => move.type !== 'sorry');
+
+  const boardAction = finished ? null : !sorry.drawn ? (
+    <Button label={`Draw for ${current?.name ?? 'this turn'}`} variant="primary" onPress={() => void onDraw()} />
+  ) : moves.length === 0 ? (
+    <Button label="Can't move" variant="primary" onPress={() => void onPass()} />
+  ) : (
+    <View style={styles.boardMoves}>
+      <View style={styles.pawns}>
+        <FilterChip label="All" active={selectedPawn == null} onPress={() => setSelectedPawn(null)} />
+        {Array.from({ length: PAWNS_PER_PLAYER }, (_, index) => (
+          <FilterChip
+            key={index}
+            label={`${index + 1}`}
+            active={selectedPawn === index}
+            onPress={() => setSelectedPawn(index)}
+          />
+        ))}
+      </View>
+      {visibleMoves.length === 0 ? (
+        <Text style={styles.boardMoveEmpty}>That pawn has no move with this card.</Text>
+      ) : (
+        <>
+          {sorryMoves.length > 0 ? (
+            <OptionSelect
+              label="Sorry"
+              value=""
+              options={sorryMoves.map((move) => {
+                const color = SORRY_COLORS[colorIndexFor(sorry, move.targetPlayerId)];
+                const name = game.players.find((player) => player.id === move.targetPlayerId)?.name ?? 'Opponent';
+                return {
+                  id: `${move.targetPlayerId}:${move.targetPawn}`,
+                  label: `Replace ${name}'s pawn ${move.targetPawn + 1}`,
+                  fill: color.fill,
+                  ink: color.ink,
+                };
+              })}
+              onChange={(id) => {
+                const move = sorryMoves.find((item) => `${item.targetPlayerId}:${item.targetPawn}` === id);
+                if (move) void onPlay(move);
+              }}
+            />
+          ) : null}
+          {otherMoves.map((move) => (
+            <Pressable key={moveKey(move)} style={styles.move} onPress={() => void onPlay(move)}>
+              <Text style={styles.moveText}>{describeMove(game.players, move)}</Text>
+            </Pressable>
+          ))}
+        </>
+      )}
+    </View>
+  );
+
   return (
     <Screen>
       <View
@@ -243,6 +297,7 @@ export function SorryScreen({ navigation, route }: Props) {
               state={sorry}
               selectedPawn={selectedPawn}
               movablePawns={movablePawns}
+              action={boardAction}
             />
             <Text style={styles.hint}>
               Clockwise track. A triangle in another color slides you and sends every pawn on that slide back to Start.
@@ -250,10 +305,6 @@ export function SorryScreen({ navigation, route }: Props) {
           </View>
 
           <View style={styles.panel}>
-            <View style={styles.cardRow}>
-              <SorryCard card="back" compact />
-              {sorry.drawn ? <SorryCard card={sorry.drawn} compact /> : <View style={styles.cardHole} />}
-            </View>
             <Text style={styles.deckCount}>
               {sorry.deck.length} in the deck
               {sorry.discard.length ? ` · ${sorry.discard.length} discarded` : ''}
@@ -261,42 +312,7 @@ export function SorryScreen({ navigation, route }: Props) {
 
             {finished ? (
               <Text style={typography.body}>Every pawn is home. Reset the board to play again.</Text>
-            ) : !sorry.drawn ? (
-              <Button label={`Draw for ${current?.name ?? 'this turn'}`} variant="primary" onPress={() => void onDraw()} />
-            ) : moves.length === 0 ? (
-              <Button label="Can't move" variant="primary" onPress={() => void onPass()} />
-            ) : (
-              <View style={styles.moves}>
-                <View style={styles.pawns}>
-                  <FilterChip
-                    label="All"
-                    active={selectedPawn == null}
-                    onPress={() => setSelectedPawn(null)}
-                  />
-                  {Array.from({ length: PAWNS_PER_PLAYER }, (_, index) => (
-                    <FilterChip
-                      key={index}
-                      label={`${index + 1}`}
-                      active={selectedPawn === index}
-                      onPress={() => setSelectedPawn(index)}
-                    />
-                  ))}
-                </View>
-                {visibleMoves.length === 0 ? (
-                  <Text style={typography.body}>That pawn has no move with this card.</Text>
-                ) : (
-                  visibleMoves.map((move) => (
-                    <Pressable
-                      key={moveKey(move)}
-                      style={styles.move}
-                      onPress={() => void onPlay(move)}
-                    >
-                      <Text style={styles.moveText}>{describeMove(game.players, move)}</Text>
-                    </Pressable>
-                  ))
-                )}
-              </View>
-            )}
+            ) : null}
 
             <Text style={[typography.section, styles.section]}>Players</Text>
             <View style={styles.playerRow}>
@@ -355,6 +371,19 @@ export function SorryScreen({ navigation, route }: Props) {
       </View>
     </Screen>
   );
+}
+
+function uniqueSorryTargets(moves: SorryMove[]): Extract<SorryMove, { type: 'sorry' }>[] {
+  const seen = new Set<string>();
+  const choices: Extract<SorryMove, { type: 'sorry' }>[] = [];
+  for (const move of moves) {
+    if (move.type !== 'sorry') continue;
+    const key = `${move.targetPlayerId}:${move.targetPawn}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    choices.push(move);
+  }
+  return choices;
 }
 
 function FilterChip({
@@ -417,17 +446,9 @@ const styles = StyleSheet.create({
     padding: space.md,
     gap: 10,
   },
-  cardRow: { flexDirection: 'row', gap: 12, alignItems: 'center' },
-  cardHole: {
-    width: 132,
-    height: 188,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: colors.borderStrong,
-  },
   deckCount: { ...typography.body, fontSize: 13 },
-  moves: { gap: 8 },
+  boardMoves: { width: 260, gap: 8 },
+  boardMoveEmpty: { ...typography.body, textAlign: 'center', fontSize: 13 },
   pawns: { flexDirection: 'row', gap: 8 },
   chip: {
     minWidth: 36,

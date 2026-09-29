@@ -7,6 +7,8 @@ export type SelectOption = {
   label: string;
   swatch?: string;
   group?: string;
+  fill?: string;
+  ink?: string;
 };
 
 type Props = {
@@ -59,12 +61,22 @@ export function OptionSelect({ label, value, options, onChange, disabled }: Prop
                         onChange(option.id);
                         setOpen(false);
                       }}
-                      style={[styles.option, active && styles.optionActive]}
+                      style={[
+                        styles.option,
+                        option.fill ? { backgroundColor: option.fill } : null,
+                        active && !option.fill && styles.optionActive,
+                      ]}
                     >
                       {option.swatch ? (
                         <View style={[styles.swatch, { backgroundColor: option.swatch }]} />
                       ) : null}
-                      <Text style={[styles.optionLabel, active && styles.optionLabelActive]}>
+                      <Text
+                        style={[
+                          styles.optionLabel,
+                          option.ink ? { color: option.ink } : null,
+                          active && !option.ink && styles.optionLabelActive,
+                        ]}
+                      >
                         {option.label}
                       </Text>
                     </Pressable>
@@ -138,6 +150,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
     borderRadius: radii.md,
     paddingHorizontal: 10,
+    marginBottom: 6,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
