@@ -13,6 +13,8 @@ import {
   gateChevron,
   homePoint,
   safetyHouse,
+  safetyLabelAngle,
+  safetyLabelPoint,
   safetyPoint,
   sideLabelAngle,
   slideTaper,
@@ -168,19 +170,33 @@ export function SorryBoard({ players, state, selectedPawn, movablePawns }: Props
           const point = startCircleCenter(colorIndex);
           const x = 15 - point.x;
           return (
-            <SvgText
+            <OutlinedText
               key={`start-label-${color.id}`}
               x={x}
               y={point.y + 0.12}
               fontSize={0.36}
-              fontFamily="sans-serif"
-              fontWeight="700"
-              textAnchor="middle"
               fill={color.fill}
               transform={`rotate(${sideLabelAngle(colorIndex)} ${x} ${point.y})`}
             >
               START
-            </SvgText>
+            </OutlinedText>
+          );
+        })}
+
+        {SORRY_COLORS.map((color, colorIndex) => {
+          const point = safetyLabelPoint(colorIndex);
+          const x = 15 - point.x;
+          return (
+            <OutlinedText
+              key={`safety-label-${color.id}`}
+              x={x}
+              y={point.y + 0.12}
+              fontSize={0.38}
+              fill={color.fill}
+              transform={`rotate(${safetyLabelAngle(colorIndex)} ${x} ${point.y})`}
+            >
+              SAFETY ZONE
+            </OutlinedText>
           );
         })}
 
@@ -206,19 +222,16 @@ export function SorryBoard({ players, state, selectedPawn, movablePawns }: Props
           const point = homePoint(colorIndex);
           const x = 15 - point.x;
           return (
-            <SvgText
+            <OutlinedText
               key={`home-label-${color.id}`}
               x={x}
               y={point.y + 0.12}
               fontSize={0.36}
-              fontFamily="sans-serif"
-              fontWeight="700"
-              textAnchor="middle"
               fill={color.fill}
               transform={`rotate(${sideLabelAngle(colorIndex)} ${x} ${point.y})`}
             >
               HOME
-            </SvgText>
+            </OutlinedText>
           );
         })}
 
@@ -271,3 +284,39 @@ function piecePoint(colorIndex: number, spot: PawnSpot, pawnIndex: number): Poin
 const styles = StyleSheet.create({
   frame: { width: '100%', aspectRatio: 1 },
 });
+
+function OutlinedText({
+  fill,
+  children,
+  x,
+  y,
+  fontSize,
+  transform,
+}: {
+  fill: string;
+  children: string;
+  x: number;
+  y: number;
+  fontSize: number;
+  transform?: string;
+}) {
+  const shared = {
+    x,
+    y,
+    fontSize,
+    transform,
+    fontFamily: 'sans-serif' as const,
+    fontWeight: '700' as const,
+    textAnchor: 'middle' as const,
+  };
+  return (
+    <G>
+      <SvgText {...shared} fill="#ffffff" stroke="#ffffff" strokeWidth={0.1} strokeLinejoin="round">
+        {children}
+      </SvgText>
+      <SvgText {...shared} fill={fill}>
+        {children}
+      </SvgText>
+    </G>
+  );
+}

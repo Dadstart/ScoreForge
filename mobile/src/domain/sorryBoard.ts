@@ -32,6 +32,16 @@ export function safetyPoint(colorIndex: number, safetyIndex: number): Point {
   return { x: gate.x + dir.x * step, y: gate.y + dir.y * step };
 }
 
+/** Middle of the five-square safety row. */
+export function safetyLabelPoint(colorIndex: number): Point {
+  return safetyPoint(colorIndex, 2);
+}
+
+/** Text runs along the safety row toward home, with the baseline toward the outside. */
+export function safetyLabelAngle(colorIndex: number): number {
+  return [-90, 0, 90, 180][colorIndex] ?? 0;
+}
+
 /** Last safety space: a square with a roof pointing into the home circle. */
 export function safetyHouse(colorIndex: number): string {
   const dir = INWARD[colorIndex] ?? INWARD[0];
@@ -52,7 +62,7 @@ export function safetyHouse(colorIndex: number): string {
 export function homePoint(colorIndex: number): Point {
   const gate = trackPoint(safetyGate(colorIndex));
   const dir = INWARD[colorIndex] ?? INWARD[0];
-  return { x: gate.x + dir.x * (SAFETY_SPACES + 1.6), y: gate.y + dir.y * (SAFETY_SPACES + 1.6) };
+  return { x: gate.x + dir.x * (SAFETY_SPACES + 1.35), y: gate.y + dir.y * (SAFETY_SPACES + 1.35) };
 }
 
 /** Degrees so each label's baseline faces that color's side. Red bottom, blue left, yellow top, green right. */
