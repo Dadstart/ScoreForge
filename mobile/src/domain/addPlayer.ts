@@ -1,4 +1,5 @@
 import { ensureCheckersState } from './checkers';
+import { ensureChineseState, playerCap } from './chineseCheckers';
 import { createPlayer, type Game } from './models';
 import { ensureSorryState } from './sorry';
 
@@ -8,8 +9,9 @@ export function withAddedPlayer(game: Game, rawName: string, maxPlayers: number)
   if (!name) {
     throw new Error('Enter a player name.');
   }
-  if (game.players.length >= maxPlayers) {
-    throw new Error(`This game already has the maximum of ${maxPlayers} players.`);
+  const cap = playerCap(game, maxPlayers);
+  if (game.players.length >= cap) {
+    throw new Error(`This game already has the maximum of ${cap} players.`);
   }
   const taken = game.players.some(
     (p) => p.name.trim().toLowerCase() === name.toLowerCase(),
@@ -17,12 +19,14 @@ export function withAddedPlayer(game: Game, rawName: string, maxPlayers: number)
   if (taken) {
     throw new Error('A player with that name is already in the game.');
   }
-  return ensureCheckersState(
-    ensureSorryState({
-      ...game,
-      players: [...game.players, createPlayer(name)],
-      updatedAt: new Date().toISOString(),
-    }),
+  return ensureChineseState(
+    ensureCheckersState(
+      ensureSorryState({
+        ...game,
+        players: [...game.players, createPlayer(name)],
+        updatedAt: new Date().toISOString(),
+      }),
+    ),
   );
 }
 
@@ -36,13 +40,15 @@ export function withoutPlayer(game: Game, playerId: string): Game {
   }
   const tokenSpaces = { ...(game.tokenSpaces ?? {}) };
   delete tokenSpaces[playerId];
-  return ensureCheckersState(
-    ensureSorryState({
-      ...game,
-      players: game.players.filter((player) => player.id !== playerId),
-      events: game.events.filter((event) => event.playerId !== playerId),
-      tokenSpaces,
-      updatedAt: new Date().toISOString(),
-    }),
+  return ensureChineseState(
+    ensureCheckersState(
+      ensureSorryState({
+        ...game,
+        players: game.players.filter((player) => player.id !== playerId),
+        events: game.events.filter((event) => event.playerId !== playerId),
+        tokenSpaces,
+        updatedAt: new Date().toISOString(),
+      }),
+    ),
   );
 }

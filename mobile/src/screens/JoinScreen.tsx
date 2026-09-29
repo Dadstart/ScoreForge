@@ -7,6 +7,7 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Button, Field, Screen } from '../components/ui';
 import { normalizeShareCode } from '../domain/models';
+import { playerCap } from '../domain/chineseCheckers';
 import { getTemplate } from '../domain/templates';
 import { loadDisplayName, saveDisplayName } from '../storage/displayNameStore';
 import { findGameByShareCode, joinGameByShareCode } from '../storage/gameStore';
@@ -48,7 +49,7 @@ export function JoinScreen({ navigation, route }: Props) {
       await saveDisplayName(name);
       const existing = await findGameByShareCode(normalized);
       const maxPlayers = existing
-        ? (getTemplate(existing.templateId)?.maxPlayers ?? 12)
+        ? playerCap(existing, getTemplate(existing.templateId)?.maxPlayers ?? 12)
         : 12;
       const game = await joinGameByShareCode(normalized, name, maxPlayers);
       navigation.replace(gameScreenForTemplate(game.templateId), { gameId: game.id });

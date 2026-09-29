@@ -12,6 +12,7 @@ import { MonopolyScreen } from './src/screens/MonopolyScreen';
 import { YahtzeeScreen } from './src/screens/YahtzeeScreen';
 import { SorryScreen } from './src/screens/SorryScreen';
 import { CheckersScreen } from './src/screens/CheckersScreen';
+import { ChineseCheckersScreen } from './src/screens/ChineseCheckersScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { JoinScreen } from './src/screens/JoinScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
@@ -100,6 +101,11 @@ export default function App() {
             name="Checkers"
             component={CheckersScreen}
             options={{ title: 'Checkers', headerShown: false }}
+          />
+          <Stack.Screen
+            name="ChineseCheckers"
+            component={ChineseCheckersScreen}
+            options={{ title: 'Chinese Checkers', headerShown: false }}
           />
           <Stack.Screen name="Settings" component={SettingsScreen} />
         </Stack.Navigator>

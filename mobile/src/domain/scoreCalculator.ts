@@ -1,6 +1,7 @@
 import type { Game, Player } from './models';
 import type { GameTemplate, WinCondition } from './templates';
 import { capturedCount, playerIdForSide } from './checkers';
+import { piecesHomeForPlayer, winnerPlayerIds } from './chineseCheckers';
 import { homeCount } from './sorry';
 import { grandTotal, isScorecardComplete } from './yahtzee';
 
@@ -90,6 +91,7 @@ function pointsForPlayer(game: Game, playerId: string, template: GameTemplate): 
   if (template.id === 'yahtzee') return grandTotal(game.events, playerId);
   if (template.id === 'sorry' && game.sorry) return homeCount(game.sorry, playerId);
   if (template.id === 'checkers' && game.checkers) return capturedCount(game.checkers, playerId);
+  if (template.id === 'chinese-checkers' && game.chinese) return piecesHomeForPlayer(game.chinese, playerId);
   return game.events
     .filter((e) => e.playerId === playerId)
     .reduce((sum, e) => sum + e.points, 0);
@@ -103,6 +105,7 @@ function detectCompletion(
 ): boolean {
   if (template.id === 'yahtzee') return isScorecardComplete(game);
   if (template.id === 'checkers') return Boolean(game.checkers?.winnerSide || game.checkers?.draw);
+  if (template.id === 'chinese-checkers') return Boolean(game.chinese?.over);
 
   if (template.winCondition === 'FirstToTarget') {
     const target = game.targetScore ?? template.defaultTargetScore;
@@ -127,6 +130,11 @@ function getWinnerIds(
     if (!game.checkers || game.checkers.draw || !game.checkers.winnerSide) return new Set();
     const winnerId = playerIdForSide(game.checkers, game.checkers.winnerSide);
     return winnerId ? new Set([winnerId]) : new Set();
+  }
+
+  if (template.id === 'chinese-checkers') {
+    if (!game.chinese?.over) return new Set();
+    return new Set(winnerPlayerIds(game.chinese));
   }
 
   if (template.winCondition === 'FirstToTarget') {

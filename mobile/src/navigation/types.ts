@@ -12,17 +12,19 @@ export type RootStackParamList = {
   Yahtzee: { gameId: string };
   Sorry: { gameId: string };
   Checkers: { gameId: string };
+  ChineseCheckers: { gameId: string };
   Settings: { gameId?: string } | undefined;
 };
 
 export function gameScreenForTemplate(
   templateId: string,
-): 'Board' | 'Cribbage' | 'Monopoly' | 'Yahtzee' | 'Sorry' | 'Checkers' {
+): 'Board' | 'Cribbage' | 'Monopoly' | 'Yahtzee' | 'Sorry' | 'Checkers' | 'ChineseCheckers' {
   if (templateId === 'cribbage') return 'Cribbage';
   if (templateId === 'monopoly') return 'Monopoly';
   if (templateId === 'yahtzee') return 'Yahtzee';
   if (templateId === 'sorry') return 'Sorry';
   if (templateId === 'checkers') return 'Checkers';
+  if (templateId === 'chinese-checkers') return 'ChineseCheckers';
   return 'Board';
 }
 

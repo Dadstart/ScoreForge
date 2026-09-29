@@ -23,6 +23,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
       Yahtzee: 'yahtzee/:gameId',
       Sorry: 'sorry/:gameId',
       Checkers: 'checkers/:gameId',
+      ChineseCheckers: 'chinese-checkers/:gameId',
       Settings: 'settings',
     },
   },
