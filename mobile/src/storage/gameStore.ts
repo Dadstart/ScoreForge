@@ -166,18 +166,16 @@ export async function createAndSaveGame(partial: {
   return game;
 }
 
-export async function deleteGame(gameId: string): Promise<void> {
+export async function deleteGame(gameId: string, shareCode?: string): Promise<void> {
   await ensureAnonymousAuth();
-  const games = await loadGames();
-  const game = games.find((g) => g.id === gameId || g.shareCode === gameId);
-  if (!game) {
+  const code = normalizeShareCode(shareCode || gameId);
+  if (code.length < 4) {
     await forgetShareCode(gameId);
     return;
   }
-  const code = normalizeShareCode(game.shareCode);
   const events = await getDocs(eventsCol(code));
   const batch = writeBatch(db);
-  for (const e of events.docs) batch.delete(e.ref);
+  for (const eventDoc of events.docs) batch.delete(eventDoc.ref);
   batch.delete(gameRef(code));
   await batch.commit();
   await forgetShareCode(code);

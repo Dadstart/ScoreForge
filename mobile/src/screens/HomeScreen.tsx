@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -44,14 +44,24 @@ export function HomeScreen({ navigation }: Props) {
     return unsub;
   }, [navigation, refresh]);
 
-  const openGame = (game: Game) => {
-    navigation.navigate(gameScreenForTemplate(game.templateId), { gameId: game.id });
-  };
+  const openGame = useCallback(
+    (game: Game) => {
+      navigation.navigate(gameScreenForTemplate(game.templateId), { gameId: game.id });
+    },
+    [navigation],
+  );
 
-  const onDelete = async (id: string) => {
-    await deleteGame(id);
-    await refresh();
-  };
+  const removeGame = useCallback((game: Game) => {
+    setGames((current) => current.filter((item) => item.id !== game.id));
+    setError(null);
+    void deleteGame(game.id, game.shareCode).catch((err: unknown) => {
+      setGames((current) => {
+        if (current.some((item) => item.id === game.id)) return current;
+        return [...current, game].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+      });
+      setError(err instanceof Error ? err.message : 'Could not delete that game');
+    });
+  }, []);
 
   return (
     <Screen>
@@ -98,43 +108,7 @@ export function HomeScreen({ navigation }: Props) {
         ) : null}
 
         {!busy &&
-          games.map((game) => {
-            const templateName = getTemplate(game.templateId)?.name ?? game.templateId;
-            const done = game.status === 'Completed';
-            return (
-              <Card key={game.id} style={styles.gameCard}>
-                <View style={styles.cardTop}>
-                  <View style={{ flex: 1, gap: 6 }}>
-                    <Text style={styles.cardTitle}>{game.name || 'Untitled game'}</Text>
-                    <View style={styles.metaRow}>
-                      <Badge label={templateName} tone="accent" />
-                      <Badge
-                        label={done ? 'Completed' : 'In progress'}
-                        tone={done ? 'success' : 'neutral'}
-                      />
-                    </View>
-                    <Text style={styles.muted}>
-                      Updated {new Date(game.updatedAt).toLocaleString()}
-                    </Text>
-                  </View>
-                  <ShareCodePanel shareCode={game.shareCode} />
-                </View>
-                <View style={styles.cardActions}>
-                  <Button
-                    label="Resume"
-                    variant="primary"
-                    onPress={() => openGame(game)}
-                    style={{ flex: 1 }}
-                  />
-                  <Button
-                    label="Delete"
-                    variant="danger"
-                    onPress={() => void onDelete(game.id)}
-                  />
-                </View>
-              </Card>
-            );
-          })}
+          games.map((game) => <GameRow key={game.id} game={game} onOpen={openGame} onDelete={removeGame} />)}
 
         {!busy && games.length === 0 ? (
           <Card style={styles.empty}>
@@ -148,6 +122,38 @@ export function HomeScreen({ navigation }: Props) {
     </Screen>
   );
 }
+
+const GameRow = memo(function GameRow({
+  game,
+  onOpen,
+  onDelete,
+}: {
+  game: Game;
+  onOpen: (game: Game) => void;
+  onDelete: (game: Game) => void;
+}) {
+  const templateName = getTemplate(game.templateId)?.name ?? game.templateId;
+  const done = game.status === 'Completed';
+  return (
+    <Card style={styles.gameCard}>
+      <View style={styles.cardTop}>
+        <View style={{ flex: 1, gap: 6 }}>
+          <Text style={styles.cardTitle}>{game.name || 'Untitled game'}</Text>
+          <View style={styles.metaRow}>
+            <Badge label={templateName} tone="accent" />
+            <Badge label={done ? 'Completed' : 'In progress'} tone={done ? 'success' : 'neutral'} />
+          </View>
+          <Text style={styles.muted}>Updated {new Date(game.updatedAt).toLocaleString()}</Text>
+        </View>
+        <ShareCodePanel shareCode={game.shareCode} />
+      </View>
+      <View style={styles.cardActions}>
+        <Button label="Resume" variant="primary" onPress={() => onOpen(game)} style={{ flex: 1 }} />
+        <Button label="Delete" variant="danger" onPress={() => onDelete(game)} />
+      </View>
+    </Card>
+  );
+});
 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: space.lg, gap: 4 },
