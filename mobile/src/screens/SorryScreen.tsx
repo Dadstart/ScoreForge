@@ -314,6 +314,7 @@ export function SorryScreen({ navigation, route }: Props) {
               selectedPawn={selectedPawn}
               movablePawns={movablePawns}
               action={boardAction}
+              onDraw={finished || sorry.drawn ? undefined : () => void onDraw()}
             />
             <Text style={styles.hint}>
               Clockwise track. A triangle in another color slides you and sends every pawn on that slide back to Start.

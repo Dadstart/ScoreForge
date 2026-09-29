@@ -1,4 +1,4 @@
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import type { ReactNode } from 'react';
 import Svg, { Circle, G, Polygon, Rect, Text as SvgText } from 'react-native-svg';
 import { SorryCard } from './SorryCard';
@@ -33,6 +33,7 @@ type Props = {
   selectedPawn: number | null;
   movablePawns: number[];
   action?: ReactNode;
+  onDraw?: () => void;
 };
 
 type Piece = {
@@ -45,7 +46,7 @@ type Piece = {
   mine: boolean;
 };
 
-export function SorryBoard({ players, state, selectedPawn, movablePawns, action }: Props) {
+export function SorryBoard({ players, state, selectedPawn, movablePawns, action, onDraw }: Props) {
   const currentColor = colorIndexFor(state, state.currentPlayerId);
   const slides = slideSpans();
   const pieces = players.flatMap((player) => piecesFor(player, state));
@@ -256,14 +257,18 @@ export function SorryBoard({ players, state, selectedPawn, movablePawns, action 
       <View style={styles.stacks} pointerEvents="box-none">
         <View style={styles.stackColumn} pointerEvents="box-none">
           <View style={styles.cardPair} pointerEvents="none">
-            <View>
-              {state.deck.length > 1 ? (
-                <View style={styles.stackUnder}>
-                  <SorryCard card="back" mini />
-                </View>
-              ) : null}
-              <SorryCard card="back" mini />
-            </View>
+            {onDraw ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Draw a card"
+                onPress={onDraw}
+                style={({ pressed }) => [styles.deckHit, pressed && styles.deckPressed]}
+              >
+                <DeckStack count={state.deck.length} />
+              </Pressable>
+            ) : (
+              <DeckStack count={state.deck.length} />
+            )}
             <View>
               {state.drawn ? <SorryCard card={state.drawn} mini /> : <View style={styles.cardHole} />}
             </View>
@@ -271,6 +276,19 @@ export function SorryBoard({ players, state, selectedPawn, movablePawns, action 
           <View style={styles.actionHit}>{action}</View>
         </View>
       </View>
+    </View>
+  );
+}
+
+function DeckStack({ count }: { count: number }) {
+  return (
+    <View>
+      {count > 1 ? (
+        <View style={styles.stackUnder}>
+          <SorryCard card="back" mini />
+        </View>
+      ) : null}
+      <SorryCard card="back" mini />
     </View>
   );
 }
@@ -316,6 +334,8 @@ const styles = StyleSheet.create({
   stackColumn: { alignItems: 'center', gap: 12 },
   actionHit: { pointerEvents: 'auto' },
   cardPair: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  deckHit: { pointerEvents: 'auto' },
+  deckPressed: { opacity: 0.82 },
   stackUnder: { position: 'absolute', top: 7, left: 7 },
   cardHole: {
     width: 118,
