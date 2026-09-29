@@ -24,6 +24,7 @@
   "devDependencies": {
     "@types/react": "~19.2.2",
     "@types/uuid": "^10.0.0",
+    "tsx": "^4.23.15",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -32,6 +33,7 @@
     "ios": "expo start --ios --port 5555",
     "web": "expo start --web --port 5555",
     "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/domain/scoring.test.ts",
     "export:web": "expo export --platform web",
     "deploy:web": "npm run export:web && firebase deploy --only hosting",
     "deploy:rules": "firebase deploy --only firestore:rules",

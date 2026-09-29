@@ -13,14 +13,13 @@ import { CribbageBoard, type CribbagePegPlayer } from '../components/CribbageBoa
 import { FireworksOverlay } from '../components/FireworksOverlay';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Screen } from '../components/ui';
-import { withAddedPlayer } from '../domain/addPlayer';
 import { findLocalPlayerId } from '../domain/localPlayer';
 import { createScoreEvent, type Game } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
 import { useWinCelebration } from '../hooks/useWinCelebration';
 import { loadDisplayName } from '../storage/displayNameStore';
-import { saveGame, subscribeGame } from '../storage/gameStore';
+import { addPlayerToGame, preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
 import { colors, radii, space, typography } from '../theme';
 import type { RootStackParamList } from '../navigation/types';
 
@@ -53,7 +52,7 @@ export function CribbageScreen({ navigation, route }: Props) {
     const unsub = subscribeGame(
       gameId,
       (found) => {
-        setGame(found);
+        setGame((current) => (found ? preferNewerGame(current, found) : null));
         if (found) {
           const tmpl = getTemplate(found.templateId);
           if (tmpl) onSnapshot(calculate(found, tmpl));
@@ -101,8 +100,8 @@ export function CribbageScreen({ navigation, route }: Props) {
   const localPlayer = pegPlayers.find((p) => p.id === localPlayerId) ?? null;
 
   const persist = async (next: Game) => {
-    await saveGame(next);
-    setGame(next);
+    const saved = await saveGame(next);
+    setGame((current) => preferNewerGame(current, saved));
   };
 
   const peg = async (points: number) => {
@@ -143,6 +142,8 @@ export function CribbageScreen({ navigation, route }: Props) {
     try {
       noteLocalResult(snap);
       await persist(next);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Autosave failed');
     } finally {
       endSuppress(snap.isComplete);
     }
@@ -152,11 +153,12 @@ export function CribbageScreen({ navigation, route }: Props) {
     if (!game || !template) return;
     const next: Game = { ...game, events: [], status: 'InProgress' };
     beginSuppress();
-    setGame(next);
     setError(null);
     try {
       noteLocalResult(calculate(next, template));
       await persist(next);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Autosave failed');
     } finally {
       endSuppress(false);
     }
@@ -166,7 +168,7 @@ export function CribbageScreen({ navigation, route }: Props) {
     return (
       <Screen>
         <View style={styles.center}>
-          <ActivityIndicator color={colors.accent} />
+          {error ? <Text style={styles.error}>{error}</Text> : <ActivityIndicator color={colors.accent} />}
         </View>
       </Screen>
     );
@@ -267,8 +269,8 @@ export function CribbageScreen({ navigation, route }: Props) {
           currentCount={game.players.length}
           onCancel={() => setAddingPlayer(false)}
           onAdd={async (name) => {
-            const next = withAddedPlayer(game, name, template.maxPlayers);
-            await persist(next);
+            const saved = await addPlayerToGame(game.shareCode, name, template.maxPlayers);
+            setGame((current) => preferNewerGame(current, saved));
             setError(null);
           }}
         />

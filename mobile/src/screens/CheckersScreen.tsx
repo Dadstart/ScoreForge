@@ -7,7 +7,6 @@ import { CheckersBoard } from '../components/CheckersBoard';
 import { FireworksOverlay } from '../components/FireworksOverlay';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Screen } from '../components/ui';
-import { withAddedPlayer } from '../domain/addPlayer';
 import {
   CHECKERS_SIDES,
   answerDraw,
@@ -29,7 +28,7 @@ import { getTemplate } from '../domain/templates';
 import { useWinCelebration } from '../hooks/useWinCelebration';
 import type { RootStackParamList } from '../navigation/types';
 import { loadDisplayName } from '../storage/displayNameStore';
-import { saveGame, subscribeGame } from '../storage/gameStore';
+import { addPlayerToGame, preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
 import { colors, radii, space, typography } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Checkers'>;
@@ -64,7 +63,7 @@ export function CheckersScreen({ navigation, route }: Props) {
     const unsub = subscribeGame(
       gameId,
       (found) => {
-        setGame(found);
+        setGame((current) => (found ? preferNewerGame(current, found) : null));
         if (found) {
           const tmpl = getTemplate(found.templateId);
           if (tmpl) onSnapshot(calculate(found, tmpl));
@@ -89,9 +88,11 @@ export function CheckersScreen({ navigation, route }: Props) {
     if (!game) return;
     const next = ensureCheckersState(game);
     if (next === game) return;
-    void saveGame(next).catch((err: unknown) => {
-      setError(err instanceof Error ? err.message : 'Could not set up the board');
-    });
+    void saveGame(next)
+      .then((saved) => setGame((current) => preferNewerGame(current, saved)))
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : 'Could not set up the board');
+      });
   }, [game]);
 
   const checkers = game?.checkers ?? null;
@@ -124,8 +125,8 @@ export function CheckersScreen({ navigation, route }: Props) {
     const snap = calculate(next, template);
     if (celebrate) noteLocalResult(snap);
     try {
-      await saveGame(next);
-      setGame(next);
+      const saved = await saveGame(next);
+      setGame((current) => preferNewerGame(current, saved));
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Autosave failed');
@@ -398,9 +399,8 @@ export function CheckersScreen({ navigation, route }: Props) {
           currentCount={game.players.length}
           onCancel={() => setAddingPlayer(false)}
           onAdd={async (name) => {
-            const next = withAddedPlayer(game, name, template.maxPlayers);
-            await saveGame(next);
-            setGame(next);
+            const saved = await addPlayerToGame(game.shareCode, name, template.maxPlayers);
+            setGame((current) => preferNewerGame(current, saved));
             setError(null);
           }}
         />

@@ -32,8 +32,7 @@ export function calculate(game: Game, template: GameTemplate): GameSnapshot {
     .reduce((max, n) => Math.max(max, n), 0);
 
   const ordered = orderPlayers(game.players, totals, template.winCondition);
-  const isComplete =
-    game.status === 'Completed' || detectCompletion(game, template, totals, currentRound);
+  const isComplete = game.status === 'Completed' || detectCompletion(game, template, totals);
 
   const winnerIds = isComplete ? getWinnerIds(ordered, totals, template, game) : new Set<string>();
 
@@ -97,25 +96,49 @@ function pointsForPlayer(game: Game, playerId: string, template: GameTemplate): 
     .reduce((sum, e) => sum + e.points, 0);
 }
 
-function detectCompletion(
-  game: Game,
-  template: GameTemplate,
-  totals: Map<string, number>,
-  currentRound: number,
-): boolean {
+function highestRound(game: Game, playerId: string): number {
+  let high = 0;
+  for (const event of game.events) {
+    if (event.playerId === playerId) high = Math.max(high, event.roundNumber ?? 0);
+  }
+  return high;
+}
+
+/** Lowest hole/round that every player has already entered. */
+function roundsEveryoneReached(game: Game): number {
+  if (game.players.length === 0) return 0;
+  let least = Number.POSITIVE_INFINITY;
+  for (const player of game.players) least = Math.min(least, highestRound(game, player.id));
+  return least;
+}
+
+function detectCompletion(game: Game, template: GameTemplate, totals: Map<string, number>): boolean {
   if (template.id === 'yahtzee') return isScorecardComplete(game);
   if (template.id === 'checkers') return Boolean(game.checkers?.winnerSide || game.checkers?.draw);
   if (template.id === 'chinese-checkers') return Boolean(game.chinese?.over);
 
   if (template.winCondition === 'FirstToTarget') {
     const target = game.targetScore ?? template.defaultTargetScore;
-    if (target != null && [...totals.values()].some((v) => v >= target)) return true;
+    if (target != null && target > 0 && [...totals.values()].some((value) => value >= target)) return true;
   }
 
   const maxRounds = game.maxRounds ?? template.defaultMaxRounds;
-  if (maxRounds != null && currentRound >= maxRounds) return true;
+  if (maxRounds != null && maxRounds > 0 && roundsEveryoneReached(game) >= maxRounds) return true;
 
   return false;
+}
+
+function firstCrossingPlayerId(game: Game, target: number): string | null {
+  const running = new Map<string, number>();
+  const events = [...game.events].sort(
+    (a, b) => a.timestamp.localeCompare(b.timestamp) || a.id.localeCompare(b.id),
+  );
+  for (const event of events) {
+    const total = (running.get(event.playerId) ?? 0) + event.points;
+    running.set(event.playerId, total);
+    if (total >= target) return event.playerId;
+  }
+  return null;
 }
 
 function getWinnerIds(
@@ -137,12 +160,16 @@ function getWinnerIds(
     return new Set(winnerPlayerIds(game.chinese));
   }
 
+  if (template.id === 'sorry') {
+    const winnerId = game.sorry?.winnerId;
+    return winnerId ? new Set([winnerId]) : new Set();
+  }
+
   if (template.winCondition === 'FirstToTarget') {
-    const target = game.targetScore ?? template.defaultTargetScore ?? Number.MAX_SAFE_INTEGER;
-    const reached = ordered.filter((p) => (totals.get(p.id) ?? 0) >= target);
-    if (reached.length === 0) return new Set();
-    const best = Math.max(...reached.map((p) => totals.get(p.id) ?? 0));
-    return new Set(reached.filter((p) => (totals.get(p.id) ?? 0) === best).map((p) => p.id));
+    const target = game.targetScore ?? template.defaultTargetScore ?? 0;
+    if (target <= 0) return new Set();
+    const winnerId = firstCrossingPlayerId(game, target);
+    return winnerId ? new Set([winnerId]) : new Set();
   }
 
   const winningTotal = totals.get(ordered[0].id) ?? 0;

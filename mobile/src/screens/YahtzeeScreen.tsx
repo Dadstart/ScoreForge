@@ -7,7 +7,6 @@ import { FireworksOverlay } from '../components/FireworksOverlay';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { YahtzeeScoreboard, YahtzeeScoreModal } from '../components/YahtzeeScoreboard';
 import { Badge, Button, Screen } from '../components/ui';
-import { withAddedPlayer } from '../domain/addPlayer';
 import { findLocalPlayerId } from '../domain/localPlayer';
 import type { Game } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
@@ -26,7 +25,7 @@ import {
 import { useWinCelebration } from '../hooks/useWinCelebration';
 import type { RootStackParamList } from '../navigation/types';
 import { loadDisplayName } from '../storage/displayNameStore';
-import { saveGame, subscribeGame } from '../storage/gameStore';
+import { addPlayerToGame, preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
 import { colors, radii, space, typography } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Yahtzee'>;
@@ -56,7 +55,7 @@ export function YahtzeeScreen({ navigation, route }: Props) {
     const unsub = subscribeGame(
       gameId,
       (found) => {
-        setGame(found);
+        setGame((current) => (found ? preferNewerGame(current, found) : null));
         if (found) {
           const tmpl = getTemplate(found.templateId);
           if (tmpl) onSnapshot(calculate(found, tmpl));
@@ -93,8 +92,8 @@ export function YahtzeeScreen({ navigation, route }: Props) {
   const editingBox = editing ? (boxById(editing.boxId) ?? null) : null;
 
   const persist = async (next: Game) => {
-    await saveGame(next);
-    setGame(next);
+    const saved = await saveGame(next);
+    setGame((current) => preferNewerGame(current, saved));
   };
 
   const applyGame = async (
@@ -136,7 +135,7 @@ export function YahtzeeScreen({ navigation, route }: Props) {
     return (
       <Screen>
         <View style={styles.center}>
-          <ActivityIndicator color={colors.accent} />
+          {error ? <Text style={styles.error}>{error}</Text> : <ActivityIndicator color={colors.accent} />}
         </View>
       </Screen>
     );
@@ -267,8 +266,8 @@ export function YahtzeeScreen({ navigation, route }: Props) {
         currentCount={game.players.length}
         onCancel={() => setAddingPlayer(false)}
         onAdd={async (name) => {
-          const next = withAddedPlayer(game, name, template.maxPlayers);
-          await persist(next);
+          const saved = await addPlayerToGame(game.shareCode, name, template.maxPlayers);
+          setGame((current) => preferNewerGame(current, saved));
           setError(null);
         }}
       />

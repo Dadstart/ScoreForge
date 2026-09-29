@@ -12,14 +12,13 @@ import { FireworksOverlay } from '../components/FireworksOverlay';
 import { AddPlayerModal } from '../components/AddPlayerModal';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Field, Screen } from '../components/ui';
-import { withAddedPlayer } from '../domain/addPlayer';
 import { findLocalPlayerId, nextRoundForPlayer } from '../domain/localPlayer';
 import { createScoreEvent, type Game } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
 import { useWinCelebration } from '../hooks/useWinCelebration';
 import { loadDisplayName } from '../storage/displayNameStore';
-import { saveGame, subscribeGame } from '../storage/gameStore';
+import { addPlayerToGame, preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
 import { colors, radii, space, typography } from '../theme';
 import type { RootStackParamList } from '../navigation/types';
 
@@ -50,7 +49,7 @@ export function BoardScreen({ navigation, route }: Props) {
     const unsub = subscribeGame(
       gameId,
       (next) => {
-        setGame(next);
+        setGame((current) => (next ? preferNewerGame(current, next) : null));
         if (next) {
           const tmpl = getTemplate(next.templateId);
           if (tmpl) onSnapshot(calculate(next, tmpl));
@@ -74,8 +73,8 @@ export function BoardScreen({ navigation, route }: Props) {
 
   const persist = async (next: Game) => {
     try {
-      await saveGame(next);
-      setGame(next);
+      const saved = await saveGame(next);
+      setGame((current) => preferNewerGame(current, saved));
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Autosave failed');
@@ -86,7 +85,7 @@ export function BoardScreen({ navigation, route }: Props) {
     return (
       <Screen>
         <View style={styles.center}>
-          <ActivityIndicator color={colors.accent} />
+          {error ? <Text style={styles.error}>{error}</Text> : <ActivityIndicator color={colors.accent} />}
         </View>
       </Screen>
     );
@@ -345,8 +344,9 @@ export function BoardScreen({ navigation, route }: Props) {
           currentCount={game.players.length}
           onCancel={() => setAddingPlayer(false)}
           onAdd={async (name) => {
-            const next = withAddedPlayer(game, name, template.maxPlayers);
-            await persist(next);
+            const saved = await addPlayerToGame(game.shareCode, name, template.maxPlayers);
+            setGame((current) => preferNewerGame(current, saved));
+            setError(null);
           }}
         />
       </View>

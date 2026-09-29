@@ -1,15 +1,213 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Share code is the document id. Knowing the code grants access.
-    // List is denied so games cannot be enumerated without a code.
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: games
+    // Document ID: 6-character share code from 23456789ABCDEFGHJKLMNPQRSTUVWXYZ
+    // The code is the capability. Callers must still be signed in (anonymous
+    // auth is enough). Games cannot be listed. Events are stored on this
+    // document so a collection-group query cannot discover codes.
+    //
+    // Fields:
+    //   - id: string (required, immutable, equal to the document id)
+    //   - shareCode: string (required, immutable, equal to the document id)
+    //   - name: string (required, 1-80)
+    //   - templateId: string (required, immutable, known template)
+    //   - players: list (required, 1-12 maps of id/name/optional token)
+    //   - events: list (required, max 800 score maps). Rules cannot walk every
+    //     element; the size cap is the guard against a huge write.
+    //   - status: 'InProgress' | 'Completed' (required)
+    //   - targetScore: number 0-1000000 or null (required key)
+    //   - maxRounds: number 0-1000000 or null (required key)
+    //   - tokenSpaces: map (required, max 12 entries)
+    //   - sorry, checkers, chinese: map or null (required keys)
+    //   - revision: int (required, starts at 1, increases by 1)
+    //   - createdAt, updatedAt: ISO-8601 strings (createdAt immutable)
+    //
+    // Subcollection: games/{shareCode}/events/{eventId}
+    // Legacy copies only. Readable while the parent has no events field.
+    // After events move onto the parent, list and get are denied. Delete by
+    // id stays allowed so the app can remove those docs.
+    //
+    // ===============================================================
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isShareCode(code) {
+      return code is string
+        && code.matches('^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{6}$');
+    }
+
+    function isIsoTime(value) {
+      return value is string
+        && value.size() <= 40
+        && value.matches('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$');
+    }
+
+    function isOptionalScore(value) {
+      return value == null || (value is number && value >= 0 && value <= 1000000);
+    }
+
+    function isBoard(value) {
+      return value == null || value is map;
+    }
+
+    function playerValid(player) {
+      return player is map
+        && player.keys().hasOnly(['id', 'name', 'token'])
+        && player.keys().hasAll(['id', 'name'])
+        && player.id is string
+        && player.id.size() > 0
+        && player.id.size() <= 80
+        && player.name is string
+        && player.name.size() > 0
+        && player.name.size() <= 40
+        && (
+          !('token' in player)
+          || player.token == null
+          || (player.token is string && player.token.size() > 0 && player.token.size() <= 40)
+        );
+    }
+
+    function eachPlayer(players, index) {
+      return index >= players.size()
+        || (playerValid(players[index]) && eachPlayer(players, index + 1));
+    }
+
+    function playersValid(players) {
+      return players is list
+        && players.size() >= 1
+        && players.size() <= 12
+        && eachPlayer(players, 0);
+    }
+
+    function isKnownTemplate(templateId) {
+      return templateId in [
+        'free-play',
+        'rounds',
+        'rummy',
+        'golf',
+        'cribbage',
+        'monopoly',
+        'yahtzee',
+        'sorry',
+        'checkers',
+        'chinese-checkers'
+      ];
+    }
+
+    function isValidGame(data) {
+      return data.keys().hasOnly([
+          'id',
+          'shareCode',
+          'name',
+          'templateId',
+          'players',
+          'events',
+          'status',
+          'targetScore',
+          'maxRounds',
+          'tokenSpaces',
+          'sorry',
+          'checkers',
+          'chinese',
+          'revision',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasAll([
+          'id',
+          'shareCode',
+          'name',
+          'templateId',
+          'players',
+          'events',
+          'status',
+          'targetScore',
+          'maxRounds',
+          'tokenSpaces',
+          'sorry',
+          'checkers',
+          'chinese',
+          'revision',
+          'createdAt',
+          'updatedAt'
+        ])
+        && isShareCode(data.id)
+        && data.shareCode == data.id
+        && data.name is string
+        && data.name.size() > 0
+        && data.name.size() <= 80
+        && isKnownTemplate(data.templateId)
+        && playersValid(data.players)
+        && data.events is list
+        && data.events.size() <= 800
+        && data.status in ['InProgress', 'Completed']
+        && isOptionalScore(data.targetScore)
+        && isOptionalScore(data.maxRounds)
+        && data.tokenSpaces is map
+        && data.tokenSpaces.size() <= 12
+        && isBoard(data.sorry)
+        && isBoard(data.checkers)
+        && isBoard(data.chinese)
+        && data.revision is int
+        && data.revision >= 1
+        && data.revision <= 1000000
+        && isIsoTime(data.createdAt)
+        && isIsoTime(data.updatedAt);
+    }
+
+    function revisionAdvances() {
+      return !('revision' in resource.data) || !(resource.data.revision is int)
+        ? request.resource.data.revision == 1
+        : request.resource.data.revision == resource.data.revision + 1;
+    }
+
+    function createdAtStable() {
+      return !('createdAt' in resource.data)
+        || request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    function identityStable(code) {
+      return request.resource.data.id == code
+        && request.resource.data.shareCode == code
+        && (
+          !('templateId' in resource.data)
+          || request.resource.data.templateId == resource.data.templateId
+        );
+    }
+
+    function eventsStillExternal(code) {
+      return exists(/databases/$(database)/documents/games/$(code))
+        && !('events' in get(/databases/$(database)/documents/games/$(code)).data);
+    }
+
     match /games/{shareCode} {
-      allow get, create, update, delete: if true;
+      allow get: if isSignedIn() && isShareCode(shareCode);
       allow list: if false;
+      allow create: if isSignedIn()
+        && isShareCode(shareCode)
+        && isValidGame(request.resource.data)
+        && request.resource.data.id == shareCode
+        && request.resource.data.revision == 1;
+      allow update: if isSignedIn()
+        && isShareCode(shareCode)
+        && isValidGame(request.resource.data)
+        && request.resource.data.id == shareCode
+        && revisionAdvances()
+        && createdAtStable()
+        && identityStable(shareCode);
+      allow delete: if isSignedIn() && isShareCode(shareCode);
 
       match /events/{eventId} {
-        allow get, list, create, delete: if true;
-        allow update: if false;
+        allow get, list: if isSignedIn() && isShareCode(shareCode) && eventsStillExternal(shareCode);
+        allow delete: if isSignedIn() && isShareCode(shareCode);
+        allow create, update: if false;
       }
     }
   }

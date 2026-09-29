@@ -40,6 +40,11 @@ export interface Game {
   checkers?: CheckersState | null;
   /** Shared Chinese checkers star, seats, and turn. */
   chinese?: ChineseState | null;
+  /**
+   * Increments on every successful save. A write is stored only when it was
+   * based on this revision, so two devices cannot overwrite each other.
+   */
+  revision: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -73,9 +78,10 @@ export function createGame(partial: {
   maxRounds?: number | null;
 }): Game {
   const now = new Date().toISOString();
+  const shareCode = generateShareCode();
   return {
-    id: cryptoRandomId(),
-    shareCode: generateShareCode(),
+    id: shareCode,
+    shareCode,
     name: partial.name,
     templateId: partial.templateId,
     players: partial.players,
@@ -83,19 +89,34 @@ export function createGame(partial: {
     status: 'InProgress',
     targetScore: partial.targetScore ?? null,
     maxRounds: partial.maxRounds ?? null,
+    revision: 0,
     createdAt: now,
     updatedAt: now,
   };
 }
 
 /** Unambiguous alphabet (no 0/O, 1/I/L) for easy verbal sharing. */
-const SHARE_CODE_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+export const SHARE_CODE_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+export const SHARE_CODE_LENGTH = 6;
 
-export function generateShareCode(length = 6): string {
+export function isShareCode(code: string): boolean {
+  if (code.length !== SHARE_CODE_LENGTH) return false;
+  for (const char of code) {
+    if (!SHARE_CODE_ALPHABET.includes(char)) return false;
+  }
+  return true;
+}
+
+/** Cryptographic share code. 32 symbols and a multiple of the byte range, so modulo is unbiased. */
+export function generateShareCode(): string {
+  const bytes = new Uint8Array(SHARE_CODE_LENGTH);
+  if (typeof crypto === 'undefined' || typeof crypto.getRandomValues !== 'function') {
+    throw new Error('Secure random numbers are not available on this device.');
+  }
+  crypto.getRandomValues(bytes);
   let code = '';
-  for (let i = 0; i < length; i++) {
-    const idx = Math.floor(Math.random() * SHARE_CODE_ALPHABET.length);
-    code += SHARE_CODE_ALPHABET[idx];
+  for (let i = 0; i < SHARE_CODE_LENGTH; i++) {
+    code += SHARE_CODE_ALPHABET[bytes[i] % SHARE_CODE_ALPHABET.length];
   }
   return code;
 }

@@ -37,7 +37,7 @@ import { getTemplate } from '../domain/templates';
 import { useSettings } from '../hooks/useSettings';
 import { useWinCelebration } from '../hooks/useWinCelebration';
 import { loadDisplayName } from '../storage/displayNameStore';
-import { saveGame, subscribeGame } from '../storage/gameStore';
+import { preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
 import { colors, radii, space, typography } from '../theme';
 import type { RootStackParamList } from '../navigation/types';
 
@@ -100,7 +100,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
     const unsub = subscribeGame(
       gameId,
       (found) => {
-        setGame(found);
+        setGame((current) => (found ? preferNewerGame(current, found) : null));
         if (found) {
           const tmpl = getTemplate(found.templateId);
           if (tmpl) onSnapshot(calculate(found, tmpl));
@@ -143,15 +143,15 @@ export function MonopolyScreen({ navigation, route }: Props) {
   );
 
   const persist = async (next: Game) => {
-    await saveGame(next);
-    setGame(next);
+    const saved = await saveGame(next);
+    setGame((current) => preferNewerGame(current, saved));
   };
 
   if (!game || !template || !snapshot) {
     return (
       <Screen>
         <View style={styles.center}>
-          <ActivityIndicator color={colors.accent} />
+          {error ? <Text style={styles.error}>{error}</Text> : <ActivityIndicator color={colors.accent} />}
         </View>
       </Screen>
     );

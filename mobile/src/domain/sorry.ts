@@ -382,7 +382,7 @@ function resolveMove(state: SorryState, move: SorryMove): Record<string, PawnSpo
         colorIndex,
         move.pawn,
         { zone: 'track', index: theirs.index },
-        true,
+        false,
       );
     }
     case 'sorry': {
@@ -398,7 +398,7 @@ function resolveMove(state: SorryState, move: SorryMove): Record<string, PawnSpo
         colorIndex,
         move.pawn,
         { zone: 'track', index: theirs.index },
-        true,
+        false,
       );
     }
     default: {
