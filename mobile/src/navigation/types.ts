@@ -11,16 +11,18 @@ export type RootStackParamList = {
   Monopoly: { gameId: string };
   Yahtzee: { gameId: string };
   Sorry: { gameId: string };
+  Checkers: { gameId: string };
   Settings: { gameId?: string } | undefined;
 };
 
 export function gameScreenForTemplate(
   templateId: string,
-): 'Board' | 'Cribbage' | 'Monopoly' | 'Yahtzee' | 'Sorry' {
+): 'Board' | 'Cribbage' | 'Monopoly' | 'Yahtzee' | 'Sorry' | 'Checkers' {
   if (templateId === 'cribbage') return 'Cribbage';
   if (templateId === 'monopoly') return 'Monopoly';
   if (templateId === 'yahtzee') return 'Yahtzee';
   if (templateId === 'sorry') return 'Sorry';
+  if (templateId === 'checkers') return 'Checkers';
   return 'Board';
 }
 

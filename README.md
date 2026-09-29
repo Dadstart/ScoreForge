@@ -55,6 +55,7 @@ npm run deploy:rules
 | Monopoly | Track own cash, optional board | Highest total |
 | Yahtzee | Fill any score-card column | Highest total |
 | Sorry | Shared board and card deck | First to get 4 pawns home |
+| Checkers | Shared board, Black moves first | Capture every piece, or leave no move |
 
 ## Project layout
 
