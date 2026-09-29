@@ -213,7 +213,10 @@ export function SorryScreen({ navigation, route }: Props) {
   };
 
   const sorryMoves = uniqueSorryTargets(visibleMoves);
-  const otherMoves = visibleMoves.filter((move) => move.type !== 'sorry');
+  const elevenMoves = sorry.drawn === 11 ? elevenChoices(visibleMoves, game.players, sorry) : [];
+  const otherMoves = visibleMoves.filter(
+    (move) => move.type !== 'sorry' && (sorry.drawn !== 11 || (move.type !== 'forward' && move.type !== 'switch')),
+  );
 
   const boardAction = finished ? null : !sorry.drawn ? (
     <Button
@@ -244,39 +247,38 @@ export function SorryScreen({ navigation, route }: Props) {
       ) : (
         <>
           {sorryMoves.length > 0 ? (
-            <View style={styles.sorryMenu}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Choose a pawn to replace"
-                onPress={() => setSorryMenu((open) => !open)}
-                style={styles.sorryTrigger}
-              >
-                <Text style={styles.sorryTriggerText}>Choose</Text>
-                <Text style={styles.sorryChevron}>{sorryMenu ? '▴' : '▾'}</Text>
-              </Pressable>
-              {sorryMenu
-                ? sorryMoves.map((move) => {
-                    const color = SORRY_COLORS[colorIndexFor(sorry, move.targetPlayerId)];
-                    const name =
-                      game.players.find((player) => player.id === move.targetPlayerId)?.name ?? 'Opponent';
-                    return (
-                      <Pressable
-                        key={`${move.targetPlayerId}:${move.targetPawn}`}
-                        accessibilityRole="button"
-                        onPress={() => {
-                          setSorryMenu(false);
-                          void onPlay(move);
-                        }}
-                        style={[styles.sorryChoice, { backgroundColor: color.fill }]}
-                      >
-                        <Text style={[styles.sorryChoiceText, { color: color.ink }]}>
-                          Replace {name}'s pawn {move.targetPawn + 1}
-                        </Text>
-                      </Pressable>
-                    );
-                  })
-                : null}
-            </View>
+            <ChoiceMenu
+              open={sorryMenu}
+              label="Choose a pawn to replace"
+              onToggle={() => setSorryMenu((open) => !open)}
+              choices={sorryMoves.map((move) => {
+                const color = SORRY_COLORS[colorIndexFor(sorry, move.targetPlayerId)];
+                const name = game.players.find((player) => player.id === move.targetPlayerId)?.name ?? 'Opponent';
+                return {
+                  key: `${move.targetPlayerId}:${move.targetPawn}`,
+                  label: `Replace ${name}'s pawn ${move.targetPawn + 1}`,
+                  fill: color.fill,
+                  ink: color.ink,
+                  move,
+                };
+              })}
+              onPick={(move) => {
+                setSorryMenu(false);
+                void onPlay(move);
+              }}
+            />
+          ) : null}
+          {elevenMoves.length > 0 ? (
+            <ChoiceMenu
+              open={sorryMenu}
+              label="Choose a move"
+              onToggle={() => setSorryMenu((open) => !open)}
+              choices={elevenMoves}
+              onPick={(move) => {
+                setSorryMenu(false);
+                void onPlay(move);
+              }}
+            />
           ) : null}
           {otherMoves.map((move) => (
             <Pressable key={moveKey(move)} style={styles.move} onPress={() => void onPlay(move)}>
@@ -395,6 +397,89 @@ export function SorryScreen({ navigation, route }: Props) {
       </View>
     </Screen>
   );
+}
+
+type MoveChoice = {
+  key: string;
+  label: string;
+  fill: string;
+  ink: string;
+  move: SorryMove;
+};
+
+function ChoiceMenu({
+  open,
+  label,
+  choices,
+  onToggle,
+  onPick,
+}: {
+  open: boolean;
+  label: string;
+  choices: MoveChoice[];
+  onToggle: () => void;
+  onPick: (move: SorryMove) => void;
+}) {
+  return (
+    <View style={styles.sorryMenu}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        onPress={onToggle}
+        style={styles.sorryTrigger}
+      >
+        <Text style={styles.sorryTriggerText}>Choose</Text>
+        <Text style={styles.sorryChevron}>{open ? '▴' : '▾'}</Text>
+      </Pressable>
+      {open
+        ? choices.map((choice) => (
+            <Pressable
+              key={choice.key}
+              accessibilityRole="button"
+              onPress={() => onPick(choice.move)}
+              style={[styles.sorryChoice, { backgroundColor: choice.fill }]}
+            >
+              <Text style={[styles.sorryChoiceText, { color: choice.ink }]}>{choice.label}</Text>
+            </Pressable>
+          ))
+        : null}
+    </View>
+  );
+}
+
+function elevenChoices(moves: SorryMove[], players: Game['players'], state: NonNullable<Game['sorry']>): MoveChoice[] {
+  const forwards = moves.filter((move) => move.type === 'forward');
+  const switches = moves.filter((move) => move.type === 'switch');
+  const actor = players.find((player) => player.id === state.currentPlayerId);
+  const own = actor ? SORRY_COLORS[colorIndexFor(state, actor.id)] : SORRY_COLORS[0];
+  const forwardChoices: MoveChoice[] = forwards.flatMap((move) =>
+    move.type === 'forward'
+      ? [
+          {
+            key: moveKey(move),
+            label: `Move pawn ${move.pawn + 1} forward ${move.steps}`,
+            fill: own.fill,
+            ink: own.ink,
+            move,
+          },
+        ]
+      : [],
+  );
+  const switchChoices: MoveChoice[] = switches.flatMap((move) => {
+    if (move.type !== 'switch') return [];
+    const color = SORRY_COLORS[colorIndexFor(state, move.targetPlayerId)];
+    const name = players.find((player) => player.id === move.targetPlayerId)?.name ?? 'Opponent';
+    return [
+      {
+        key: moveKey(move),
+        label: `Switch pawn ${move.pawn + 1} with ${name}'s pawn ${move.targetPawn + 1}`,
+        fill: color.fill,
+        ink: color.ink,
+        move,
+      },
+    ];
+  });
+  return [...forwardChoices, ...switchChoices];
 }
 
 function uniqueSorryTargets(moves: SorryMove[]): Extract<SorryMove, { type: 'sorry' }>[] {
