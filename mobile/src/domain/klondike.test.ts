@@ -12,6 +12,7 @@ import {
   finish,
   foundationCount,
   hasMove,
+  dropTarget,
   layoutKlondike,
   packKlondike,
   play,
@@ -43,6 +44,31 @@ function size(state: KlondikeState): number {
 function suited(suit: Suit, ranks: number[]): string[] {
   return ranks.map((rank) => cardCode(rank, suit, true));
 }
+
+describe('klondike drop target', () => {
+  const card = 40;
+  const gap = 6;
+  const rowGap = 14;
+
+  it('finds foundations on the top row and columns below', () => {
+    assert.deepEqual(dropTarget(3 * (card + gap) + 4, 10, card, 60, gap, rowGap), {
+      pile: 'foundation',
+      index: 0,
+    });
+    assert.deepEqual(dropTarget(6 * (card + gap) + 4, 10, card, 60, gap, rowGap), {
+      pile: 'foundation',
+      index: 3,
+    });
+    assert.equal(dropTarget(4, 10, card, 60, gap, rowGap), null);
+    assert.equal(dropTarget(card + 2, 10, card, 60, gap, rowGap), null);
+    assert.deepEqual(dropTarget(card + gap + 4, 60 + rowGap + 8, card, 60, gap, rowGap), {
+      pile: 'tableau',
+      index: 1,
+    });
+    assert.equal(dropTarget(4, 60 + 4, card, 60, gap, rowGap), null);
+    assert.equal(dropTarget(card + 1, 80, card, 60, gap, rowGap), null);
+  });
+});
 
 describe('klondike deal', () => {
   it('deals 28 tableau cards and a 24-card stock', () => {

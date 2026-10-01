@@ -42,7 +42,9 @@ export function KlondikeScreen({ navigation, route }: Props) {
   const [selection, setSelection] = useState<Source | null>(null);
   const [hintText, setHintText] = useState<string | null>(null);
   const [confirmDeal, setConfirmDeal] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const saving = useRef(false);
+  const serverGame = useRef<Game | null>(null);
   const {
     showCelebration,
     onSnapshot,
@@ -56,7 +58,12 @@ export function KlondikeScreen({ navigation, route }: Props) {
     const unsub = subscribeGame(
       gameId,
       (found) => {
-        setGame((current) => (found ? preferNewerGame(current, found) : null));
+        setGame((current) => {
+          if (!found) return null;
+          if (saving.current && current && found.revision <= current.revision) return current;
+          serverGame.current = found;
+          return preferNewerGame(current, found);
+        });
         if (found) {
           const tmpl = getTemplate(found.templateId);
           if (tmpl) onSnapshot(calculate(found, tmpl));
@@ -95,13 +102,16 @@ export function KlondikeScreen({ navigation, route }: Props) {
   const persist = async (next: Game, celebrate: boolean) => {
     if (!template || saving.current) return;
     saving.current = true;
+    setGame(next);
     const snap = calculate(next, template);
     if (celebrate) noteLocalResult(snap);
     try {
       const saved = await saveGame(next);
+      serverGame.current = saved;
       setGame((current) => preferNewerGame(current, saved));
       setError(null);
     } catch (err) {
+      if (serverGame.current) setGame(serverGame.current);
       setError(err instanceof Error ? err.message : 'Autosave failed');
     } finally {
       saving.current = false;
@@ -242,7 +252,7 @@ export function KlondikeScreen({ navigation, route }: Props) {
           {hintText ? <Text style={styles.action}>{hintText}</Text> : null}
         </View>
 
-        <ScrollView contentContainerStyle={wide ? styles.wide : styles.stack}>
+        <ScrollView scrollEnabled={!dragging} contentContainerStyle={wide ? styles.wide : styles.stack}>
           <View style={[styles.boardPane, wide && styles.boardPaneWide]}>
             <KlondikeBoard
               state={klondike}
@@ -252,9 +262,11 @@ export function KlondikeScreen({ navigation, route }: Props) {
               onWaste={onWaste}
               onFoundation={onFoundation}
               onTableau={onTableau}
+              onDrop={(source, dest) => tryMove(source, dest)}
+              onDragChange={setDragging}
             />
             <Text style={styles.hint}>
-              Tap a card, then the column or foundation where it goes. Tap it again to build it up.
+              Drag a card onto a column or foundation. Tap it, then tap again, to build it up.
               {klondike.drawCount === 3 ? ' Draw three. Only the top waste card plays.' : ' Draw one.'}
             </Text>
           </View>

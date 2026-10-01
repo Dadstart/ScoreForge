@@ -16,6 +16,31 @@ export type Source =
 
 export type Dest = { pile: 'foundation'; index: number } | { pile: 'tableau'; index: number };
 
+/**
+ * Pile under a point in the board's own coordinates.
+ * The top row is stock, waste, a gap, then four foundations. The row below is seven columns.
+ */
+export function dropTarget(
+  localX: number,
+  localY: number,
+  cardWidth: number,
+  cardHeight: number,
+  columnGap: number,
+  rowGap: number,
+): Dest | null {
+  if (cardWidth <= 0 || cardHeight <= 0 || localX < 0 || localY < 0) return null;
+  const stride = cardWidth + columnGap;
+  const column = Math.floor(localX / stride);
+  if (column < 0 || column > 6) return null;
+  if (localX - column * stride > cardWidth) return null;
+  if (localY <= cardHeight) {
+    if (column < 3) return null;
+    return { pile: 'foundation', index: column - 3 };
+  }
+  if (localY >= cardHeight + rowGap) return { pile: 'tableau', index: column };
+  return null;
+}
+
 export type KlondikeState = {
   drawCount: DrawCount;
   /** Face-down stock. The last card is the top. */
