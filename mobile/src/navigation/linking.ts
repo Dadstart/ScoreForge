@@ -24,6 +24,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
       Sorry: 'sorry/:gameId',
       Checkers: 'checkers/:gameId',
       ChineseCheckers: 'chinese-checkers/:gameId',
+      Klondike: 'klondike/:gameId',
       Settings: 'settings',
     },
   },

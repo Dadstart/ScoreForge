@@ -15,6 +15,7 @@ import {
 import { withAddedPlayer } from '../domain/addPlayer';
 import { createCheckersState } from '../domain/checkers';
 import { createChineseState, type ChineseSetup } from '../domain/chineseCheckers';
+import { createKlondikeState, packKlondike, unpackKlondike, type DrawCount } from '../domain/klondike';
 import {
   isShareCode,
   normalizeShareCode,
@@ -46,6 +47,7 @@ type StoredGame = {
   sorry?: Game['sorry'];
   checkers?: Game['checkers'];
   chinese?: Game['chinese'];
+  klondike?: unknown;
   revision?: number;
   createdAt?: string;
   updatedAt?: string;
@@ -104,6 +106,7 @@ function toStored(game: Game): Record<string, unknown> {
     sorry: game.sorry ?? null,
     checkers: game.checkers ?? null,
     chinese: game.chinese ?? null,
+    klondike: game.klondike ? packKlondike(game.klondike) : null,
     revision: game.revision,
     createdAt: game.createdAt,
     updatedAt: game.updatedAt,
@@ -125,6 +128,7 @@ function fromStored(shareCode: string, data: StoredGame, events: ScoreEvent[]): 
     sorry: data.sorry ?? null,
     checkers: data.checkers ?? null,
     chinese: data.chinese ?? null,
+    klondike: unpackKlondike(data.klondike),
     revision: revisionOf(data),
     createdAt: typeof data.createdAt === 'string' ? data.createdAt : new Date().toISOString(),
     updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : new Date().toISOString(),
@@ -288,6 +292,7 @@ export async function createAndSaveGame(partial: {
   maxRounds?: number | null;
   requireJumps?: boolean;
   chinese?: ChineseSetup;
+  drawCount?: DrawCount;
 }): Promise<Game> {
   await ensureAnonymousAuth();
   const now = new Date().toISOString();
@@ -314,6 +319,9 @@ export async function createAndSaveGame(partial: {
     }
     if (partial.templateId === 'chinese-checkers') {
       game.chinese = createChineseState(partial.players, partial.chinese);
+    }
+    if (partial.templateId === 'klondike') {
+      game.klondike = createKlondikeState(partial.drawCount === 3 ? 3 : 1);
     }
     try {
       const saved = await runTransaction(db, async (transaction) => {

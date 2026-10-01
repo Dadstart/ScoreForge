@@ -13,6 +13,7 @@ import { YahtzeeScreen } from './src/screens/YahtzeeScreen';
 import { SorryScreen } from './src/screens/SorryScreen';
 import { CheckersScreen } from './src/screens/CheckersScreen';
 import { ChineseCheckersScreen } from './src/screens/ChineseCheckersScreen';
+import { KlondikeScreen } from './src/screens/KlondikeScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { JoinScreen } from './src/screens/JoinScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
@@ -106,6 +107,11 @@ export default function App() {
             name="ChineseCheckers"
             component={ChineseCheckersScreen}
             options={{ title: 'Chinese Checkers', headerShown: false }}
+          />
+          <Stack.Screen
+            name="Klondike"
+            component={KlondikeScreen}
+            options={{ title: 'Klondike', headerShown: false }}
           />
           <Stack.Screen name="Settings" component={SettingsScreen} />
         </Stack.Navigator>

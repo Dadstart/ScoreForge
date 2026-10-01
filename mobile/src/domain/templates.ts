@@ -109,6 +109,16 @@ export const templates: GameTemplate[] = [
     maxPlayers: 2,
   },
   {
+    id: 'klondike',
+    name: 'Klondike',
+    description:
+      'Classic solitaire. Build each suit from ace to king. Draw one or three, and undo a mistake.',
+    scoringMode: 'Instant',
+    winCondition: 'HighestTotal',
+    minPlayers: 1,
+    maxPlayers: 1,
+  },
+  {
     id: 'chinese-checkers',
     name: 'Chinese Checkers',
     description:
