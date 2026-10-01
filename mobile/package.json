@@ -33,7 +33,7 @@
     "ios": "expo start --ios --port 5555",
     "web": "expo start --web --port 5555",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/domain/scoring.test.ts",
+    "test": "tsx --test src/domain/scoring.test.ts src/domain/klondike.test.ts",
     "export:web": "expo export --platform web",
     "deploy:web": "npm run export:web && firebase deploy --only hosting",
     "deploy:rules": "firebase deploy --only firestore:rules",

@@ -9,6 +9,7 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Button, Field, Screen } from '../components/ui';
 import { setupDetail, setupSummary, type ChineseMode, type PlayerCount, type SetCount, type TwoSetGoals } from '../domain/chineseCheckers';
+import type { DrawCount } from '../domain/klondike';
 import { createPlayer } from '../domain/models';
 import { getTemplate, templates } from '../domain/templates';
 import { loadDisplayName, saveDisplayName } from '../storage/displayNameStore';
@@ -26,6 +27,7 @@ export function SetupScreen({ navigation }: Props) {
   const [targetScore, setTargetScore] = useState(String(templates[0].defaultTargetScore ?? ''));
   const [maxRounds, setMaxRounds] = useState(String(templates[0].defaultMaxRounds ?? '18'));
   const [requireJumps, setRequireJumps] = useState(true);
+  const [drawCount, setDrawCount] = useState<DrawCount>(1);
   const [tableSize, setTableSize] = useState<PlayerCount>(6);
   const [tableMode, setTableMode] = useState<ChineseMode>('ffa');
   const [tableSets, setTableSets] = useState<SetCount>(1);
@@ -50,6 +52,7 @@ export function SetupScreen({ navigation }: Props) {
     setTargetScore(t.defaultTargetScore != null ? String(t.defaultTargetScore) : '');
     setMaxRounds(String(t.defaultMaxRounds ?? 18));
     setRequireJumps(true);
+    setDrawCount(1);
     setTableSize(6);
     setTableMode('ffa');
     setTableSets(1);
@@ -76,6 +79,7 @@ export function SetupScreen({ navigation }: Props) {
         targetScore: showTarget && targetScore ? Number(targetScore) : null,
         maxRounds: showMaxRounds && maxRounds ? Number(maxRounds) : null,
         requireJumps: template.id === 'checkers' ? requireJumps : undefined,
+        drawCount: template.id === 'klondike' ? drawCount : undefined,
         chinese:
           template.id === 'chinese-checkers'
             ? { playerCount: tableSize, mode: tableMode, sets: tableSets, twoSetGoals: tableGoals }
@@ -104,6 +108,8 @@ export function SetupScreen({ navigation }: Props) {
           return (
             <Pressable
               key={t.id}
+              accessibilityRole="button"
+              accessibilityLabel={t.name}
               onPress={() => selectTemplate(t.id)}
               style={[styles.template, active && styles.templateActive]}
             >
@@ -254,6 +260,32 @@ export function SetupScreen({ navigation }: Props) {
           </>
         ) : null}
 
+        {template.id === 'klondike' ? (
+          <>
+            <Text style={[typography.section, styles.section]}>Draw</Text>
+            <View style={styles.choiceRow}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Draw 1"
+                onPress={() => setDrawCount(1)}
+                style={[styles.choice, drawCount === 1 && styles.choiceActive]}
+              >
+                <Text style={[styles.choiceLabel, drawCount === 1 && { color: colors.accent }]}>Draw 1</Text>
+                <Text style={typography.body}>Turn one card at a time.</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Draw 3"
+                onPress={() => setDrawCount(3)}
+                style={[styles.choice, drawCount === 3 && styles.choiceActive]}
+              >
+                <Text style={[styles.choiceLabel, drawCount === 3 && { color: colors.accent }]}>Draw 3</Text>
+                <Text style={typography.body}>Turn three. Only the top card plays.</Text>
+              </Pressable>
+            </View>
+          </>
+        ) : null}
+
         {template.id === 'checkers' ? (
           <>
             <Text style={[typography.section, styles.section]}>Jumps</Text>
@@ -278,7 +310,9 @@ export function SetupScreen({ navigation }: Props) {
 
         <Text style={[typography.section, styles.section]}>Your name</Text>
         <Text style={[typography.body, { marginBottom: 8 }]}>
-          Start alone. Share the game code so others can join.
+          {template.id === 'klondike'
+            ? 'A solo game. Open the share code on another device with this same name to keep playing.'
+            : 'Start alone. Share the game code so others can join.'}
         </Text>
         <Field
           value={hostName}
