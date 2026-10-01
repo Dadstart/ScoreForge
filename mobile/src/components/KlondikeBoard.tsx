@@ -44,6 +44,7 @@ type Lift = {
   origin?: Point;
   cards?: string[];
   cover?: Cover;
+  duration?: number;
 };
 
 const TAP_SLOP = 12;
@@ -82,6 +83,7 @@ function Layout({
   const layoutRef = useRef<View>(null);
   const boxRef = useRef<Box>({ x: 0, y: 0, width: 0, height: 0 });
   const settleToken = useRef(0);
+  const lastTap = useRef<{ source: Source; at: number } | null>(null);
   const [lift, setLift] = useState<Lift | null>(null);
   useEffect(() => () => {
     settleToken.current += 1;
@@ -129,6 +131,10 @@ function Layout({
       box.width > 0
         ? dropTarget(pageX - box.x, pageY - box.y, current.cardWidth, current.cardHeight, GAP, ROW_GAP)
         : null;
+    if (dest && canLand(current.state, source, dest)) {
+      startFlight(source, dest, 180);
+      return true;
+    }
     const token = settleToken.current + 1;
     settleToken.current = token;
     const glide = (dx: number, dy: number) => {
@@ -139,33 +145,66 @@ function Layout({
         });
       });
     };
-    if (dest && canLand(current.state, source, dest)) {
-      const origin = ghostOrigin(current.state, source, current.cardWidth, current.cardHeight, overlapDown, overlapUp);
-      const landing = landingPoint(current.state, dest, current.cardWidth, current.cardHeight, overlapDown, overlapUp);
-      const cards = carriedCards(current.state, source);
-      current.onDrop(source, dest);
-      setLift((held) =>
-        held
-          ? {
-              ...held,
-              hover: dest,
-              settling: true,
-              origin,
-              cards,
-              cover: { pile: dest.pile, index: dest.index, count: cards.length },
-            }
-          : null,
-      );
-      glide(landing.x - origin.x, landing.y - origin.y);
-    } else {
-      setLift((held) => (held ? { ...held, hover: null, settling: true } : null));
-      glide(0, 0);
-    }
+    setLift((held) => (held ? { ...held, hover: null, settling: true } : null));
+    glide(0, 0);
     setTimeout(() => {
       if (settleToken.current !== token) return;
       setLift(null);
       gesture.current.onDragChange?.(false);
     }, 220);
+    return true;
+  };
+
+  const startFlight = (source: Source, dest: Dest, duration: number) => {
+    const current = gesture.current;
+    const origin = ghostOrigin(current.state, source, current.cardWidth, current.cardHeight, overlapDown, overlapUp);
+    const landing = landingPoint(current.state, dest, current.cardWidth, current.cardHeight, overlapDown, overlapUp);
+    const cards = carriedCards(current.state, source);
+    const token = settleToken.current + 1;
+    settleToken.current = token;
+    current.onDrop(source, dest);
+    current.onDragChange?.(true);
+    setLift((held) => ({
+      source,
+      dx: held?.dx ?? 0,
+      dy: held?.dy ?? 0,
+      hover: dest,
+      settling: true,
+      origin,
+      cards,
+      duration,
+      cover: { pile: dest.pile, index: dest.index, count: cards.length },
+    }));
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (settleToken.current !== token) return;
+        setLift((held) => (held ? { ...held, dx: landing.x - origin.x, dy: landing.y - origin.y } : held));
+      });
+    });
+    setTimeout(() => {
+      if (settleToken.current !== token) return;
+      setLift(null);
+      gesture.current.onDragChange?.(false);
+    }, duration + 40);
+  };
+
+  const sendHome = (source: Source) => {
+    const now = Date.now();
+    const previous = lastTap.current;
+    const repeat = previous != null && now - previous.at < 500 && sameSource(previous.source, source);
+    lastTap.current = { source, at: now };
+    const picked =
+      repeat ||
+      (source.pile === 'waste' && selection?.pile === 'waste') ||
+      (source.pile === 'tableau' &&
+        selection?.pile === 'tableau' &&
+        selection.index === source.index &&
+        selection.at === source.at);
+    if (!picked) return false;
+    const dest = foundationHome(state, source);
+    if (!dest) return false;
+    lastTap.current = null;
+    startFlight(source, dest, 320);
     return true;
   };
 
@@ -202,7 +241,10 @@ function Layout({
           disabled={disabled}
           draggable={!disabled && canLandSomewhere(state, { pile: 'waste' })}
           lifted={lift?.source.pile === 'waste' ? lift : null}
-          onPress={onWaste}
+          onPress={() => {
+            if (sendHome({ pile: 'waste' })) return;
+            onWaste();
+          }}
           onLift={beginLift}
           onMove={moveLift}
           onRelease={endLift}
@@ -264,7 +306,10 @@ function Layout({
             column={index}
             lift={lift}
             state={state}
-            onPress={(at) => onTableau(index, at)}
+            onPress={(at) => {
+              if (sendHome({ pile: 'tableau', index, at })) return;
+              onTableau(index, at);
+            }}
             onLift={beginLift}
             onMove={moveLift}
             onRelease={endLift}
@@ -708,6 +753,23 @@ function Draggable({
   );
 }
 
+function sameSource(a: Source, b: Source): boolean {
+  if (a.pile !== b.pile) return false;
+  if (a.pile === 'waste') return true;
+  if (a.pile === 'tableau' && b.pile === 'tableau') return a.index === b.index && a.at === b.at;
+  return a.pile === 'foundation' && b.pile === 'foundation' && a.index === b.index;
+}
+
+function foundationHome(state: KlondikeState, source: Source): Dest | null {
+  if (source.pile === 'foundation') return null;
+  if (source.pile === 'tableau' && source.at !== (state.tableau[source.index]?.length ?? 0) - 1) return null;
+  for (let index = 0; index < 4; index++) {
+    const dest: Dest = { pile: 'foundation', index };
+    if (canLand(state, source, dest)) return dest;
+  }
+  return null;
+}
+
 function canLand(state: KlondikeState, source: Source, dest: Dest): boolean {
   return destinations(state, source).some((item) => item.pile === dest.pile && item.index === dest.index);
 }
@@ -745,7 +807,7 @@ function DragGhost({
           width: cardWidth,
           height: cardHeight + overlapUp * Math.max(0, cards.length - 1),
         },
-        lift.settling ? settleMotion : null,
+        lift.settling ? flightMotion(lift.duration ?? 180) : null,
       ]}
     >
       {cards.map((code, index) => (
@@ -822,14 +884,14 @@ const webGrab =
     ? ({ cursor: 'grab', touchAction: 'none', userSelect: 'none' } as unknown as ViewStyle)
     : null;
 
-const settleMotion =
-  Platform.OS === 'web'
-    ? ({
-        transitionProperty: 'left, top',
-        transitionDuration: '180ms',
-        transitionTimingFunction: 'ease-out',
-      } as unknown as ViewStyle)
-    : null;
+function flightMotion(duration: number): ViewStyle | null {
+  if (Platform.OS !== 'web') return null;
+  return {
+    transitionProperty: 'left, top',
+    transitionDuration: `${duration}ms`,
+    transitionTimingFunction: 'ease-out',
+  } as unknown as ViewStyle;
+}
 
 const styles = StyleSheet.create({
   table: {
