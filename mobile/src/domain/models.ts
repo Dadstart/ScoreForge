@@ -1,5 +1,6 @@
 import type { CheckersState } from './checkers';
 import type { ChineseState } from './chineseCheckers';
+import type { FreecellState } from './freecell';
 import type { KlondikeState } from './klondike';
 import type { SorryState } from './sorry';
 
@@ -43,6 +44,8 @@ export interface Game {
   chinese?: ChineseState | null;
   /** Klondike layout, stock, and undo. */
   klondike?: KlondikeState | null;
+  /** Freecell layout, free cells, and undo. */
+  freecell?: FreecellState | null;
   /**
    * Increments on every successful save. A write is stored only when it was
    * based on this revision, so two devices cannot overwrite each other.

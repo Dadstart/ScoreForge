@@ -9,6 +9,7 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Button, Field, Screen } from '../components/ui';
 import { setupDetail, setupSummary, type ChineseMode, type PlayerCount, type SetCount, type TwoSetGoals } from '../domain/chineseCheckers';
+import { FREECELL_DEAL_MAX } from '../domain/freecell';
 import type { DrawCount } from '../domain/klondike';
 import { createPlayer } from '../domain/models';
 import { getTemplate, templates } from '../domain/templates';
@@ -28,6 +29,7 @@ export function SetupScreen({ navigation }: Props) {
   const [maxRounds, setMaxRounds] = useState(String(templates[0].defaultMaxRounds ?? '18'));
   const [requireJumps, setRequireJumps] = useState(true);
   const [drawCount, setDrawCount] = useState<DrawCount>(1);
+  const [dealText, setDealText] = useState('');
   const [tableSize, setTableSize] = useState<PlayerCount>(6);
   const [tableMode, setTableMode] = useState<ChineseMode>('ffa');
   const [tableSets, setTableSets] = useState<SetCount>(1);
@@ -53,6 +55,7 @@ export function SetupScreen({ navigation }: Props) {
     setMaxRounds(String(t.defaultMaxRounds ?? 18));
     setRequireJumps(true);
     setDrawCount(1);
+    setDealText('');
     setTableSize(6);
     setTableMode('ffa');
     setTableSets(1);
@@ -65,6 +68,16 @@ export function SetupScreen({ navigation }: Props) {
     if (!host) {
       setValidation('Enter your display name.');
       return;
+    }
+
+    let deal: number | undefined;
+    if (template.id === 'freecell' && dealText.trim()) {
+      const parsed = Number(dealText.trim());
+      if (!Number.isInteger(parsed) || parsed < 1 || parsed > FREECELL_DEAL_MAX) {
+        setValidation(`Enter a deal from 1 to ${FREECELL_DEAL_MAX}, or leave it blank.`);
+        return;
+      }
+      deal = parsed;
     }
 
     setBusy(true);
@@ -80,6 +93,7 @@ export function SetupScreen({ navigation }: Props) {
         maxRounds: showMaxRounds && maxRounds ? Number(maxRounds) : null,
         requireJumps: template.id === 'checkers' ? requireJumps : undefined,
         drawCount: template.id === 'klondike' ? drawCount : undefined,
+        deal,
         chinese:
           template.id === 'chinese-checkers'
             ? { playerCount: tableSize, mode: tableMode, sets: tableSets, twoSetGoals: tableGoals }
@@ -260,6 +274,23 @@ export function SetupScreen({ navigation }: Props) {
           </>
         ) : null}
 
+        {template.id === 'freecell' ? (
+          <>
+            <Text style={[typography.section, styles.section]}>Deal</Text>
+            <Field
+              value={dealText}
+              onChangeText={(text) => {
+                setDealText(text.replace(/[^\d]/g, ''));
+                setValidation(null);
+              }}
+              placeholder={`Random, or 1–${FREECELL_DEAL_MAX}`}
+              keyboardType="number-pad"
+              maxLength={5}
+            />
+            <Text style={typography.body}>Leave blank for a random Microsoft deal. The same number is the same layout.</Text>
+          </>
+        ) : null}
+
         {template.id === 'klondike' ? (
           <>
             <Text style={[typography.section, styles.section]}>Draw</Text>
@@ -310,7 +341,7 @@ export function SetupScreen({ navigation }: Props) {
 
         <Text style={[typography.section, styles.section]}>Your name</Text>
         <Text style={[typography.body, { marginBottom: 8 }]}>
-          {template.id === 'klondike'
+          {template.id === 'klondike' || template.id === 'freecell'
             ? 'A solo game. Open the share code on another device with this same name to keep playing.'
             : 'Start alone. Share the game code so others can join.'}
         </Text>

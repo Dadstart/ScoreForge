@@ -119,6 +119,16 @@ export const templates: GameTemplate[] = [
     maxPlayers: 1,
   },
   {
+    id: 'freecell',
+    name: 'Freecell',
+    description:
+      'All 52 cards face up, with four free cells. Build each suit from ace to king. A deal number replays the same layout.',
+    scoringMode: 'Instant',
+    winCondition: 'HighestTotal',
+    minPlayers: 1,
+    maxPlayers: 1,
+  },
+  {
     id: 'chinese-checkers',
     name: 'Chinese Checkers',
     description:

@@ -58,6 +58,7 @@ npm run deploy:rules
 | Checkers | Shared board, Black moves first. Jumps required or optional | Capture every piece, or leave no move |
 | Chinese Checkers | Shared star. Two to six players, one or more colors, alone or in teams | Fill the opposite corner. Later places keep playing |
 | Klondike | Solitaire layout. Draw one or three | Build all 52 cards on the foundations |
+| Freecell | Solitaire layout. Four free cells. Deal 1–32000 | Build all 52 cards on the foundations |
 
 ## Project layout
 

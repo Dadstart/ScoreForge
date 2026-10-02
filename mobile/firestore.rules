@@ -23,7 +23,7 @@ service cloud.firestore {
     //   - targetScore: number 0-1000000 or null (required key)
     //   - maxRounds: number 0-1000000 or null (required key)
     //   - tokenSpaces: map (required, max 12 entries)
-    //   - sorry, checkers, chinese, klondike: map or null (required keys)
+    //   - sorry, checkers, chinese, klondike, freecell: map or null (required keys)
     //   - revision: int (required, starts at 1, increases by 1)
     //   - createdAt, updatedAt: ISO-8601 strings (createdAt immutable)
     //
@@ -98,7 +98,8 @@ service cloud.firestore {
         'sorry',
         'checkers',
         'chinese-checkers',
-        'klondike'
+        'klondike',
+        'freecell'
       ];
     }
 
@@ -118,6 +119,7 @@ service cloud.firestore {
           'checkers',
           'chinese',
           'klondike',
+          'freecell',
           'revision',
           'createdAt',
           'updatedAt'
@@ -137,6 +139,7 @@ service cloud.firestore {
           'checkers',
           'chinese',
           'klondike',
+          'freecell',
           'revision',
           'createdAt',
           'updatedAt'
@@ -159,6 +162,7 @@ service cloud.firestore {
         && isBoard(data.checkers)
         && isBoard(data.chinese)
         && isBoard(data.klondike)
+        && isBoard(data.freecell)
         && data.revision is int
         && data.revision >= 1
         && data.revision <= 1000000
