@@ -26,6 +26,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
       ChineseCheckers: 'chinese-checkers/:gameId',
       Klondike: 'klondike/:gameId',
       Pyramid: 'pyramid/:gameId',
+      Spider: 'spider/:gameId',
       Settings: 'settings',
     },
   },
