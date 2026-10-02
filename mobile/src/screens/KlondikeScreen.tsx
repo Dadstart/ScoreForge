@@ -64,21 +64,21 @@ export function KlondikeScreen({ navigation, route }: Props) {
           serverGame.current = found;
           return preferNewerGame(current, found);
         });
-        if (found) {
-          const tmpl = getTemplate(found.templateId);
-          if (tmpl) onSnapshot(calculate(found, tmpl));
-        }
       },
       (err) => setError(err.message),
     );
     return unsub;
-  }, [gameId, onSnapshot]);
+  }, [gameId]);
 
   const template = game ? getTemplate(game.templateId) : undefined;
   const snapshot = useMemo(
     () => (game && template ? calculate(game, template) : null),
     [game, template],
   );
+
+  useEffect(() => {
+    if (snapshot) onSnapshot(snapshot);
+  }, [snapshot, onSnapshot]);
 
   useEffect(() => {
     if (!game) return;
