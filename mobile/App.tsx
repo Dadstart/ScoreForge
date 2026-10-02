@@ -14,6 +14,7 @@ import { SorryScreen } from './src/screens/SorryScreen';
 import { CheckersScreen } from './src/screens/CheckersScreen';
 import { ChineseCheckersScreen } from './src/screens/ChineseCheckersScreen';
 import { KlondikeScreen } from './src/screens/KlondikeScreen';
+import { FreecellScreen } from './src/screens/FreecellScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { JoinScreen } from './src/screens/JoinScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
@@ -112,6 +113,11 @@ export default function App() {
             name="Klondike"
             component={KlondikeScreen}
             options={{ title: 'Klondike', headerShown: false }}
+          />
+          <Stack.Screen
+            name="Freecell"
+            component={FreecellScreen}
+            options={{ title: 'Freecell', headerShown: false }}
           />
           <Stack.Screen name="Settings" component={SettingsScreen} />
         </Stack.Navigator>

@@ -3,15 +3,15 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, useWindowDimensions, V
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { FireworksOverlay } from '../components/FireworksOverlay';
-import { KlondikeBoard } from '../components/KlondikeBoard';
+import { FreecellBoard } from '../components/FreecellBoard';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Screen } from '../components/ui';
 import {
   buildFoundation,
   canFinish,
-  createKlondikeState,
-  drawStock,
-  ensureKlondikeState,
+  createFreecellState,
+  destinations,
+  ensureFreecellState,
   finish,
   foundationCount,
   hasMove,
@@ -19,9 +19,9 @@ import {
   play,
   undo,
   type Dest,
-  type KlondikeState,
+  type FreecellState,
   type Source,
-} from '../domain/klondike';
+} from '../domain/freecell';
 import type { Game } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
@@ -30,9 +30,9 @@ import type { RootStackParamList } from '../navigation/types';
 import { preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
 import { colors, radii, space, typography } from '../theme';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Klondike'>;
+type Props = NativeStackScreenProps<RootStackParamList, 'Freecell'>;
 
-export function KlondikeScreen({ navigation, route }: Props) {
+export function FreecellScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
   const wide = window.width >= 980;
@@ -82,7 +82,7 @@ export function KlondikeScreen({ navigation, route }: Props) {
 
   useEffect(() => {
     if (!game) return;
-    const next = ensureKlondikeState(game);
+    const next = ensureFreecellState(game);
     if (next === game) return;
     void saveGame(next)
       .then((saved) => setGame((current) => preferNewerGame(current, saved)))
@@ -91,8 +91,8 @@ export function KlondikeScreen({ navigation, route }: Props) {
       });
   }, [game]);
 
-  const klondike = game?.klondike ?? null;
-  const moveKey = `${klondike?.moves ?? 0}|${klondike?.won ?? false}|${klondike?.lastAction ?? ''}`;
+  const freecell = game?.freecell ?? null;
+  const moveKey = `${freecell?.deal ?? 0}|${freecell?.moves ?? 0}|${freecell?.won ?? false}|${freecell?.lastAction ?? ''}`;
   useEffect(() => {
     setSelection(null);
     setHintText(null);
@@ -118,7 +118,7 @@ export function KlondikeScreen({ navigation, route }: Props) {
     }
   };
 
-  if (!game || !template || !snapshot || !klondike) {
+  if (!game || !template || !snapshot || !freecell) {
     return (
       <Screen>
         <View style={styles.center}>
@@ -129,54 +129,49 @@ export function KlondikeScreen({ navigation, route }: Props) {
   }
 
   const player = game.players[0];
-  const home = foundationCount(klondike);
-  const stuck = !klondike.won && !hasMove(klondike);
-  const banner = klondike.won
+  const home = foundationCount(freecell);
+  const stuck = !freecell.won && !hasMove(freecell);
+  const banner = freecell.won
     ? `${player?.name ?? 'You'} wins`
     : stuck
       ? 'No moves left'
-      : `${home} of 52 · ${klondike.moves} ${klondike.moves === 1 ? 'move' : 'moves'}`;
+      : `${home} of 52 · ${freecell.moves} ${freecell.moves === 1 ? 'move' : 'moves'}`;
 
-  const apply = async (nextKlondike: KlondikeState) => {
+  const apply = async (nextFreecell: FreecellState) => {
     const next: Game = {
       ...game,
-      klondike: nextKlondike,
-      status: nextKlondike.won ? 'Completed' : 'InProgress',
+      freecell: nextFreecell,
+      status: nextFreecell.won ? 'Completed' : 'InProgress',
       updatedAt: new Date().toISOString(),
     };
     await persist(next, true);
   };
 
   const tryMove = (source: Source | null, dest: Dest | null) => {
-    if (!source || !dest || klondike.won) return false;
-    const next = play(klondike, source, dest);
+    if (!source || !dest || freecell.won) return false;
+    const next = play(freecell, source, dest);
     if (!next) return false;
     void apply(next);
     return true;
   };
 
-  const onStock = () => {
-    if (klondike.won) return;
-    const next = drawStock(klondike);
-    if (next) void apply(next);
-  };
-
-  const onWaste = () => {
-    const source: Source = { pile: 'waste' };
-    if (selection?.pile === 'waste') {
-      const built = buildFoundation(klondike, source);
+  const onCell = (index: number) => {
+    const dest: Dest = { pile: 'cell', index };
+    if (tryMove(selection, dest)) return;
+    if (selection?.pile === 'cell' && selection.index === index) {
+      const built = buildFoundation(freecell, selection);
       if (built) {
         void apply(built);
         return;
       }
     }
-    setSelection(klondike.waste.length > 0 ? source : null);
+    setSelection(freecell.cells[index] ? { pile: 'cell', index } : null);
   };
 
   const onFoundation = (index: number) => {
     const dest: Dest = { pile: 'foundation', index };
     if (tryMove(selection, dest)) return;
-    const pile = klondike.foundations[index] ?? [];
+    const pile = freecell.foundations[index] ?? [];
     setSelection(pile.length > 0 ? { pile: 'foundation', index } : null);
   };
 
@@ -184,7 +179,7 @@ export function KlondikeScreen({ navigation, route }: Props) {
     const dest: Dest = { pile: 'tableau', index };
     if (tryMove(selection, dest)) return;
     if (selection?.pile === 'tableau' && selection.index === index && selection.at === at) {
-      const built = buildFoundation(klondike, selection);
+      const built = buildFoundation(freecell, selection);
       if (built) {
         void apply(built);
         return;
@@ -195,27 +190,27 @@ export function KlondikeScreen({ navigation, route }: Props) {
       return;
     }
     const source: Source = { pile: 'tableau', index, at };
-    setSelection(canPick(klondike, source) ? source : null);
+    setSelection(destinations(freecell, source).length > 0 ? source : null);
   };
 
   const onUndo = () => {
-    const next = undo(klondike);
+    const next = undo(freecell);
     if (next) void apply(next);
   };
 
   const onFinish = () => {
-    const next = finish(klondike);
+    const next = finish(freecell);
     if (next) void apply(next);
   };
 
   const onDeal = async () => {
-    if (!klondike.won && klondike.moves > 0 && !confirmDeal) {
+    if (!freecell.won && freecell.moves > 0 && !confirmDeal) {
       setConfirmDeal(true);
       return;
     }
     const next: Game = {
       ...game,
-      klondike: createKlondikeState(klondike.drawCount),
+      freecell: createFreecellState(),
       status: 'InProgress',
       updatedAt: new Date().toISOString(),
     };
@@ -240,7 +235,7 @@ export function KlondikeScreen({ navigation, route }: Props) {
         <View style={styles.header}>
           <View style={styles.titleBlock}>
             <Text style={typography.title}>{game.name}</Text>
-            <Badge label={`Draw ${klondike.drawCount}`} tone="accent" />
+            <Badge label={`Deal ${freecell.deal}`} tone="accent" />
           </View>
           <ShareCodePanel shareCode={game.shareCode} />
           <Button label="Home" variant="ghost" onPress={() => navigation.navigate('Home')} />
@@ -248,26 +243,25 @@ export function KlondikeScreen({ navigation, route }: Props) {
 
         <View style={styles.banner}>
           <Text style={styles.bannerText}>{banner}</Text>
-          {klondike.lastAction ? <Text style={styles.action}>{klondike.lastAction}</Text> : null}
+          {freecell.lastAction ? <Text style={styles.action}>{freecell.lastAction}</Text> : null}
           {hintText ? <Text style={styles.action}>{hintText}</Text> : null}
         </View>
 
         <ScrollView scrollEnabled={!dragging} contentContainerStyle={wide ? styles.wide : styles.stack}>
           <View style={[styles.boardPane, wide && styles.boardPaneWide]}>
-            <KlondikeBoard
-              state={klondike}
+            <FreecellBoard
+              state={freecell}
               selection={selection}
-              disabled={klondike.won}
-              onStock={onStock}
-              onWaste={onWaste}
+              disabled={freecell.won}
+              onCell={onCell}
               onFoundation={onFoundation}
               onTableau={onTableau}
               onDrop={(source, dest) => tryMove(source, dest)}
               onDragChange={setDragging}
             />
             <Text style={styles.hint}>
-              Drag a card onto a column or foundation. Tap it, then tap again, to build it up.
-              {klondike.drawCount === 3 ? ' Draw three. Only the top waste card plays.' : ' Draw one.'}
+              Drag a card onto a column, a free cell, or a foundation. Tap it, then tap again, to build it up. A run
+              moves together when the free cells have room.
             </Text>
           </View>
 
@@ -276,50 +270,26 @@ export function KlondikeScreen({ navigation, route }: Props) {
               {player?.name ?? 'You'} · {home} on the foundations
             </Text>
             <Text style={typography.body}>
-              {klondike.won
+              {freecell.won
                 ? 'All 52 cards are home. Deal again to play another.'
                 : 'The share code opens this same deal on another device signed in with your name.'}
             </Text>
             <View style={styles.actions}>
-              <Button label="Undo" disabled={klondike.undo.length === 0} onPress={onUndo} />
-              <Button label="Hint" onPress={() => setHintText(hint(klondike))} />
-              {canFinish(klondike) ? (
-                <Button label="Finish" variant="primary" onPress={onFinish} />
-              ) : null}
-              <Button
-                label={confirmDeal ? 'Confirm deal' : 'New deal'}
-                onPress={() => void onDeal()}
-              />
+              <Button label="Undo" disabled={freecell.undo.length === 0} onPress={onUndo} />
+              <Button label="Hint" onPress={() => setHintText(hint(freecell))} />
+              {canFinish(freecell) ? <Button label="Finish" variant="primary" onPress={onFinish} /> : null}
+              <Button label={confirmDeal ? 'Confirm deal' : 'New deal'} onPress={() => void onDeal()} />
             </View>
             {error ? <Text style={styles.error}>{error}</Text> : null}
           </View>
         </ScrollView>
 
         {showCelebration ? (
-          <FireworksOverlay
-            winnerName={snapshot.winnerName}
-            subtitle="Klondike"
-            onDismiss={dismissCelebration}
-          />
+          <FireworksOverlay winnerName={snapshot.winnerName} subtitle="Freecell" onDismiss={dismissCelebration} />
         ) : null}
       </View>
     </Screen>
   );
-}
-
-function canPick(state: KlondikeState, source: Source): boolean {
-  if (source.pile !== 'tableau') return false;
-  const pile = state.tableau[source.index] ?? [];
-  const run = pile.slice(source.at);
-  if (run.length === 0) return false;
-  for (let index = 0; index < 4; index++) {
-    if (play(state, source, { pile: 'foundation', index })) return true;
-  }
-  for (let index = 0; index < 7; index++) {
-    if (index === source.index) continue;
-    if (play(state, source, { pile: 'tableau', index })) return true;
-  }
-  return false;
 }
 
 const styles = StyleSheet.create({
