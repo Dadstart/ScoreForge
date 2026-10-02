@@ -2,6 +2,7 @@ import type { CheckersState } from './checkers';
 import type { ChineseState } from './chineseCheckers';
 import type { KlondikeState } from './klondike';
 import type { PyramidState } from './pyramid';
+import type { SpiderState } from './spider';
 import type { SorryState } from './sorry';
 
 export type GameStatus = 'InProgress' | 'Completed';
@@ -46,6 +47,8 @@ export interface Game {
   klondike?: KlondikeState | null;
   /** Pyramid layout, stock, and undo. */
   pyramid?: PyramidState | null;
+  /** Spider layout, stock, and undo. */
+  spider?: SpiderState | null;
   /**
    * Increments on every successful save. A write is stored only when it was
    * based on this revision, so two devices cannot overwrite each other.

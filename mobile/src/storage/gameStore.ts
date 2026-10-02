@@ -17,6 +17,7 @@ import { createCheckersState } from '../domain/checkers';
 import { createChineseState, type ChineseSetup } from '../domain/chineseCheckers';
 import { createKlondikeState, packKlondike, unpackKlondike, type DrawCount } from '../domain/klondike';
 import { createPyramidState, packPyramid, unpackPyramid } from '../domain/pyramid';
+import { createSpiderState, packSpider, unpackSpider, type SuitCount } from '../domain/spider';
 import {
   isShareCode,
   normalizeShareCode,
@@ -50,6 +51,7 @@ type StoredGame = {
   chinese?: Game['chinese'];
   klondike?: unknown;
   pyramid?: unknown;
+  spider?: unknown;
   revision?: number;
   createdAt?: string;
   updatedAt?: string;
@@ -110,6 +112,7 @@ function toStored(game: Game): Record<string, unknown> {
     chinese: game.chinese ?? null,
     klondike: game.klondike ? packKlondike(game.klondike) : null,
     pyramid: game.pyramid ? packPyramid(game.pyramid) : null,
+    spider: game.spider ? packSpider(game.spider) : null,
     revision: game.revision,
     createdAt: game.createdAt,
     updatedAt: game.updatedAt,
@@ -133,6 +136,7 @@ function fromStored(shareCode: string, data: StoredGame, events: ScoreEvent[]): 
     chinese: data.chinese ?? null,
     klondike: unpackKlondike(data.klondike),
     pyramid: unpackPyramid(data.pyramid),
+    spider: unpackSpider(data.spider),
     revision: revisionOf(data),
     createdAt: typeof data.createdAt === 'string' ? data.createdAt : new Date().toISOString(),
     updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : new Date().toISOString(),
@@ -297,6 +301,7 @@ export async function createAndSaveGame(partial: {
   requireJumps?: boolean;
   chinese?: ChineseSetup;
   drawCount?: DrawCount;
+  suits?: SuitCount;
 }): Promise<Game> {
   await ensureAnonymousAuth();
   const now = new Date().toISOString();
@@ -329,6 +334,10 @@ export async function createAndSaveGame(partial: {
     }
     if (partial.templateId === 'pyramid') {
       game.pyramid = createPyramidState();
+    }
+    if (partial.templateId === 'spider') {
+      const suits = partial.suits === 2 || partial.suits === 4 ? partial.suits : 1;
+      game.spider = createSpiderState(suits);
     }
     try {
       const saved = await runTransaction(db, async (transaction) => {

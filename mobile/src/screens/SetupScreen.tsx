@@ -10,6 +10,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Button, Field, Screen } from '../components/ui';
 import { setupDetail, setupSummary, type ChineseMode, type PlayerCount, type SetCount, type TwoSetGoals } from '../domain/chineseCheckers';
 import type { DrawCount } from '../domain/klondike';
+import type { SuitCount } from '../domain/spider';
 import { createPlayer } from '../domain/models';
 import { getTemplate, templates } from '../domain/templates';
 import { loadDisplayName, saveDisplayName } from '../storage/displayNameStore';
@@ -28,6 +29,7 @@ export function SetupScreen({ navigation }: Props) {
   const [maxRounds, setMaxRounds] = useState(String(templates[0].defaultMaxRounds ?? '18'));
   const [requireJumps, setRequireJumps] = useState(true);
   const [drawCount, setDrawCount] = useState<DrawCount>(1);
+  const [suitCount, setSuitCount] = useState<SuitCount>(1);
   const [tableSize, setTableSize] = useState<PlayerCount>(6);
   const [tableMode, setTableMode] = useState<ChineseMode>('ffa');
   const [tableSets, setTableSets] = useState<SetCount>(1);
@@ -53,6 +55,7 @@ export function SetupScreen({ navigation }: Props) {
     setMaxRounds(String(t.defaultMaxRounds ?? 18));
     setRequireJumps(true);
     setDrawCount(1);
+    setSuitCount(1);
     setTableSize(6);
     setTableMode('ffa');
     setTableSets(1);
@@ -80,6 +83,7 @@ export function SetupScreen({ navigation }: Props) {
         maxRounds: showMaxRounds && maxRounds ? Number(maxRounds) : null,
         requireJumps: template.id === 'checkers' ? requireJumps : undefined,
         drawCount: template.id === 'klondike' ? drawCount : undefined,
+        suits: template.id === 'spider' ? suitCount : undefined,
         chinese:
           template.id === 'chinese-checkers'
             ? { playerCount: tableSize, mode: tableMode, sets: tableSets, twoSetGoals: tableGoals }
@@ -286,6 +290,41 @@ export function SetupScreen({ navigation }: Props) {
           </>
         ) : null}
 
+        {template.id === 'spider' ? (
+          <>
+            <Text style={[typography.section, styles.section]}>Suits</Text>
+            <View style={styles.choiceRow}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="1 suit"
+                onPress={() => setSuitCount(1)}
+                style={[styles.choice, suitCount === 1 && styles.choiceActive]}
+              >
+                <Text style={[styles.choiceLabel, suitCount === 1 && { color: colors.accent }]}>1 suit</Text>
+                <Text style={typography.body}>All spades. The easier game.</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="2 suits"
+                onPress={() => setSuitCount(2)}
+                style={[styles.choice, suitCount === 2 && styles.choiceActive]}
+              >
+                <Text style={[styles.choiceLabel, suitCount === 2 && { color: colors.accent }]}>2 suits</Text>
+                <Text style={typography.body}>Spades and hearts.</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="4 suits"
+                onPress={() => setSuitCount(4)}
+                style={[styles.choice, suitCount === 4 && styles.choiceActive]}
+              >
+                <Text style={[styles.choiceLabel, suitCount === 4 && { color: colors.accent }]}>4 suits</Text>
+                <Text style={typography.body}>Two full decks.</Text>
+              </Pressable>
+            </View>
+          </>
+        ) : null}
+
         {template.id === 'checkers' ? (
           <>
             <Text style={[typography.section, styles.section]}>Jumps</Text>
@@ -310,7 +349,7 @@ export function SetupScreen({ navigation }: Props) {
 
         <Text style={[typography.section, styles.section]}>Your name</Text>
         <Text style={[typography.body, { marginBottom: 8 }]}>
-          {template.id === 'klondike' || template.id === 'pyramid'
+          {template.id === 'klondike' || template.id === 'pyramid' || template.id === 'spider'
             ? 'A solo game. Open the share code on another device with this same name to keep playing.'
             : 'Start alone. Share the game code so others can join.'}
         </Text>

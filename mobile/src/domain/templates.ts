@@ -129,6 +129,16 @@ export const templates: GameTemplate[] = [
     maxPlayers: 1,
   },
   {
+    id: 'spider',
+    name: 'Spider',
+    description:
+      'Two decks and ten columns. Move a same-suit run onto the next rank. Clear eight suits. One, two, or four suits.',
+    scoringMode: 'Instant',
+    winCondition: 'HighestTotal',
+    minPlayers: 1,
+    maxPlayers: 1,
+  },
+  {
     id: 'chinese-checkers',
     name: 'Chinese Checkers',
     description:
