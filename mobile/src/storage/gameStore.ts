@@ -16,6 +16,7 @@ import { withAddedPlayer } from '../domain/addPlayer';
 import { createCheckersState } from '../domain/checkers';
 import { createChineseState, type ChineseSetup } from '../domain/chineseCheckers';
 import { createKlondikeState, packKlondike, unpackKlondike, type DrawCount } from '../domain/klondike';
+import { createPyramidState, packPyramid, unpackPyramid } from '../domain/pyramid';
 import {
   isShareCode,
   normalizeShareCode,
@@ -48,6 +49,7 @@ type StoredGame = {
   checkers?: Game['checkers'];
   chinese?: Game['chinese'];
   klondike?: unknown;
+  pyramid?: unknown;
   revision?: number;
   createdAt?: string;
   updatedAt?: string;
@@ -107,6 +109,7 @@ function toStored(game: Game): Record<string, unknown> {
     checkers: game.checkers ?? null,
     chinese: game.chinese ?? null,
     klondike: game.klondike ? packKlondike(game.klondike) : null,
+    pyramid: game.pyramid ? packPyramid(game.pyramid) : null,
     revision: game.revision,
     createdAt: game.createdAt,
     updatedAt: game.updatedAt,
@@ -129,6 +132,7 @@ function fromStored(shareCode: string, data: StoredGame, events: ScoreEvent[]): 
     checkers: data.checkers ?? null,
     chinese: data.chinese ?? null,
     klondike: unpackKlondike(data.klondike),
+    pyramid: unpackPyramid(data.pyramid),
     revision: revisionOf(data),
     createdAt: typeof data.createdAt === 'string' ? data.createdAt : new Date().toISOString(),
     updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : new Date().toISOString(),
@@ -322,6 +326,9 @@ export async function createAndSaveGame(partial: {
     }
     if (partial.templateId === 'klondike') {
       game.klondike = createKlondikeState(partial.drawCount === 3 ? 3 : 1);
+    }
+    if (partial.templateId === 'pyramid') {
+      game.pyramid = createPyramidState();
     }
     try {
       const saved = await runTransaction(db, async (transaction) => {

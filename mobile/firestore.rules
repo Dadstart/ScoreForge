@@ -23,7 +23,7 @@ service cloud.firestore {
     //   - targetScore: number 0-1000000 or null (required key)
     //   - maxRounds: number 0-1000000 or null (required key)
     //   - tokenSpaces: map (required, max 12 entries)
-    //   - sorry, checkers, chinese, klondike: map or null (required keys)
+    //   - sorry, checkers, chinese, klondike, pyramid: map or null (required keys)
     //   - revision: int (required, starts at 1, increases by 1)
     //   - createdAt, updatedAt: ISO-8601 strings (createdAt immutable)
     //
@@ -74,16 +74,22 @@ service cloud.firestore {
         );
     }
 
-    function eachPlayer(players, index) {
-      return index >= players.size()
-        || (playerValid(players[index]) && eachPlayer(players, index + 1));
-    }
-
     function playersValid(players) {
       return players is list
         && players.size() >= 1
         && players.size() <= 12
-        && eachPlayer(players, 0);
+        && playerValid(players[0])
+        && (players.size() < 2 || playerValid(players[1]))
+        && (players.size() < 3 || playerValid(players[2]))
+        && (players.size() < 4 || playerValid(players[3]))
+        && (players.size() < 5 || playerValid(players[4]))
+        && (players.size() < 6 || playerValid(players[5]))
+        && (players.size() < 7 || playerValid(players[6]))
+        && (players.size() < 8 || playerValid(players[7]))
+        && (players.size() < 9 || playerValid(players[8]))
+        && (players.size() < 10 || playerValid(players[9]))
+        && (players.size() < 11 || playerValid(players[10]))
+        && (players.size() < 12 || playerValid(players[11]));
     }
 
     function isKnownTemplate(templateId) {
@@ -98,7 +104,8 @@ service cloud.firestore {
         'sorry',
         'checkers',
         'chinese-checkers',
-        'klondike'
+        'klondike',
+        'pyramid'
       ];
     }
 
@@ -118,6 +125,7 @@ service cloud.firestore {
           'checkers',
           'chinese',
           'klondike',
+          'pyramid',
           'revision',
           'createdAt',
           'updatedAt'
@@ -137,6 +145,7 @@ service cloud.firestore {
           'checkers',
           'chinese',
           'klondike',
+          'pyramid',
           'revision',
           'createdAt',
           'updatedAt'
@@ -159,6 +168,7 @@ service cloud.firestore {
         && isBoard(data.checkers)
         && isBoard(data.chinese)
         && isBoard(data.klondike)
+        && isBoard(data.pyramid)
         && data.revision is int
         && data.revision >= 1
         && data.revision <= 1000000

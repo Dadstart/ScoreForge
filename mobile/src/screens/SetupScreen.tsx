@@ -310,7 +310,7 @@ export function SetupScreen({ navigation }: Props) {
 
         <Text style={[typography.section, styles.section]}>Your name</Text>
         <Text style={[typography.body, { marginBottom: 8 }]}>
-          {template.id === 'klondike'
+          {template.id === 'klondike' || template.id === 'pyramid'
             ? 'A solo game. Open the share code on another device with this same name to keep playing.'
             : 'Start alone. Share the game code so others can join.'}
         </Text>
