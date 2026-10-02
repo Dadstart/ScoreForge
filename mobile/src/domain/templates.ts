@@ -119,6 +119,16 @@ export const templates: GameTemplate[] = [
     maxPlayers: 1,
   },
   {
+    id: 'pyramid',
+    name: 'Pyramid',
+    description:
+      'Clear the pyramid. Pair uncovered cards that add to 13. A king comes off alone. Draw one card from the stock.',
+    scoringMode: 'Instant',
+    winCondition: 'HighestTotal',
+    minPlayers: 1,
+    maxPlayers: 1,
+  },
+  {
     id: 'chinese-checkers',
     name: 'Chinese Checkers',
     description:

@@ -1,6 +1,6 @@
 {
   "name": "scoreforge",
-  "version": "1.0.0",
+  "version": "1.5.0",
   "main": "index.ts",
   "dependencies": {
     "@expo/metro-runtime": "~57.0.16",
@@ -33,7 +33,7 @@
     "ios": "expo start --ios --port 5555",
     "web": "expo start --web --port 5555",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/domain/scoring.test.ts src/domain/klondike.test.ts",
+    "test": "tsx --test src/domain/scoring.test.ts src/domain/klondike.test.ts src/domain/pyramid.test.ts",
     "export:web": "expo export --platform web",
     "deploy:web": "npm run export:web && firebase deploy --only hosting",
     "deploy:rules": "firebase deploy --only firestore:rules",
