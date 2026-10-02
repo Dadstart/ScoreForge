@@ -101,29 +101,25 @@ export function SetupScreen({ navigation }: Props) {
   return (
     <Screen>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={typography.title}>New Game</Text>
-        <Text style={[typography.subtitle, { marginBottom: 8 }]}>
-          Pick a template, name yourself, then share the code so others can join.
-        </Text>
-
-        <Text style={[typography.section, styles.section]}>Template</Text>
-        {templates.map((t) => {
-          const active = templateId === t.id;
-          return (
-            <Pressable
-              key={t.id}
-              accessibilityRole="button"
-              accessibilityLabel={t.name}
-              onPress={() => selectTemplate(t.id)}
-              style={[styles.template, active && styles.templateActive]}
-            >
-              <Text style={[styles.templateName, active && { color: colors.accent }]}>
-                {t.name}
-              </Text>
-              <Text style={typography.body}>{t.description}</Text>
-            </Pressable>
-          );
-        })}
+        <Text style={[typography.section, styles.sectionFirst]}>Template</Text>
+        <View style={styles.wrap}>
+          {templates.map((t) => {
+            const active = templateId === t.id;
+            return (
+              <Pressable
+                key={t.id}
+                accessibilityRole="button"
+                accessibilityLabel={t.name}
+                accessibilityState={{ selected: active }}
+                onPress={() => selectTemplate(t.id)}
+                style={[styles.chip, active && styles.chipActive]}
+              >
+                <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>{t.name}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text style={styles.hint}>{template.description}</Text>
 
         <Text style={[typography.section, styles.section]}>Game name</Text>
         <Field value={name} onChangeText={setName} />
@@ -155,108 +151,46 @@ export function SetupScreen({ navigation }: Props) {
         {template.id === 'chinese-checkers' ? (
           <>
             <Text style={[typography.section, styles.section]}>Players</Text>
-            <View style={styles.choiceRow}>
+            <View style={styles.wrap}>
               {([2, 3, 4, 6] as const).map((count) => (
-                <Pressable
-                  key={count}
-                  onPress={() => setTableSize(count)}
-                  style={[styles.choice, tableSize === count && styles.choiceActive]}
-                >
-                  <Text style={[styles.choiceLabel, tableSize === count && { color: colors.accent }]}>{count}</Text>
-                </Pressable>
+                <Choice key={count} label={String(count)} selected={tableSize === count} onPress={() => setTableSize(count)} />
               ))}
             </View>
             {tableSize === 6 || tableSize === 4 ? (
               <>
                 <Text style={[typography.section, styles.section]}>Sides</Text>
-                <View style={styles.choiceRow}>
-                  <Pressable
-                    onPress={() => setTableMode('ffa')}
-                    style={[styles.choice, tableMode === 'ffa' && styles.choiceActive]}
-                  >
-                    <Text style={[styles.choiceLabel, tableMode === 'ffa' && { color: colors.accent }]}>All versus all</Text>
-                    <Text style={typography.body}>Each color races alone. Later places keep playing.</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => setTableMode('teams')}
-                    style={[styles.choice, tableMode === 'teams' && styles.choiceActive]}
-                  >
-                    <Text style={[styles.choiceLabel, tableMode === 'teams' && { color: colors.accent }]}>Teams of two</Text>
-                    <Text style={typography.body}>Partners sit opposite and each move their own color.</Text>
-                  </Pressable>
+                <View style={styles.wrap}>
+                  <Choice label="All versus all" selected={tableMode === 'ffa'} onPress={() => setTableMode('ffa')} />
+                  <Choice label="Teams of two" selected={tableMode === 'teams'} onPress={() => setTableMode('teams')} />
                 </View>
               </>
             ) : null}
             {tableSize === 3 ? (
               <>
                 <Text style={[typography.section, styles.section]}>Sets each</Text>
-                <View style={styles.choiceRow}>
-                  <Pressable
-                    onPress={() => setTableSets(1)}
-                    style={[styles.choice, tableSets === 1 && styles.choiceActive]}
-                  >
-                    <Text style={[styles.choiceLabel, tableSets === 1 && { color: colors.accent }]}>One set</Text>
-                    <Text style={typography.body}>Race into the empty opposite corner.</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => setTableSets(2)}
-                    style={[styles.choice, tableSets === 2 && styles.choiceActive]}
-                  >
-                    <Text style={[styles.choiceLabel, tableSets === 2 && { color: colors.accent }]}>Two sets</Text>
-                    <Text style={typography.body}>Control both colors on opposite points.</Text>
-                  </Pressable>
+                <View style={styles.wrap}>
+                  <Choice label="One set" selected={tableSets === 1} onPress={() => setTableSets(1)} />
+                  <Choice label="Two sets" selected={tableSets === 2} onPress={() => setTableSets(2)} />
                 </View>
               </>
             ) : null}
             {tableSize === 2 ? (
               <>
                 <Text style={[typography.section, styles.section]}>Sets each</Text>
-                <View style={styles.choiceRow}>
-                  <Pressable
-                    onPress={() => setTableSets(1)}
-                    style={[styles.choice, tableSets === 1 && styles.choiceActive]}
-                  >
-                    <Text style={[styles.choiceLabel, tableSets === 1 && { color: colors.accent }]}>One · 15</Text>
-                    <Text style={typography.body}>Fifteen pieces into the opponent’s camp.</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => setTableSets(2)}
-                    style={[styles.choice, tableSets === 2 && styles.choiceActive]}
-                  >
-                    <Text style={[styles.choiceLabel, tableSets === 2 && { color: colors.accent }]}>Two</Text>
-                    <Text style={typography.body}>Two colors each.</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => setTableSets(3)}
-                    style={[styles.choice, tableSets === 3 && styles.choiceActive]}
-                  >
-                    <Text style={[styles.choiceLabel, tableSets === 3 && { color: colors.accent }]}>Three</Text>
-                    <Text style={typography.body}>Into the opponent’s three corners.</Text>
-                  </Pressable>
+                <View style={styles.wrap}>
+                  <Choice label="One · 15" selected={tableSets === 1} onPress={() => setTableSets(1)} />
+                  <Choice label="Two" selected={tableSets === 2} onPress={() => setTableSets(2)} />
+                  <Choice label="Three" selected={tableSets === 3} onPress={() => setTableSets(3)} />
                 </View>
                 {tableSets === 2 ? (
-                  <View style={[styles.choiceRow, { marginTop: 8 }]}>
-                    <Pressable
-                      onPress={() => setTableGoals('opponent')}
-                      style={[styles.choice, tableGoals === 'opponent' && styles.choiceActive]}
-                    >
-                      <Text style={[styles.choiceLabel, tableGoals === 'opponent' && { color: colors.accent }]}>
-                        Opponent’s corners
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => setTableGoals('empty')}
-                      style={[styles.choice, tableGoals === 'empty' && styles.choiceActive]}
-                    >
-                      <Text style={[styles.choiceLabel, tableGoals === 'empty' && { color: colors.accent }]}>
-                        One empty corner
-                      </Text>
-                    </Pressable>
+                  <View style={styles.wrap}>
+                    <Choice label="Opponent’s corners" selected={tableGoals === 'opponent'} onPress={() => setTableGoals('opponent')} />
+                    <Choice label="One empty corner" selected={tableGoals === 'empty'} onPress={() => setTableGoals('empty')} />
                   </View>
                 ) : null}
               </>
             ) : null}
-            <Text style={[typography.body, { marginTop: 8 }]}>
+            <Text style={styles.hint}>
               {setupSummary({ playerCount: tableSize, mode: tableMode, sets: tableSets, twoSetGoals: tableGoals })}
               {' — '}
               {setupDetail({ playerCount: tableSize, mode: tableMode, sets: tableSets, twoSetGoals: tableGoals })}
@@ -267,91 +201,48 @@ export function SetupScreen({ navigation }: Props) {
         {template.id === 'klondike' ? (
           <>
             <Text style={[typography.section, styles.section]}>Draw</Text>
-            <View style={styles.choiceRow}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Draw 1"
-                onPress={() => setDrawCount(1)}
-                style={[styles.choice, drawCount === 1 && styles.choiceActive]}
-              >
-                <Text style={[styles.choiceLabel, drawCount === 1 && { color: colors.accent }]}>Draw 1</Text>
-                <Text style={typography.body}>Turn one card at a time.</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Draw 3"
-                onPress={() => setDrawCount(3)}
-                style={[styles.choice, drawCount === 3 && styles.choiceActive]}
-              >
-                <Text style={[styles.choiceLabel, drawCount === 3 && { color: colors.accent }]}>Draw 3</Text>
-                <Text style={typography.body}>Turn three. Only the top card plays.</Text>
-              </Pressable>
+            <View style={styles.wrap}>
+              <Choice label="Draw 1" selected={drawCount === 1} onPress={() => setDrawCount(1)} />
+              <Choice label="Draw 3" selected={drawCount === 3} onPress={() => setDrawCount(3)} />
             </View>
+            <Text style={styles.hint}>
+              {drawCount === 1 ? 'Turn one card at a time.' : 'Turn three. Only the top card plays.'}
+            </Text>
           </>
         ) : null}
 
         {template.id === 'spider' ? (
           <>
             <Text style={[typography.section, styles.section]}>Suits</Text>
-            <View style={styles.choiceRow}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="1 suit"
-                onPress={() => setSuitCount(1)}
-                style={[styles.choice, suitCount === 1 && styles.choiceActive]}
-              >
-                <Text style={[styles.choiceLabel, suitCount === 1 && { color: colors.accent }]}>1 suit</Text>
-                <Text style={typography.body}>All spades. The easier game.</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="2 suits"
-                onPress={() => setSuitCount(2)}
-                style={[styles.choice, suitCount === 2 && styles.choiceActive]}
-              >
-                <Text style={[styles.choiceLabel, suitCount === 2 && { color: colors.accent }]}>2 suits</Text>
-                <Text style={typography.body}>Spades and hearts.</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="4 suits"
-                onPress={() => setSuitCount(4)}
-                style={[styles.choice, suitCount === 4 && styles.choiceActive]}
-              >
-                <Text style={[styles.choiceLabel, suitCount === 4 && { color: colors.accent }]}>4 suits</Text>
-                <Text style={typography.body}>Two full decks.</Text>
-              </Pressable>
+            <View style={styles.wrap}>
+              <Choice label="1 suit" selected={suitCount === 1} onPress={() => setSuitCount(1)} />
+              <Choice label="2 suits" selected={suitCount === 2} onPress={() => setSuitCount(2)} />
+              <Choice label="4 suits" selected={suitCount === 4} onPress={() => setSuitCount(4)} />
             </View>
+            <Text style={styles.hint}>
+              {suitCount === 1 ? 'All spades. The easier game.' : suitCount === 2 ? 'Spades and hearts.' : 'Two full decks.'}
+            </Text>
           </>
         ) : null}
 
         {template.id === 'checkers' ? (
           <>
             <Text style={[typography.section, styles.section]}>Jumps</Text>
-            <View style={styles.choiceRow}>
-              <Pressable
-                onPress={() => setRequireJumps(true)}
-                style={[styles.choice, requireJumps && styles.choiceActive]}
-              >
-                <Text style={[styles.choiceLabel, requireJumps && { color: colors.accent }]}>Required</Text>
-                <Text style={typography.body}>You must jump when you can.</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setRequireJumps(false)}
-                style={[styles.choice, !requireJumps && styles.choiceActive]}
-              >
-                <Text style={[styles.choiceLabel, !requireJumps && { color: colors.accent }]}>Optional</Text>
-                <Text style={typography.body}>You may move without capturing.</Text>
-              </Pressable>
+            <View style={styles.wrap}>
+              <Choice label="Required" selected={requireJumps} onPress={() => setRequireJumps(true)} />
+              <Choice label="Optional" selected={!requireJumps} onPress={() => setRequireJumps(false)} />
             </View>
+            <Text style={styles.hint}>
+              {requireJumps ? 'You must jump when you can.' : 'You may move without capturing.'}
+            </Text>
           </>
         ) : null}
 
         <Text style={[typography.section, styles.section]}>Your name</Text>
-        <Text style={[typography.body, { marginBottom: 8 }]}>
+        <Text style={styles.hint}>
           {template.id === 'klondike' || template.id === 'pyramid' || template.id === 'spider'
-            ? 'A solo game. Open the share code on another device with this same name to keep playing.'
-            : 'Start alone. Share the game code so others can join.'}
+            ? 'Solo. Use this name on another device to keep playing.'
+            : 'Start alone, then share the code so others can join.'}
         </Text>
         <Field
           value={hostName}
@@ -380,45 +271,55 @@ export function SetupScreen({ navigation }: Props) {
   );
 }
 
+function Choice({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      style={[styles.chip, selected && styles.chipActive]}
+    >
+      <Text style={[styles.chipLabel, selected && styles.chipLabelActive]}>{label}</Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  content: { padding: space.lg, paddingBottom: 48, gap: 8 },
-  section: { marginTop: 14, marginBottom: 6 },
-  template: {
+  content: { padding: space.md, paddingBottom: space.xl, gap: 4 },
+  section: { marginTop: space.sm, marginBottom: 2 },
+  sectionFirst: { marginTop: 0, marginBottom: 2 },
+  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  chip: {
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radii.lg,
-    padding: space.lg,
-    marginBottom: 8,
-    gap: 6,
+    borderRadius: radii.md,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
   },
-  templateActive: {
+  chipActive: {
     borderColor: colors.accent,
     backgroundColor: colors.accentSoft,
   },
-  templateName: {
-    ...typography.label,
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  choiceRow: { flexDirection: 'row', gap: 8 },
-  choice: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.lg,
-    padding: space.md,
-    gap: 4,
-  },
-  choiceActive: {
-    borderColor: colors.accent,
-    backgroundColor: colors.accentSoft,
-  },
-  choiceLabel: {
+  chipLabel: {
     ...typography.label,
     fontWeight: '700',
   },
-  row: { flexDirection: 'row', gap: 10, marginTop: 16 },
-  error: { color: colors.danger, marginTop: 8 },
+  chipLabelActive: { color: colors.accent },
+  hint: {
+    ...typography.body,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  row: { flexDirection: 'row', gap: 8, marginTop: space.sm },
+  error: { color: colors.danger, marginTop: space.sm },
 });
