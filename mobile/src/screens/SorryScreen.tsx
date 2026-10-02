@@ -23,7 +23,7 @@ import {
   SORRY_COLORS,
   colorIndexFor,
   describeMove,
-  drawCard,
+  drawFromDeck,
   ensureSorryState,
   homeCount,
   legalMoves,
@@ -157,9 +157,13 @@ export function SorryScreen({ navigation, route }: Props) {
     ? snapshot.winnerName
       ? `${snapshot.winnerName} got ${target} pawns home`
       : 'Game complete'
-    : current
-      ? `${yourTurn ? 'Your turn' : `${current.name}'s turn`} · ${currentColor?.name ?? ''} · draw a card, then move`
-      : 'Waiting for a player';
+    : !current
+      ? 'Waiting for a player'
+      : !sorry.drawn
+        ? `${yourTurn ? 'Your turn' : `${current.name}'s turn`} · ${currentColor?.name ?? ''} · click the deck`
+        : moves.length === 0
+          ? `${current.name} can't use this card. Click the deck to draw again.`
+          : `${yourTurn ? 'Your turn' : `${current.name}'s turn`} · ${currentColor?.name ?? ''} · play this card`;
 
   const apply = async (nextSorry: typeof sorry) => {
     const next: Game = {
@@ -172,7 +176,7 @@ export function SorryScreen({ navigation, route }: Props) {
   };
 
   const onDraw = async () => {
-    const next = drawCard(sorry);
+    const next = drawFromDeck(sorry, game.players);
     if (!next) return;
     await apply(next);
   };
@@ -325,7 +329,9 @@ export function SorryScreen({ navigation, route }: Props) {
               selectedPawn={selectedPawn}
               movablePawns={movablePawns}
               action={boardAction}
-              onDraw={finished || sorry.drawn ? undefined : () => void onDraw()}
+              onDraw={
+                finished || (sorry.drawn && moves.length > 0) ? undefined : () => void onDraw()
+              }
             />
             <Text style={styles.hint}>
               Clockwise track. A triangle in another color slides you and sends every pawn on that slide back to Start.
