@@ -147,3 +147,19 @@ export function slideTriangle(index: number): string {
 export function boardSlides(): SlideSpan[] {
   return slideSpans();
 }
+
+/** Position along a slide from its triangle to its end. `t` is 0 at the start and 1 at the end. */
+export function slidePoint(start: number, end: number, t: number): Point {
+  const steps = end - start;
+  if (steps <= 0) return trackPoint(start);
+  const clamped = Math.min(1, Math.max(0, t));
+  const scaled = clamped * steps;
+  const index = Math.min(steps - 1, Math.floor(scaled));
+  const local = scaled - index;
+  const from = trackPoint(start + index);
+  const to = trackPoint(start + index + 1);
+  return {
+    x: from.x + (to.x - from.x) * local,
+    y: from.y + (to.y - from.y) * local,
+  };
+}

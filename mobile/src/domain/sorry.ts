@@ -4,9 +4,10 @@ import type { Game, Player } from './models';
  * Pawn race with a 60-space track, safety lanes, and a 45-card deck.
  * Board geometry is original; the turn rules follow the familiar public card effects.
  *
- * Each color owns 15 clockwise spaces. Pawns leave Start at local 4, slide on the
- * triangles at local 1 (4 spaces) and local 9 (5 spaces), and turn into a 5-space
- * safety lane instead of landing on local 2.
+ * Each color owns 15 clockwise spaces. Pawns leave Start at local 4. Landing on
+ * another color's triangle at local 1 or local 9 slides you to the end of that
+ * slide (forward 3 or 4). Your own triangles do not slide. Forward moves turn
+ * into the 5-space safety lane instead of passing local 2.
  */
 
 export const TRACK_SPACES = 60;
@@ -37,6 +38,29 @@ export type SorryMove =
   | { type: 'switch'; pawn: number; targetPlayerId: string; targetPawn: number }
   | { type: 'sorry'; pawn: number; targetPlayerId: string; targetPawn: number };
 
+/** A pawn that landed on another color's triangle and rides to the end of that slide. */
+export type PawnSlide = {
+  playerId: string;
+  pawn: number;
+  start: number;
+  end: number;
+};
+
+/** One square a pawn visits while a move is shown. */
+export type TravelStop =
+  | { zone: 'track'; index: number }
+  | { zone: 'safety'; index: number }
+  | { zone: 'start' }
+  | { zone: 'home' };
+
+/** A pawn's path for the move animation. `delay` is how many squares to wait. */
+export type PawnTravel = {
+  playerId: string;
+  pawn: number;
+  stops: TravelStop[];
+  delay: number;
+};
+
 export type SorryState = {
   pawns: Record<string, PawnSpot[]>;
   colors: Record<string, number>;
@@ -46,6 +70,10 @@ export type SorryState = {
   drawn: CardKind | null;
   winnerId: string | null;
   lastAction: string | null;
+  /** Bumps on every move so a repeated move still animates. */
+  slideNonce: number;
+  pawnSlides: PawnSlide[];
+  pawnTravels: PawnTravel[];
 };
 
 export type SlideSpan = { colorIndex: number; start: number; end: number };
@@ -116,6 +144,9 @@ export function createSorryState(players: { id: string }[]): SorryState {
     drawn: null,
     winnerId: null,
     lastAction: null,
+    slideNonce: 0,
+    pawnSlides: [],
+    pawnTravels: [],
   };
 }
 
@@ -145,6 +176,19 @@ export function drawCard(state: SorryState): SorryState | null {
     discard,
     drawn,
   };
+}
+
+/**
+ * Draw from the deck. A face-up card that cannot be played is discarded first,
+ * then the player who is up draws. A card that still has a legal move stays put.
+ */
+export function drawFromDeck(state: SorryState, players: Player[]): SorryState | null {
+  if (state.winnerId) return null;
+  if (!state.drawn) return drawCard(state);
+  if (legalMoves(state, players).length > 0) return null;
+  const passed = passTurn(state, players);
+  if (!passed) return null;
+  return drawCard(passed) ?? passed;
 }
 
 export function legalMoves(state: SorryState, players: Player[]): SorryMove[] {
@@ -216,15 +260,20 @@ export function playMove(
   target: number,
 ): SorryState | null {
   if (!state.drawn || state.winnerId) return null;
-  const pawns = resolveMove(state, move);
+  const slides: { pawn: number; start: number; end: number }[] = [];
+  const pawns = resolveMove(state, move, slides);
   if (!pawns) return null;
   const card = state.drawn;
   const actor = players.find((player) => player.id === state.currentPlayerId);
   const won = countHome(pawns, state.currentPlayerId) >= Math.max(1, target);
   const drawAgain = card === 2 && !won;
+  const colorIndex = colorIndexFor(state, state.currentPlayerId);
   return {
     ...state,
     pawns,
+    slideNonce: (state.slideNonce ?? 0) + 1,
+    pawnSlides: slides.map((slide) => ({ ...slide, playerId: state.currentPlayerId })),
+    pawnTravels: describePawnTravels(state.pawns, pawns, move, state.currentPlayerId, colorIndex),
     drawn: null,
     discard: [...state.discard, card],
     currentPlayerId:
@@ -325,7 +374,11 @@ function cardAllows(card: CardKind, move: SorryMove): boolean {
   }
 }
 
-function resolveMove(state: SorryState, move: SorryMove): Record<string, PawnSpot[]> | null {
+function resolveMove(
+  state: SorryState,
+  move: SorryMove,
+  slides: { pawn: number; start: number; end: number }[] | null = null,
+): Record<string, PawnSpot[]> | null {
   if (!state.drawn || !cardAllows(state.drawn, move)) return null;
   const playerId = state.currentPlayerId;
   const mine = state.pawns[playerId];
@@ -342,6 +395,7 @@ function resolveMove(state: SorryState, move: SorryMove): Record<string, PawnSpo
         move.pawn,
         { zone: 'track', index: startExit(colorIndex) },
         true,
+        slides,
       );
     }
     case 'forward':
@@ -353,7 +407,15 @@ function resolveMove(state: SorryState, move: SorryMove): Record<string, PawnSpo
         move.type === 'forward' ? 'forward' : 'backward',
       );
       if (!dest) return null;
-      return place(state.pawns, playerId, colorIndex, move.pawn, dest, move.type === 'forward');
+      return place(
+        state.pawns,
+        playerId,
+        colorIndex,
+        move.pawn,
+        dest,
+        move.type === 'forward',
+        slides,
+      );
     }
     case 'split': {
       if (move.pawn === move.pawn2 || move.steps < 1 || move.steps2 < 1) return null;
@@ -361,11 +423,11 @@ function resolveMove(state: SorryState, move: SorryMove): Record<string, PawnSpo
       if (move.pawn2 < 0 || move.pawn2 >= mine.length) return null;
       const first = destination(mine[move.pawn], move.steps, colorIndex, 'forward');
       if (!first) return null;
-      const mid = place(state.pawns, playerId, colorIndex, move.pawn, first, true);
+      const mid = place(state.pawns, playerId, colorIndex, move.pawn, first, true, slides);
       if (!mid) return null;
       const second = destination(mid[playerId][move.pawn2], move.steps2, colorIndex, 'forward');
       if (!second) return null;
-      return place(mid, playerId, colorIndex, move.pawn2, second, true);
+      return place(mid, playerId, colorIndex, move.pawn2, second, true, slides);
     }
     case 'switch': {
       if (move.targetPlayerId === playerId) return null;
@@ -383,6 +445,7 @@ function resolveMove(state: SorryState, move: SorryMove): Record<string, PawnSpo
         move.pawn,
         { zone: 'track', index: theirs.index },
         false,
+        slides,
       );
     }
     case 'sorry': {
@@ -399,6 +462,7 @@ function resolveMove(state: SorryState, move: SorryMove): Record<string, PawnSpo
         move.pawn,
         { zone: 'track', index: theirs.index },
         false,
+        slides,
       );
     }
     default: {
@@ -447,6 +511,7 @@ function place(
   pawnIndex: number,
   dest: PawnSpot,
   allowSlide: boolean,
+  slides: { pawn: number; start: number; end: number }[] | null = null,
 ): Record<string, PawnSpot[]> | null {
   if (!pawns[playerId]?.[pawnIndex]) return null;
   const next = clonePawns(pawns);
@@ -478,6 +543,7 @@ function place(
   if (slide && slide.colorIndex !== colorIndex) {
     for (let index = slide.start; index <= slide.end; index++) clearTrack(next, index);
     next[playerId][pawnIndex] = { zone: 'track', index: slide.end };
+    slides?.push({ pawn: pawnIndex, start: slide.start, end: slide.end });
     return next;
   }
 
@@ -518,6 +584,202 @@ function clonePawns(pawns: Record<string, PawnSpot[]>): Record<string, PawnSpot[
     next[playerId] = spots.map((spot) => ({ ...spot }));
   }
   return next;
+}
+
+function describePawnTravels(
+  before: Record<string, PawnSpot[]>,
+  after: Record<string, PawnSpot[]>,
+  move: SorryMove,
+  playerId: string,
+  colorIndex: number,
+): PawnTravel[] {
+  if (move.type === 'switch' || move.type === 'sorry') {
+    return [
+      travelBetween(before, after, playerId, move.pawn, 0),
+      travelBetween(before, after, move.targetPlayerId, move.targetPawn, 0),
+    ].filter((travel): travel is PawnTravel => travel != null);
+  }
+
+  const legs: { pawn: number; direction: 'forward' | 'backward' | 'start'; steps: number }[] =
+    move.type === 'split'
+      ? [
+          { pawn: move.pawn, direction: 'forward', steps: move.steps },
+          { pawn: move.pawn2, direction: 'forward', steps: move.steps2 },
+        ]
+      : move.type === 'start'
+        ? [{ pawn: move.pawn, direction: 'start', steps: 0 }]
+        : [
+            {
+              pawn: move.pawn,
+              direction: move.type === 'backward' ? 'backward' : 'forward',
+              steps: move.steps,
+            },
+          ];
+
+  const travels: PawnTravel[] = [];
+  const claimed = new Set<string>();
+  let clock = 0;
+  for (const leg of legs) {
+    const origin = before[playerId]?.[leg.pawn];
+    const dest = after[playerId]?.[leg.pawn];
+    if (!origin || !dest) continue;
+    const stops = stopsFor(origin, dest, leg.direction, colorIndex);
+    if (stops.length < 2) continue;
+    travels.push({ playerId, pawn: leg.pawn, stops, delay: clock });
+    claimed.add(`${playerId}-${leg.pawn}`);
+    const bumps = bumpIndices(origin, dest, leg.direction, leg.steps, colorIndex);
+    for (const [id, spots] of Object.entries(before)) {
+      spots.forEach((spot, pawn) => {
+        const key = `${id}-${pawn}`;
+        if (claimed.has(key) || spot.zone !== 'track' || !bumps.includes(spot.index)) return;
+        if (after[id]?.[pawn]?.zone !== 'start') return;
+        const at = stops.findIndex((stop) => stop.zone === 'track' && stop.index === spot.index);
+        travels.push({
+          playerId: id,
+          pawn,
+          stops: [
+            { zone: 'track', index: spot.index },
+            { zone: 'start' },
+          ],
+          delay: clock + (at < 0 ? stops.length - 1 : at),
+        });
+        claimed.add(key);
+      });
+    }
+    clock += stops.length - 1;
+  }
+  return travels;
+}
+
+function travelBetween(
+  before: Record<string, PawnSpot[]>,
+  after: Record<string, PawnSpot[]>,
+  playerId: string,
+  pawn: number,
+  delay: number,
+): PawnTravel | null {
+  const origin = before[playerId]?.[pawn];
+  const dest = after[playerId]?.[pawn];
+  if (!origin || !dest || sameSpot(origin, dest)) return null;
+  return { playerId, pawn, stops: [toStop(origin), toStop(dest)], delay };
+}
+
+function stopsFor(
+  origin: PawnSpot,
+  dest: PawnSpot,
+  direction: 'forward' | 'backward' | 'start',
+  colorIndex: number,
+): TravelStop[] {
+  if (direction === 'start' || origin.zone === 'start' || dest.zone === 'start') {
+    return dedupeStops([toStop(origin), toStop(dest)]);
+  }
+  if (origin.zone === 'track' && direction === 'backward' && dest.zone === 'track') {
+    return walkTrack(origin.index, dest.index, -1);
+  }
+  if (origin.zone === 'track' && direction === 'backward' && (dest.zone === 'safety' || dest.zone === 'home')) {
+    const stops = walkTrack(origin.index, safetyGate(colorIndex), -1);
+    appendSafety(stops, dest);
+    return stops;
+  }
+  if (origin.zone === 'track' && (dest.zone === 'safety' || dest.zone === 'home')) {
+    return walkIntoSafety(origin.index, dest, colorIndex);
+  }
+  if (origin.zone === 'safety' && (dest.zone === 'safety' || dest.zone === 'home')) {
+    return walkSafety(origin.index, dest);
+  }
+  if (origin.zone === 'track' && dest.zone === 'track') {
+    return walkTrack(origin.index, dest.index, 1);
+  }
+  return dedupeStops([toStop(origin), toStop(dest)]);
+}
+
+function bumpIndices(
+  origin: PawnSpot,
+  dest: PawnSpot,
+  direction: 'forward' | 'backward' | 'start',
+  steps: number,
+  colorIndex: number,
+): number[] {
+  if (dest.zone !== 'track') return [];
+  if (direction === 'forward' && origin.zone === 'track') {
+    const landing = (origin.index + steps) % TRACK_SPACES;
+    const slide = slideSpans().find((span) => span.start === landing && span.colorIndex !== colorIndex);
+    if (slide && dest.index === slide.end) {
+      return Array.from({ length: slide.end - slide.start + 1 }, (_, offset) => slide.start + offset);
+    }
+  }
+  return [dest.index];
+}
+
+function walkTrack(from: number, to: number, dir: 1 | -1): TravelStop[] {
+  const stops: TravelStop[] = [{ zone: 'track', index: from }];
+  let cursor = from;
+  for (let guard = 0; guard < TRACK_SPACES && cursor !== to; guard++) {
+    cursor = (cursor + dir + TRACK_SPACES) % TRACK_SPACES;
+    stops.push({ zone: 'track', index: cursor });
+  }
+  return stops;
+}
+
+function walkIntoSafety(from: number, dest: PawnSpot, colorIndex: number): TravelStop[] {
+  const gate = safetyGate(colorIndex);
+  const stops: TravelStop[] = [{ zone: 'track', index: from }];
+  if (from !== gate) {
+    let cursor = from;
+    for (let guard = 0; guard < TRACK_SPACES; guard++) {
+      cursor = (cursor + 1) % TRACK_SPACES;
+      stops.push({ zone: 'track', index: cursor });
+      if (cursor === gate) break;
+    }
+  }
+  appendSafety(stops, dest);
+  return stops;
+}
+
+function walkSafety(from: number, dest: PawnSpot): TravelStop[] {
+  const stops: TravelStop[] = [];
+  for (let index = from; index < SAFETY_SPACES; index++) {
+    stops.push({ zone: 'safety', index });
+    if (dest.zone === 'safety' && index === dest.index) return stops;
+  }
+  if (dest.zone === 'home') stops.push({ zone: 'home' });
+  return stops;
+}
+
+function appendSafety(stops: TravelStop[], dest: PawnSpot) {
+  if (dest.zone === 'safety') {
+    for (let index = 0; index <= dest.index; index++) stops.push({ zone: 'safety', index });
+  } else if (dest.zone === 'home') {
+    for (let index = 0; index < SAFETY_SPACES; index++) stops.push({ zone: 'safety', index });
+    stops.push({ zone: 'home' });
+  }
+}
+
+function toStop(spot: PawnSpot): TravelStop {
+  if (spot.zone === 'track') return { zone: 'track', index: spot.index };
+  if (spot.zone === 'safety') return { zone: 'safety', index: spot.index };
+  if (spot.zone === 'home') return { zone: 'home' };
+  return { zone: 'start' };
+}
+
+function sameSpot(a: PawnSpot, b: PawnSpot): boolean {
+  if (a.zone !== b.zone) return false;
+  if ((a.zone === 'track' || a.zone === 'safety') && (b.zone === 'track' || b.zone === 'safety')) {
+    return a.index === b.index;
+  }
+  return true;
+}
+
+function dedupeStops(stops: TravelStop[]): TravelStop[] {
+  return stops.filter((stop, index) => index === 0 || !sameStop(stop, stops[index - 1]));
+}
+
+function sameStop(a: TravelStop, b: TravelStop): boolean {
+  if (a.zone !== b.zone) return false;
+  if ((a.zone === 'track' || a.zone === 'safety') && (b.zone === 'track' || b.zone === 'safety')) {
+    return a.index === b.index;
+  }
+  return true;
 }
 
 function spotIndex(spot: PawnSpot): number | undefined {
@@ -654,5 +916,56 @@ function repairSorryState(game: Game): SorryState {
     drawn,
     winnerId,
     lastAction: typeof previous?.lastAction === 'string' ? previous.lastAction : null,
+    slideNonce:
+      typeof previous?.slideNonce === 'number' && previous.slideNonce >= 0 ? previous.slideNonce : 0,
+    pawnSlides: cleanPawnSlides(previous?.pawnSlides),
+    pawnTravels: cleanPawnTravels(previous?.pawnTravels),
   };
+}
+
+function cleanPawnTravels(value: PawnTravel[] | undefined): PawnTravel[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (travel) =>
+      travel &&
+      typeof travel.playerId === 'string' &&
+      Number.isInteger(travel.pawn) &&
+      travel.pawn >= 0 &&
+      travel.pawn < PAWNS_PER_PLAYER &&
+      typeof travel.delay === 'number' &&
+      travel.delay >= 0 &&
+      Array.isArray(travel.stops) &&
+      travel.stops.length >= 2 &&
+      travel.stops.every(
+        (stop) =>
+          stop &&
+          (stop.zone === 'start' ||
+            stop.zone === 'home' ||
+            (stop.zone === 'track' &&
+              Number.isInteger(stop.index) &&
+              stop.index >= 0 &&
+              stop.index < TRACK_SPACES) ||
+            (stop.zone === 'safety' &&
+              Number.isInteger(stop.index) &&
+              stop.index >= 0 &&
+              stop.index < SAFETY_SPACES)),
+      ),
+  );
+}
+
+function cleanPawnSlides(value: PawnSlide[] | undefined): PawnSlide[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (slide) =>
+      slide &&
+      typeof slide.playerId === 'string' &&
+      Number.isInteger(slide.pawn) &&
+      slide.pawn >= 0 &&
+      slide.pawn < PAWNS_PER_PLAYER &&
+      Number.isInteger(slide.start) &&
+      Number.isInteger(slide.end) &&
+      slide.start >= 0 &&
+      slide.end > slide.start &&
+      slide.end < TRACK_SPACES,
+  );
 }

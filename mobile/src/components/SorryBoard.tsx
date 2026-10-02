@@ -1,15 +1,19 @@
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import type { ReactNode } from 'react';
 import Svg, { Circle, G, Polygon, Rect, Text as SvgText } from 'react-native-svg';
 import { SorryCard } from './SorryCard';
 import type { Player } from '../domain/models';
 import {
+  PAWNS_PER_PLAYER,
+  SAFETY_SPACES,
   SORRY_COLORS,
   TRACK_SPACES,
   colorIndexFor,
   slideSpans,
   type PawnSpot,
+  type PawnTravel,
   type SorryState,
+  type TravelStop,
 } from '../domain/sorry';
 import {
   gateChevron,
@@ -50,6 +54,9 @@ export function SorryBoard({ players, state, selectedPawn, movablePawns, action,
   const currentColor = colorIndexFor(state, state.currentPlayerId);
   const slides = slideSpans();
   const pieces = players.flatMap((player) => piecesFor(player, state));
+  const motion = usePawnMotion(state);
+  const moving = new Set((motion?.travels ?? []).map((travel) => `${travel.playerId}-${travel.pawn}`));
+  const resting = pieces.filter((piece) => !moving.has(piece.key));
 
   return (
     <View style={styles.frame}>
@@ -205,7 +212,7 @@ export function SorryBoard({ players, state, selectedPawn, movablePawns, action,
         })}
 
         <G transform="translate(15, 0) scale(-1, 1)">
-        {pieces.map((piece) => {
+        {resting.map((piece) => {
           const selected = piece.mine && selectedPawn === piece.pawnIndex;
           const movable = piece.mine && movablePawns.includes(piece.pawnIndex);
           return (
@@ -217,6 +224,21 @@ export function SorryBoard({ players, state, selectedPawn, movablePawns, action,
               fill={piece.fill}
               stroke={selected ? '#d4a84b' : movable ? '#fffaf0' : '#2a2118'}
               strokeWidth={selected || movable ? 0.1 : 0.04}
+            />
+          );
+        })}
+        {motion?.travels.map((travel) => {
+          const point = travelPosition(travel, motion.spaces, colorIndexFor(state, travel.playerId));
+          const color = SORRY_COLORS[colorIndexFor(state, travel.playerId)];
+          return (
+            <Circle
+              key={`move-${travel.playerId}-${travel.pawn}`}
+              cx={point.x}
+              cy={point.y}
+              r={0.34}
+              fill={color?.fill ?? '#2a2118'}
+              stroke="#fffaf0"
+              strokeWidth={0.08}
             />
           );
         })}
@@ -239,7 +261,7 @@ export function SorryBoard({ players, state, selectedPawn, movablePawns, action,
           );
         })}
 
-        {pieces.map((piece) => (
+        {resting.map((piece) => (
           <SvgText
             key={`n-${piece.key}`}
             x={15 - piece.point.x}
@@ -253,6 +275,24 @@ export function SorryBoard({ players, state, selectedPawn, movablePawns, action,
             {piece.pawnIndex + 1}
           </SvgText>
         ))}
+        {motion?.travels.map((travel) => {
+          const point = travelPosition(travel, motion.spaces, colorIndexFor(state, travel.playerId));
+          const color = SORRY_COLORS[colorIndexFor(state, travel.playerId)];
+          return (
+            <SvgText
+              key={`move-n-${travel.playerId}-${travel.pawn}`}
+              x={15 - point.x}
+              y={point.y + 0.12}
+              fontSize={0.32}
+              fontFamily="sans-serif"
+              fontWeight="700"
+              textAnchor="middle"
+              fill={color?.ink ?? '#fffaf0'}
+            >
+              {travel.pawn + 1}
+            </SvgText>
+          );
+        })}
       </Svg>
       <View style={styles.stacks} pointerEvents="box-none">
         <View style={styles.stackColumn} pointerEvents="box-none">
@@ -278,6 +318,106 @@ export function SorryBoard({ players, state, selectedPawn, movablePawns, action,
       </View>
     </View>
   );
+}
+
+const MS_PER_SPACE = 150;
+
+function usePawnMotion(state: SorryState): { travels: PawnTravel[]; spaces: number } | null {
+  const nonce = state.slideNonce ?? 0;
+  const bootNonce = useRef<number | null>(null);
+  const animRef = useRef<{ nonce: number; travels: PawnTravel[]; spaces: number; total: number } | null>(
+    null,
+  );
+  const [, setFrame] = useState(0);
+
+  if (bootNonce.current === null) {
+    bootNonce.current = nonce;
+  } else if (bootNonce.current !== nonce) {
+    bootNonce.current = nonce;
+    const travels = playableTravels(state.pawnTravels);
+    if (travels.length) {
+      const total = Math.max(
+        ...travels.map((travel) => travel.delay + Math.max(1, travel.stops.length - 1)),
+      );
+      animRef.current = { nonce, travels, spaces: 0, total };
+    } else {
+      animRef.current = null;
+    }
+  }
+
+  useEffect(() => {
+    const anim = animRef.current;
+    if (!anim || anim.nonce !== nonce) return;
+    const { total } = anim;
+    const started = performance.now();
+    let frame = 0;
+    const tick = (now: number) => {
+      const raw = Math.min(1, (now - started) / (total * MS_PER_SPACE));
+      if (raw >= 1) {
+        if (animRef.current?.nonce === nonce) animRef.current = null;
+        setFrame((value) => value + 1);
+        return;
+      }
+      if (animRef.current?.nonce === nonce) {
+        animRef.current = { ...animRef.current, spaces: raw * total };
+        setFrame((value) => value + 1);
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [nonce]);
+
+  const anim = animRef.current;
+  return anim && anim.nonce === nonce ? { travels: anim.travels, spaces: anim.spaces } : null;
+}
+
+function playableTravels(travels: PawnTravel[] | undefined): PawnTravel[] {
+  if (!Array.isArray(travels)) return [];
+  return travels.filter(
+    (travel) =>
+      travel &&
+      typeof travel.playerId === 'string' &&
+      Number.isInteger(travel.pawn) &&
+      travel.pawn >= 0 &&
+      travel.pawn < PAWNS_PER_PLAYER &&
+      typeof travel.delay === 'number' &&
+      travel.delay >= 0 &&
+      Array.isArray(travel.stops) &&
+      travel.stops.length >= 2 &&
+      travel.stops.every(isStop),
+  );
+}
+
+function isStop(stop: TravelStop): boolean {
+  if (!stop) return false;
+  if (stop.zone === 'start' || stop.zone === 'home') return true;
+  if (stop.zone === 'track') return Number.isInteger(stop.index) && stop.index >= 0 && stop.index < TRACK_SPACES;
+  if (stop.zone === 'safety') {
+    return Number.isInteger(stop.index) && stop.index >= 0 && stop.index < SAFETY_SPACES;
+  }
+  return false;
+}
+
+function travelPosition(travel: PawnTravel, spaces: number, colorIndex: number): Point {
+  const segments = Math.max(1, travel.stops.length - 1);
+  const clamped = Math.min(segments, Math.max(0, spaces - travel.delay));
+  const index = Math.min(segments - 1, Math.floor(clamped));
+  const frac = clamped >= segments ? 1 : clamped - index;
+  const from = stopPoint(colorIndex, travel.pawn, travel.stops[index]);
+  const next = travel.stops[index + 1] ?? travel.stops[index];
+  const to = stopPoint(colorIndex, travel.pawn, next);
+  return {
+    x: from.x + (to.x - from.x) * frac,
+    y: from.y + (to.y - from.y) * frac,
+  };
+}
+
+function stopPoint(colorIndex: number, pawnIndex: number, stop: TravelStop): Point {
+  if (stop.zone === 'track') return trackPoint(stop.index);
+  if (stop.zone === 'safety') return safetyPoint(colorIndex, stop.index);
+  if (stop.zone === 'home') return piecePoint(colorIndex, { zone: 'home' }, pawnIndex);
+  return startPoint(colorIndex, pawnIndex);
 }
 
 function DeckStack({ count }: { count: number }) {
