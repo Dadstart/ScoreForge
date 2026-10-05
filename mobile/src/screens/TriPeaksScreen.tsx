@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { FireworksOverlay } from '../components/FireworksOverlay';
@@ -190,7 +190,7 @@ export function TriPeaksScreen({ navigation, route }: Props) {
       <View
         style={[
           styles.screen,
-          { paddingTop: Math.max(insets.top, 10), paddingBottom: Math.max(insets.bottom, 10) },
+          { paddingTop: 8, paddingBottom: Math.max(insets.bottom, 10) },
         ]}
       >
         <View style={styles.header}>
@@ -207,7 +207,7 @@ export function TriPeaksScreen({ navigation, route }: Props) {
           {hintText ? <Text style={styles.action}>{hintText}</Text> : null}
         </View>
 
-        <ScrollView contentContainerStyle={wide ? styles.wide : styles.stack}>
+        <View style={wide ? styles.wide : styles.stack}>
           <View style={[styles.boardPane, wide && styles.boardPaneWide]}>
             <TriPeaksBoard
               state={tripeaks}
@@ -240,7 +240,7 @@ export function TriPeaksScreen({ navigation, route }: Props) {
             </View>
             {error ? <Text style={styles.error}>{error}</Text> : null}
           </View>
-        </ScrollView>
+        </View>
 
         {showCelebration ? (
           <FireworksOverlay
@@ -259,7 +259,7 @@ function pointsLabel(score: number): string {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, paddingHorizontal: space.md, gap: 8 },
+  screen: { paddingHorizontal: space.md, gap: 8 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   titleBlock: { flex: 1, gap: 4 },

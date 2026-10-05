@@ -1,7 +1,6 @@
 import { memo, useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -65,13 +64,12 @@ export function HomeScreen({ navigation }: Props) {
 
   return (
     <Screen>
-      <ScrollView
-        contentContainerStyle={[
+      <View
+        style={[
           styles.content,
-          { paddingTop: Math.max(insets.top, 16) + 8, paddingBottom: insets.bottom + 40 },
+          { paddingTop: 12, paddingBottom: insets.bottom + 40 },
         ]}
       >
-        <Text style={typography.brand}>ScoreForge</Text>
         <Text style={[typography.subtitle, styles.lead]}>
           Keep score together — share a code, everyone tracks their own points.
         </Text>
@@ -118,7 +116,7 @@ export function HomeScreen({ navigation }: Props) {
             </Text>
           </Card>
         ) : null}
-      </ScrollView>
+      </View>
     </Screen>
   );
 }

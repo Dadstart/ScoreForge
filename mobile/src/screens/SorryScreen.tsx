@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -302,7 +301,7 @@ export function SorryScreen({ navigation, route }: Props) {
         style={[
           styles.screen,
           {
-            paddingTop: Math.max(insets.top, 10),
+            paddingTop: 8,
             paddingBottom: Math.max(insets.bottom, 10),
           },
         ]}
@@ -321,7 +320,7 @@ export function SorryScreen({ navigation, route }: Props) {
           {sorry.lastAction ? <Text style={styles.action}>{sorry.lastAction}</Text> : null}
         </View>
 
-        <ScrollView contentContainerStyle={wide ? styles.wide : styles.stack}>
+        <View style={wide ? styles.wide : styles.stack}>
           <View style={[styles.boardPane, wide && styles.boardPaneWide]}>
             <SorryBoard
               players={game.players}
@@ -380,7 +379,7 @@ export function SorryScreen({ navigation, route }: Props) {
             </View>
             {error ? <Text style={styles.error}>{error}</Text> : null}
           </View>
-        </ScrollView>
+        </View>
 
         {showCelebration ? (
           <FireworksOverlay
@@ -534,7 +533,7 @@ function moveKey(move: SorryMove): string {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, paddingHorizontal: space.md, gap: 8 },
+  screen: { paddingHorizontal: space.md, gap: 8 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   banner: {

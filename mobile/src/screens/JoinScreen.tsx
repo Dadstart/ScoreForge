@@ -115,7 +115,7 @@ export function JoinScreen({ navigation, route }: Props) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, padding: space.lg, gap: 10 },
+  screen: { padding: space.lg, gap: 10 },
   section: { marginTop: 10, marginBottom: 4 },
   error: { color: colors.danger },
   row: { flexDirection: 'row', gap: 10, marginTop: 12 },

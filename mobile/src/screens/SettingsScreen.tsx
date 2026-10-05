@@ -128,7 +128,7 @@ export function SettingsScreen({ navigation, route }: Props) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, padding: space.lg, gap: 14 },
+  screen: { padding: space.lg, gap: 14 },
   group: { gap: 8 },
   ok: { alignSelf: 'flex-start', minWidth: 96 },
   row: {
