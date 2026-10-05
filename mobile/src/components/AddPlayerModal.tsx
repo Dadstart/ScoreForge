@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -27,6 +27,7 @@ export function AddPlayerModal({
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const pending = useRef(false);
 
   const close = () => {
     setName('');
@@ -36,6 +37,8 @@ export function AddPlayerModal({
   };
 
   const submit = async () => {
+    if (busy || pending.current) return;
+    pending.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -46,6 +49,8 @@ export function AddPlayerModal({
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not add player');
       setBusy(false);
+    } finally {
+      pending.current = false;
     }
   };
 
@@ -74,6 +79,9 @@ export function AddPlayerModal({
             autoCorrect={false}
             maxLength={40}
             editable={!busy}
+            returnKeyType="done"
+            blurOnSubmit={false}
+            onSubmitEditing={() => void submit()}
           />
           {error ? <Text style={styles.error}>{error}</Text> : null}
           <View style={styles.row}>
