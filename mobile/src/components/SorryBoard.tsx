@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Circle, G, Polygon, Rect, Text as SvgText } from 'react-native-svg';
 import { SorryCard } from './SorryCard';
+import { CardFlip, useFreshFaces } from './CardFlip';
 import type { Player } from '../domain/models';
 import {
   PAWNS_PER_PLAYER,
@@ -309,9 +310,7 @@ export function SorryBoard({ players, state, selectedPawn, movablePawns, action,
             ) : (
               <DeckStack count={state.deck.length} />
             )}
-            <View>
-              {state.drawn ? <SorryCard card={state.drawn} mini /> : <View style={styles.cardHole} />}
-            </View>
+            <DrawnCard card={state.drawn} />
           </View>
           <View style={styles.actionHit}>{action}</View>
         </View>
@@ -418,6 +417,23 @@ function stopPoint(colorIndex: number, pawnIndex: number, stop: TravelStop): Poi
   if (stop.zone === 'safety') return safetyPoint(colorIndex, stop.index);
   if (stop.zone === 'home') return piecePoint(colorIndex, { zone: 'home' }, pawnIndex);
   return startPoint(colorIndex, pawnIndex);
+}
+
+function DrawnCard({ card }: { card: SorryState['drawn'] }) {
+  const fresh = useFreshFaces(card == null ? [] : [String(card)]);
+  if (card == null) return <View style={styles.cardHole} />;
+  const id = String(card);
+  return (
+    <CardFlip
+      key={id}
+      up
+      play={fresh.has(id)}
+      width={118}
+      height={162}
+      front={<SorryCard card={card} mini />}
+      back={<SorryCard card="back" mini label={false} />}
+    />
+  );
 }
 
 function DeckStack({ count }: { count: number }) {

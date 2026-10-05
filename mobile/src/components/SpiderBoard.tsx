@@ -20,6 +20,7 @@ import {
   type SpiderState,
 } from '../domain/spider';
 import { colors, fonts, radii } from '../theme';
+import { CardFlip, flipDelay, isFaceUpCode, useFreshFaces } from './CardFlip';
 
 type Props = {
   state: SpiderState;
@@ -124,6 +125,11 @@ function Layout({ width, state, selection, disabled, onColumn, onStock, onDrop, 
     [state],
   );
   const deals = Math.floor(state.stock.length / 10);
+  const faceIds: string[] = [];
+  for (const column of state.tableau) {
+    for (const code of column) if (isFaceUpCode(code)) faceIds.push(code.toUpperCase());
+  }
+  const fresh = useFreshFaces(faceIds);
 
   return (
     <View style={{ width }}>
@@ -171,6 +177,8 @@ function Layout({ width, state, selection, disabled, onColumn, onStock, onDrop, 
             hover={hover === index}
             target={selection != null && destinations(state, selection).includes(index)}
             lifted={lift?.source.column === index ? lift.source.at : null}
+            fresh={fresh}
+            order={faceIds}
             canDrag={canDrag[index] ?? []}
             disabled={disabled}
             onColumn={onColumn}
@@ -205,6 +213,8 @@ function Column({
   hover,
   target,
   lifted,
+  fresh,
+  order,
   canDrag,
   disabled,
   onColumn,
@@ -222,6 +232,8 @@ function Column({
   hover: boolean;
   target: boolean;
   lifted: number | null;
+  fresh: ReadonlySet<string>;
+  order: readonly string[];
   canDrag: boolean[];
   disabled?: boolean;
   onColumn: (column: number, at: number) => void;
@@ -248,28 +260,26 @@ function Column({
           const allowed = canDrag[at] ?? false;
           const selected = selection?.column === column && at >= selection.at;
           const hidden = lifted != null && at >= lifted;
+          const id = code.toUpperCase();
+          const play = fresh.has(id);
           return (
-            <View key={`${code}-${at}`} style={[styles.stacked, { top: offsets[at], zIndex: at + 1, opacity: hidden ? 0 : 1 }]}>
-              {face?.up ? (
-                <CardFace
-                  code={code}
-                  width={cardWidth}
-                  height={cardHeight}
-                  selected={selected}
-                  target={(target || hover) && at === cards.length - 1}
-                  disabled={disabled}
-                  allowed={allowed}
-                  source={source}
-                  onPress={() => onColumn(column, at)}
-                  onBegin={onBegin}
-                  onMove={onMove}
-                  onEnd={onEnd}
-                />
-              ) : (
-                <View style={[styles.back, { width: cardWidth, height: cardHeight }]}>
-                  <View style={[styles.diamond, { width: cardWidth * 0.22, height: cardWidth * 0.22 }]} />
-                </View>
-              )}
+            <View key={id} style={[styles.stacked, { top: offsets[at], zIndex: play ? at + 20 : at + 1, opacity: hidden ? 0 : 1 }]}>
+              <CardFace
+                code={code}
+                width={cardWidth}
+                height={cardHeight}
+                selected={selected}
+                target={(target || hover) && at === cards.length - 1}
+                disabled={disabled || !face?.up}
+                allowed={allowed}
+                play={play}
+                delay={flipDelay(id, order, fresh)}
+                source={source}
+                onPress={() => onColumn(column, at)}
+                onBegin={onBegin}
+                onMove={onMove}
+                onEnd={onEnd}
+              />
             </View>
           );
         })
@@ -296,6 +306,8 @@ function CardFace({
   target,
   disabled,
   allowed,
+  play = false,
+  delay = 0,
   source,
   onPress,
   onBegin,
@@ -309,6 +321,8 @@ function CardFace({
   target?: boolean;
   disabled?: boolean;
   allowed: boolean;
+  play?: boolean;
+  delay?: number;
   source: SpiderSource;
   onPress: () => void;
   onBegin: (source: SpiderSource) => void;
@@ -318,29 +332,40 @@ function CardFace({
   const face = cardFace(code);
   if (!face) return null;
   const ink = face.red ? '#c23b3b' : '#1c1612';
-  const frame = [
-    styles.face,
-    { width, height },
-    selected && styles.selected,
-    target && styles.target,
-  ];
-  if (disabled) {
+  const frame = [styles.face, { width, height }, selected && styles.selected, target && styles.target];
+  const flip = (
+    <CardFlip
+      up={face.up}
+      play={play}
+      delay={delay}
+      width={width}
+      height={height}
+      front={
+        <View style={frame}>
+          <Text style={[styles.corner, { color: ink, fontSize: Math.max(10, width * 0.28) }]}>
+            {face.rankLabel}
+            {face.symbol}
+          </Text>
+          <Text style={[styles.pip, { color: ink, fontSize: Math.max(12, width * 0.4) }]}>{face.symbol}</Text>
+        </View>
+      }
+      back={
+        <View style={[styles.back, { width, height }]}>
+          <View style={[styles.diamond, { width: width * 0.22, height: width * 0.22 }]} />
+        </View>
+      }
+    />
+  );
+  if (!face.up || disabled) {
     return (
-      <View style={frame}>
-        <Text style={[styles.corner, { color: ink, fontSize: Math.max(10, width * 0.28) }]}>
-          {face.rankLabel}
-          {face.symbol}
-        </Text>
+      <View accessibilityLabel={face.up ? face.name : 'Face-down card'} style={{ width, height }}>
+        {flip}
       </View>
     );
   }
   return (
-    <Draggable source={source} label={face.name} allowed={allowed} style={frame} onTap={onPress} onBegin={onBegin} onMove={onMove} onEnd={onEnd}>
-      <Text style={[styles.corner, { color: ink, fontSize: Math.max(10, width * 0.28) }]}>
-        {face.rankLabel}
-        {face.symbol}
-      </Text>
-      <Text style={[styles.pip, { color: ink, fontSize: Math.max(12, width * 0.4) }]}>{face.symbol}</Text>
+    <Draggable source={source} label={face.name} allowed={allowed} style={{ width, height }} onTap={onPress} onBegin={onBegin} onMove={onMove} onEnd={onEnd}>
+      {flip}
     </Draggable>
   );
 }

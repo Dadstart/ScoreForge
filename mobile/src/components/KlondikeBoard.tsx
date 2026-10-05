@@ -19,6 +19,7 @@ import {
   type Source,
 } from '../domain/klondike';
 import { colors, fonts, radii } from '../theme';
+import { CardFlip, flipDelay, isFaceUpCode, useFreshFaces } from './CardFlip';
 
 type Props = {
   state: KlondikeState;
@@ -208,6 +209,15 @@ function Layout({
     return true;
   };
 
+  const faceIds: string[] = [];
+  for (const pile of state.tableau) {
+    for (const code of pile) if (isFaceUpCode(code)) faceIds.push(code.toUpperCase());
+  }
+  for (const code of state.waste) if (isFaceUpCode(code)) faceIds.push(code.toUpperCase());
+  for (const pile of state.foundations) {
+    for (const code of pile) if (isFaceUpCode(code)) faceIds.push(code.toUpperCase());
+  }
+  const fresh = useFreshFaces(faceIds);
   const active = lift?.source ?? selection;
   const targets = active && !disabled ? destinations(state, active) : [];
   const aimed = (pile: Dest['pile'], index: number) =>
@@ -241,6 +251,8 @@ function Layout({
           disabled={disabled}
           draggable={!disabled && canLandSomewhere(state, { pile: 'waste' })}
           lifted={lift?.source.pile === 'waste' ? lift : null}
+          fresh={fresh}
+          order={faceIds}
           onPress={() => {
             if (sendHome({ pile: 'waste' })) return;
             onWaste();
@@ -306,6 +318,8 @@ function Layout({
             column={index}
             lift={lift}
             state={state}
+            fresh={fresh}
+            order={faceIds}
             onPress={(at) => {
               if (sendHome({ pile: 'tableau', index, at })) return;
               onTableau(index, at);
@@ -343,6 +357,8 @@ function Column({
   column,
   lift,
   state,
+  fresh,
+  order,
   onPress,
   onLift,
   onMove,
@@ -360,6 +376,8 @@ function Column({
   column: number;
   lift: Lift | null;
   state: KlondikeState;
+  fresh: ReadonlySet<string>;
+  order: readonly string[];
   onPress: (at: number) => void;
   onLift: (source: Source) => void;
   onMove: (source: Source, dx: number, dy: number, pageX: number, pageY: number) => void;
@@ -400,9 +418,10 @@ function Column({
           lift.cover.index === column &&
           index >= pile.length - lift.cover.count;
         const hidden = (carried && !lift?.cover) || landed;
+        const id = code.toUpperCase();
         return (
           <View
-            key={`${code}-${index}`}
+            key={id}
             style={[
               styles.stacked,
               { top: offsets[index], zIndex: index + 1, opacity: hidden ? 0 : 1 },
@@ -417,6 +436,8 @@ function Column({
               hover={hover && index === pile.length - 1}
               disabled={disabled}
               draggable={!disabled && canLandSomewhere(state, source)}
+              play={fresh.has(id)}
+              delay={flipDelay(id, order, fresh)}
               source={source}
               onPress={() => onPress(index)}
               onLift={onLift}
@@ -479,6 +500,8 @@ function Waste({
   disabled,
   draggable,
   lifted,
+  fresh,
+  order,
   onPress,
   onLift,
   onMove,
@@ -492,6 +515,8 @@ function Waste({
   disabled?: boolean;
   draggable: boolean;
   lifted: Lift | null;
+  fresh: ReadonlySet<string>;
+  order: readonly string[];
   onPress: () => void;
   onLift: (source: Source) => void;
   onMove: (source: Source, dx: number, dy: number, pageX: number, pageY: number) => void;
@@ -508,10 +533,13 @@ function Waste({
       {shown.map((code, index) => {
         const top = index === shown.length - 1;
         const hidden = top && lifted != null && !lifted.cover;
+        const id = code.toUpperCase();
+        const play = fresh.has(id);
+        const delay = flipDelay(id, order, fresh);
         return (
           <View
-            key={`${code}-${index}`}
-            style={[styles.stacked, { left: index * peek, zIndex: top ? 20 : index + 1, opacity: hidden ? 0 : 1 }]}
+            key={id}
+            style={[styles.stacked, { left: index * peek, zIndex: play ? 24 : top ? 20 : index + 1, opacity: hidden ? 0 : 1 }]}
           >
             {top ? (
               <PlayingCard
@@ -521,6 +549,8 @@ function Waste({
                 selected={selected}
                 disabled={disabled}
                 draggable={draggable}
+                play={play}
+                delay={delay}
                 source={source}
                 onPress={onPress}
                 onLift={onLift}
@@ -528,7 +558,7 @@ function Waste({
                 onRelease={onRelease}
               />
             ) : (
-              <CardFace code={code} width={width} height={height} />
+              <CardFace code={code} width={width} height={height} play={play} delay={delay} />
             )}
           </View>
         );
@@ -546,6 +576,8 @@ function PlayingCard({
   hover,
   disabled,
   draggable,
+  play = false,
+  delay = 0,
   source,
   onPress,
   onLift,
@@ -560,6 +592,8 @@ function PlayingCard({
   hover?: boolean;
   disabled?: boolean;
   draggable?: boolean;
+  play?: boolean;
+  delay?: number;
   source?: Source;
   onPress: () => void;
   onLift?: (source: Source) => void;
@@ -569,21 +603,35 @@ function PlayingCard({
   const face = cardFace(code);
   const label = face ? (face.up ? face.name : 'Face-down card') : 'Card';
   const marks = [selected && styles.selected, (target || hover) && styles.target, hover && styles.hover];
-  const body = !face?.up ? (
-    <View style={[styles.diamond, { width: width * 0.28, height: width * 0.28 }]} />
-  ) : (
-    <CardInk face={face} width={width} />
+  const body = (
+    <CardFlip
+      up={Boolean(face?.up)}
+      play={play}
+      delay={delay}
+      width={width}
+      height={height}
+      front={
+        <View style={[styles.face, { width, height }, ...marks]}>
+          {face ? <CardInk face={face} width={width} /> : null}
+        </View>
+      }
+      back={
+        <View style={[styles.back, { width, height }, ...marks]}>
+          <View style={[styles.diamond, { width: width * 0.28, height: width * 0.28 }]} />
+        </View>
+      }
+    />
   );
-  const frame = [face?.up ? styles.face : styles.back, { width, height }, ...marks];
+  const hit = { width, height };
   if (draggable && source && onLift && onMove && onRelease) {
     return (
-      <Draggable source={source} label={label} style={frame} onTap={onPress} onLift={onLift} onMove={onMove} onRelease={onRelease}>
+      <Draggable source={source} label={label} style={hit} onTap={onPress} onLift={onLift} onMove={onMove} onRelease={onRelease}>
         {body}
       </Draggable>
     );
   }
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled} onPress={onPress} style={frame}>
+    <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled} onPress={onPress} style={hit}>
       {body}
     </Pressable>
   );
@@ -602,24 +650,39 @@ function CardInk({ face, width }: { face: NonNullable<ReturnType<typeof cardFace
   );
 }
 
-function CardFace({ code, width, height }: { code: string; width: number; height: number }) {
+function CardFace({
+  code,
+  width,
+  height,
+  play = false,
+  delay = 0,
+}: {
+  code: string;
+  width: number;
+  height: number;
+  play?: boolean;
+  delay?: number;
+}) {
   const face = cardFace(code);
-  if (!face?.up) {
-    return (
-      <View style={[styles.back, { width, height }]}>
-        <View style={[styles.diamond, { width: width * 0.28, height: width * 0.28 }]} />
-      </View>
-    );
-  }
-  const ink = face.red ? '#c23b3b' : '#1c1612';
+  if (!face) return null;
   return (
-    <View style={[styles.face, { width, height }]}>
-      <Text style={[styles.corner, { color: ink, fontSize: Math.max(12, width * 0.28) }]}>
-        {face.rankLabel}
-        {face.symbol}
-      </Text>
-      <Text style={[styles.pip, { color: ink, fontSize: Math.max(16, width * 0.46) }]}>{face.symbol}</Text>
-    </View>
+    <CardFlip
+      up={face.up}
+      play={play}
+      delay={delay}
+      width={width}
+      height={height}
+      front={
+        <View style={[styles.face, { width, height }]}>
+          <CardInk face={face} width={width} />
+        </View>
+      }
+      back={
+        <View style={[styles.back, { width, height }]}>
+          <View style={[styles.diamond, { width: width * 0.28, height: width * 0.28 }]} />
+        </View>
+      }
+    />
   );
 }
 

@@ -9,6 +9,7 @@ import {
   type Spot,
 } from '../domain/pyramid';
 import { colors, fonts, radii } from '../theme';
+import { CardFlip, isFaceUpCode, useFreshFaces } from './CardFlip';
 
 type Props = {
   state: PyramidState;
@@ -44,6 +45,13 @@ function Layout({ width, state, selection, disabled, onSpot, onStock }: Props & 
   const stride = cardWidth + GAP;
   const pyramidHeight = overlap * 6 + cardHeight;
   const partners = selection ? matches(state, selection) : [];
+  const faceIds: string[] = [];
+  for (const row of state.rows) {
+    for (const code of row) if (code && isFaceUpCode(code)) faceIds.push(code.toUpperCase());
+  }
+  for (const code of state.waste) if (isFaceUpCode(code)) faceIds.push(code.toUpperCase());
+  const fresh = useFreshFaces(faceIds);
+  const wasteCode = state.waste[state.waste.length - 1] ?? null;
 
   return (
     <View style={{ width, height: pyramidHeight + 16 + cardHeight }}>
@@ -91,7 +99,8 @@ function Layout({ width, state, selection, disabled, onSpot, onStock }: Props & 
           onPress={onStock}
         />
         <Waste
-          code={state.waste[state.waste.length - 1] ?? null}
+          code={wasteCode}
+          play={wasteCode != null && fresh.has(wasteCode.toUpperCase())}
           buried={Math.max(0, state.waste.length - 1)}
           width={cardWidth}
           height={cardHeight}
@@ -187,6 +196,7 @@ function Stock({
 
 function Waste({
   code,
+  play,
   buried,
   width,
   height,
@@ -196,6 +206,7 @@ function Waste({
   onPress,
 }: {
   code: string | null;
+  play: boolean;
   buried: number;
   width: number;
   height: number;
@@ -211,17 +222,49 @@ function Waste({
       </View>
     );
   }
+  const face = cardFace(code);
+  if (!face) return null;
+  const ink = face.red ? '#c23b3b' : '#1c1612';
   return (
     <View>
-      <PlayingCard
-        code={code}
-        width={width}
-        height={height}
-        selected={selected}
-        partner={partner}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={face.name}
+        accessibilityState={{ disabled: Boolean(disabled), selected: Boolean(selected) }}
         disabled={disabled}
         onPress={onPress}
-      />
+        style={{ width, height }}
+      >
+        <CardFlip
+          key={code}
+          up
+          play={play}
+          width={width}
+          height={height}
+          front={
+            <View
+              style={[
+                styles.face,
+                { width, height },
+                selected && styles.selected,
+                partner && styles.partner,
+                disabled && styles.covered,
+              ]}
+            >
+              <Text style={[styles.corner, { color: ink, fontSize: Math.max(11, width * 0.26) }]}>
+                {face.rankLabel}
+                {face.symbol}
+              </Text>
+              <Text style={[styles.pip, { color: ink, fontSize: Math.max(16, width * 0.42) }]}>{face.symbol}</Text>
+            </View>
+          }
+          back={
+            <View style={[styles.back, { width, height }]}>
+              <View style={[styles.diamond, { width: width * 0.28, height: width * 0.28 }]} />
+            </View>
+          }
+        />
+      </Pressable>
       {buried > 0 ? <Text style={styles.buried}>{buried} under</Text> : null}
     </View>
   );

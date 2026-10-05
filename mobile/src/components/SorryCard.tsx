@@ -6,15 +6,17 @@ type Props = {
   card: CardKind | 'back';
   compact?: boolean;
   mini?: boolean;
+  /** Face-down cards in the deck say “Deck”. A turning card leaves the word off. */
+  label?: boolean;
 };
 
-export function SorryCard({ card, compact, mini }: Props) {
+export function SorryCard({ card, compact, mini, label = true }: Props) {
   const size = mini ? styles.mini : compact ? styles.compact : styles.full;
   if (card === 'back') {
     return (
       <View style={[styles.face, styles.back, size, mini && styles.backMini]}>
         <View style={[styles.diamond, mini && styles.diamondMini]} />
-        <Text style={[styles.backLabel, mini && styles.backLabelMini]}>Deck</Text>
+        {label ? <Text style={[styles.backLabel, mini && styles.backLabelMini]}>Deck</Text> : null}
       </View>
     );
   }
