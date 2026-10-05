@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AddPlayerModal } from '../components/AddPlayerModal';
@@ -222,7 +222,7 @@ export function BackgammonScreen({ navigation, route }: Props) {
       <View
         style={[
           styles.screen,
-          { paddingTop: Math.max(insets.top, 10), paddingBottom: Math.max(insets.bottom, 10) },
+          { paddingTop: 8, paddingBottom: Math.max(insets.bottom, 10) },
         ]}
       >
         <View style={styles.header}>
@@ -241,7 +241,7 @@ export function BackgammonScreen({ navigation, route }: Props) {
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <ScrollView contentContainerStyle={wide ? styles.wide : styles.stack}>
+        <View style={wide ? styles.wide : styles.stack}>
           <View style={[styles.boardPane, wide && styles.boardPaneWide]}>
             <View style={styles.diceRow}>
               {board.dice ? (
@@ -341,7 +341,7 @@ export function BackgammonScreen({ navigation, route }: Props) {
               ) : null}
             </View>
           </View>
-        </ScrollView>
+        </View>
         {showCelebration ? (
           <FireworksOverlay winnerName={snapshot.winnerName} subtitle="Backgammon" onDismiss={dismissCelebration} />
         ) : null}
@@ -374,7 +374,7 @@ function Die({ value }: { value: number }) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, paddingHorizontal: space.md, gap: 8 },
+  screen: { paddingHorizontal: space.md, gap: 8 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   banner: {

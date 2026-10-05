@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -100,7 +99,7 @@ export function SetupScreen({ navigation }: Props) {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={styles.content}>
+      <View style={styles.content}>
         <Text style={[typography.section, styles.sectionFirst]}>Template</Text>
         <View style={styles.wrap}>
           {templates.map((t) => {
@@ -266,7 +265,7 @@ export function SetupScreen({ navigation }: Props) {
           />
           <Button label="Cancel" variant="ghost" onPress={() => navigation.goBack()} />
         </View>
-      </ScrollView>
+      </View>
     </Screen>
   );
 }

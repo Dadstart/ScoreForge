@@ -186,8 +186,8 @@ export function BoardScreen({ navigation, route }: Props) {
 
   return (
     <Screen>
-      <View style={styles.screen}>
-        <ScrollView contentContainerStyle={styles.content}>
+      <View>
+        <View style={styles.content}>
           <View style={styles.header}>
             <View style={{ flex: 1, gap: 4 }}>
               <Text style={typography.title}>{game.name}</Text>
@@ -300,7 +300,7 @@ export function BoardScreen({ navigation, route }: Props) {
               ))}
             </ScrollView>
           )}
-        </ScrollView>
+        </View>
 
         {enteringScore && localPlayer ? (
           <View style={styles.roundPanel}>
@@ -355,7 +355,6 @@ export function BoardScreen({ navigation, route }: Props) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1 },
   content: { padding: space.lg, paddingBottom: 24, gap: 12 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AddPlayerModal } from '../components/AddPlayerModal';
@@ -150,15 +150,14 @@ export function YahtzeeScreen({ navigation, route }: Props) {
 
   return (
     <Screen>
-      <ScrollView
-        contentContainerStyle={[
+      <View
+        style={[
           styles.content,
           {
-            paddingTop: Math.max(insets.top, 12),
+            paddingTop: 8,
             paddingBottom: Math.max(insets.bottom, 28),
           },
         ]}
-        keyboardShouldPersistTaps="handled"
       >
         <View style={styles.header}>
           <View style={{ flex: 1, gap: 4 }}>
@@ -219,7 +218,7 @@ export function YahtzeeScreen({ navigation, route }: Props) {
           Upper section bonus is {UPPER_BONUS} once that section reaches {UPPER_BONUS_AT}. After a 50 in
           Yahtzee, each other five-of-a-kind adds 100. Enter 0 to scratch a box. Highest total wins.
         </Text>
-      </ScrollView>
+      </View>
 
       <YahtzeeScoreModal
         visible={editing != null && editingBox != null && !locked}

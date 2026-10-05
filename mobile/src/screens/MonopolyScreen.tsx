@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -7,7 +7,7 @@ import { MonopolyBoard } from '../components/MonopolyBoard';
 import { FireworksOverlay } from '../components/FireworksOverlay';
 import { OptionSelect } from '../components/OptionSelect';
 import { ShareCodePanel } from '../components/ShareCodePanel';
-import { Badge, Button, Card, Field, Screen } from '../components/ui';
+import { Badge, Button, Card, Field, Screen, usePageScroll } from '../components/ui';
 import { withoutPlayer } from '../domain/addPlayer';
 import { findLocalPlayerId } from '../domain/localPlayer';
 import { type Game, createScoreEvent } from '../domain/models';
@@ -77,6 +77,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
   const [settings] = useSettings();
   const showBoard = settings.showMonopolyBoard;
   const [boardDragging, setBoardDragging] = useState(false);
+  usePageScroll(!boardDragging);
   const [landNote, setLandNote] = useState<string | null>(null);
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
   const [confirmingRemoveId, setConfirmingRemoveId] = useState<string | null>(null);
@@ -367,16 +368,14 @@ export function MonopolyScreen({ navigation, route }: Props) {
 
   return (
     <Screen>
-      <ScrollView
-        contentContainerStyle={[
+      <View
+        style={[
           styles.content,
           {
-            paddingTop: Math.max(insets.top, 12),
+            paddingTop: 8,
             paddingBottom: Math.max(insets.bottom, 24),
           },
         ]}
-        keyboardShouldPersistTaps="handled"
-        scrollEnabled={!boardDragging}
       >
         <View style={styles.header}>
           <View style={{ flex: 1, gap: 4 }}>
@@ -684,7 +683,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
             style={{ alignSelf: 'stretch' }}
           />
         </Card>
-      </ScrollView>
+      </View>
 
       {showCelebration ? (
         <FireworksOverlay

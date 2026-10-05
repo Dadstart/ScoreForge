@@ -1,16 +1,34 @@
-import type { ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { useHeaderHeight } from '@react-navigation/elements';
 import {
   ActivityIndicator,
+  Image,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
   type StyleProp,
   type TextInputProps,
   type ViewStyle,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fonts, radii, space, typography } from '../theme';
+
+const logo = require('../../assets/logo.jpg');
+
+const PageScrollContext = createContext<(enabled: boolean) => void>(() => {});
+
+/** Keep the page still while a card or piece is dragged. */
+export function usePageScroll(enabled: boolean) {
+  const setEnabled = useContext(PageScrollContext);
+  useEffect(() => {
+    setEnabled(enabled);
+    return () => setEnabled(true);
+  }, [enabled, setEnabled]);
+}
 
 export function Screen({
   children,
@@ -19,12 +37,38 @@ export function Screen({
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
+  const insets = useSafeAreaInsets();
+  const headerHeight = useHeaderHeight();
+  const window = useWindowDimensions();
+  const [scrollEnabled, setScrollEnabled] = useState(true);
+  const topInset = headerHeight > 0 ? 0 : insets.top;
+  const compact = window.height < 520;
+
   return (
-    <View style={[styles.screen, style]}>
-      <View pointerEvents="none" style={styles.glowTop} />
-      <View pointerEvents="none" style={styles.glowCorner} />
-      <View style={styles.screenInner}>{children}</View>
-    </View>
+    <PageScrollContext.Provider value={setScrollEnabled}>
+      <View style={[styles.screen, style]}>
+        <View pointerEvents="none" style={styles.glowTop} />
+        <View pointerEvents="none" style={styles.glowCorner} />
+        <ScrollView
+          style={styles.screenScroll}
+          contentContainerStyle={[styles.page, { paddingTop: topInset }]}
+          keyboardShouldPersistTaps="handled"
+          scrollEnabled={scrollEnabled}
+        >
+          <View style={[styles.logoBar, compact && styles.logoBarCompact]}>
+            <View style={[styles.logoFrame, compact && styles.logoFrameCompact]}>
+              <Image
+                source={logo}
+                accessibilityLabel="ScoreForge"
+                resizeMode="contain"
+                style={styles.logo}
+              />
+            </View>
+          </View>
+          {children}
+        </ScrollView>
+      </View>
+    </PageScrollContext.Provider>
   );
 }
 
@@ -146,11 +190,37 @@ export function Field(props: TextInputProps & { mono?: boolean }) {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
+    minHeight: 0,
     backgroundColor: colors.bg,
     overflow: 'hidden',
   },
-  screenInner: {
+  screenScroll: {
     flex: 1,
+    minHeight: 0,
+  },
+  page: {
+    flexGrow: 1,
+  },
+  logoBar: {
+    backgroundColor: '#014629',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  logoBarCompact: {
+    paddingVertical: 2,
+  },
+  logoFrame: {
+    width: '100%',
+    maxWidth: 420,
+    aspectRatio: 1024 / 341,
+  },
+  logoFrameCompact: {
+    maxWidth: 240,
+  },
+  logo: {
+    width: '100%',
+    height: '100%',
   },
   glowTop: {
     position: 'absolute',

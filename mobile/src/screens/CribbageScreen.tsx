@@ -189,7 +189,7 @@ export function CribbageScreen({ navigation, route }: Props) {
         style={[
           styles.screen,
           {
-            paddingTop: Math.max(insets.top, 10),
+            paddingTop: 8,
             paddingBottom: Math.max(insets.bottom, 10),
           },
         ]}
@@ -280,7 +280,7 @@ export function CribbageScreen({ navigation, route }: Props) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, paddingHorizontal: space.md, gap: 8 },
+  screen: { paddingHorizontal: space.md, gap: 8 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   banner: {
@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
   bannerText: { ...typography.label, fontSize: 15 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   error: { color: colors.danger },
-  boardWrap: { flex: 1, minHeight: 180 },
+  boardWrap: { minHeight: 180 },
   controls: {
     backgroundColor: colors.surface,
     borderRadius: radii.lg,
