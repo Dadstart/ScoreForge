@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AddPlayerModal } from '../components/AddPlayerModal';
 import { FireworksOverlay } from '../components/FireworksOverlay';
+import { PlaySpark } from '../components/PlaySpark';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { SorryBoard } from '../components/SorryBoard';
 import { Badge, Button, Screen } from '../components/ui';
@@ -32,6 +33,7 @@ import {
   type SorryMove,
 } from '../domain/sorry';
 import { getTemplate } from '../domain/templates';
+import { usePlaySpark } from '../hooks/usePlaySpark';
 import { useWinCelebration } from '../hooks/useWinCelebration';
 import { loadDisplayName } from '../storage/displayNameStore';
 import { addPlayerToGame, preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
@@ -61,6 +63,7 @@ export function SorryScreen({ navigation, route }: Props) {
     endSuppress,
     noteLocalResult,
   } = useWinCelebration();
+  const { sparks, spark } = usePlaySpark();
 
   useEffect(() => {
     void loadDisplayName().then(setDisplayName);
@@ -104,11 +107,23 @@ export function SorryScreen({ navigation, route }: Props) {
 
   const sorry = game?.sorry ?? null;
   const drawnKey = sorry?.drawn ?? null;
+  const priorSorry = useRef<NonNullable<Game['sorry']> | null>(null);
   useEffect(() => {
     setSelectedPawn(null);
     setSorryMenu(false);
     setConfirmReset(false);
   }, [drawnKey, sorry?.currentPlayerId]);
+  useEffect(() => {
+    const prior = priorSorry.current;
+    priorSorry.current = sorry;
+    if (!prior || !sorry || !game) return;
+    const gained = game.players.reduce(
+      (sum, player) => sum + homeCount(sorry, player.id) - homeCount(prior, player.id),
+      0,
+    );
+    if (gained === 1) spark('Home!', 'green');
+    else if (gained > 1) spark(`${gained} home`, 'green');
+  }, [sorry, game, spark]);
 
   const moves = useMemo(
     () => (sorry && game ? legalMoves(sorry, game.players) : []),
@@ -381,6 +396,7 @@ export function SorryScreen({ navigation, route }: Props) {
           </View>
         </View>
 
+        <PlaySpark sparks={sparks} />
         {showCelebration ? (
           <FireworksOverlay
             winnerName={snapshot.winnerName}

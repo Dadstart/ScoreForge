@@ -5,6 +5,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AddPlayerModal } from '../components/AddPlayerModal';
 import { ChineseCheckersBoard, goalCorners } from '../components/ChineseCheckersBoard';
 import { FireworksOverlay } from '../components/FireworksOverlay';
+import { PlaySpark } from '../components/PlaySpark';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Screen } from '../components/ui';
 import {
@@ -36,6 +37,7 @@ import { findLocalPlayerId } from '../domain/localPlayer';
 import type { Game } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
+import { usePlaySpark } from '../hooks/usePlaySpark';
 import { useWinCelebration } from '../hooks/useWinCelebration';
 import type { RootStackParamList } from '../navigation/types';
 import { loadDisplayName } from '../storage/displayNameStore';
@@ -68,6 +70,7 @@ export function ChineseCheckersScreen({ navigation, route }: Props) {
     endSuppress,
     noteLocalResult,
   } = useWinCelebration();
+  const { sparks, spark } = usePlaySpark();
 
   useEffect(() => {
     void loadDisplayName().then(setDisplayName);
@@ -110,6 +113,15 @@ export function ChineseCheckersScreen({ navigation, route }: Props) {
   }, [game]);
 
   const chinese = game?.chinese ?? null;
+  const priorChinese = useRef<ChineseState | null>(null);
+  useEffect(() => {
+    const prior = priorChinese.current;
+    priorChinese.current = chinese;
+    if (!prior || !chinese) return;
+    const gained = homesArrived(prior, chinese);
+    if (gained === 1) spark('Home!', 'green');
+    else if (gained > 1) spark(`${gained} home`, 'green');
+  }, [chinese, spark]);
   const setupKey = chinese
     ? `${chinese.playerCount}|${chinese.mode}|${chinese.sets}|${chinese.twoSetGoals}`
     : '';
@@ -469,6 +481,7 @@ export function ChineseCheckersScreen({ navigation, route }: Props) {
           </View>
         </View>
 
+        <PlaySpark sparks={sparks} />
         {showCelebration ? (
           <FireworksOverlay
             winnerName={snapshot.winnerName}
@@ -491,6 +504,16 @@ export function ChineseCheckersScreen({ navigation, route }: Props) {
       </View>
     </Screen>
   );
+}
+
+function homesArrived(before: ChineseState, after: ChineseState): number {
+  const seats = Math.max(before.playerCount, after.playerCount);
+  let gained = 0;
+  for (let seat = 0; seat < seats; seat++) {
+    const delta = homeProgress(after, seat).home - homeProgress(before, seat).home;
+    if (delta > 0) gained += delta;
+  }
+  return gained;
 }
 
 function Choice({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {

@@ -5,6 +5,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AddPlayerModal } from '../components/AddPlayerModal';
 import { CheckersBoard } from '../components/CheckersBoard';
 import { FireworksOverlay } from '../components/FireworksOverlay';
+import { PlaySpark } from '../components/PlaySpark';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Screen } from '../components/ui';
 import {
@@ -25,6 +26,7 @@ import { findLocalPlayerId } from '../domain/localPlayer';
 import type { Game } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
+import { usePlaySpark } from '../hooks/usePlaySpark';
 import { useWinCelebration } from '../hooks/useWinCelebration';
 import type { RootStackParamList } from '../navigation/types';
 import { loadDisplayName } from '../storage/displayNameStore';
@@ -54,6 +56,7 @@ export function CheckersScreen({ navigation, route }: Props) {
     endSuppress,
     noteLocalResult,
   } = useWinCelebration();
+  const { sparks, spark } = usePlaySpark();
 
   useEffect(() => {
     void loadDisplayName().then(setDisplayName);
@@ -96,6 +99,18 @@ export function CheckersScreen({ navigation, route }: Props) {
   }, [game]);
 
   const checkers = game?.checkers ?? null;
+  const priorCheckers = useRef<CheckersState | null>(null);
+  useEffect(() => {
+    const prior = priorCheckers.current;
+    priorCheckers.current = checkers;
+    if (!prior || !checkers) return;
+    const captured = prior.pieces.length - checkers.pieces.length;
+    const crowned =
+      checkers.pieces.filter((piece) => piece.kind === 'king').length -
+      prior.pieces.filter((piece) => piece.kind === 'king').length;
+    if (captured > 0) spark(captured > 1 ? `${captured} jumps` : 'Jump!', 'rose');
+    else if (crowned > 0) spark('King!', 'gold');
+  }, [checkers, spark]);
   const turnKey = checkers?.turn ?? null;
   const chainKey = checkers?.chain ? `${checkers.chain.row},${checkers.chain.col}` : '';
   const moveKey = checkers?.lastMove ? `${checkers.lastMove.toRow},${checkers.lastMove.toCol}` : '';
@@ -385,6 +400,7 @@ export function CheckersScreen({ navigation, route }: Props) {
           </View>
         </View>
 
+        <PlaySpark sparks={sparks} />
         {showCelebration ? (
           <FireworksOverlay
             winnerName={snapshot.winnerName}

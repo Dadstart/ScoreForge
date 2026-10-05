@@ -5,6 +5,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AddPlayerModal } from '../components/AddPlayerModal';
 import { BackgammonBoard } from '../components/BackgammonBoard';
 import { FireworksOverlay } from '../components/FireworksOverlay';
+import { PlaySpark } from '../components/PlaySpark';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Screen } from '../components/ui';
 import {
@@ -28,6 +29,7 @@ import { findLocalPlayerId } from '../domain/localPlayer';
 import type { Game } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
+import { usePlaySpark } from '../hooks/usePlaySpark';
 import { useWinCelebration } from '../hooks/useWinCelebration';
 import type { RootStackParamList } from '../navigation/types';
 import { loadDisplayName } from '../storage/displayNameStore';
@@ -52,6 +54,7 @@ export function BackgammonScreen({ navigation, route }: Props) {
   const saving = useRef(false);
   const { showCelebration, onSnapshot, dismissCelebration, beginSuppress, endSuppress, noteLocalResult } =
     useWinCelebration();
+  const { sparks, spark } = usePlaySpark();
 
   useEffect(() => {
     void loadDisplayName().then(setDisplayName);
@@ -88,6 +91,16 @@ export function BackgammonScreen({ navigation, route }: Props) {
   }, [game]);
 
   const board = game?.backgammon ?? null;
+  const priorBoard = useRef<BackgammonState | null>(null);
+  useEffect(() => {
+    const prior = priorBoard.current;
+    priorBoard.current = board;
+    if (!prior || !board) return;
+    const borne = board.off.light + board.off.dark - (prior.off.light + prior.off.dark);
+    const hits = board.bar.light + board.bar.dark - (prior.bar.light + prior.bar.dark);
+    if (borne > 0) spark(borne > 1 ? `${borne} off` : 'Off!', 'green');
+    else if (hits > 0) spark(hits > 1 ? `${hits} hits` : 'Hit!', 'rose');
+  }, [board, spark]);
   const turnKey = board?.turn ?? null;
   const diceKey = board?.dice?.join('-') ?? '';
   const remainingKey = board?.remaining.join('-') ?? '';
@@ -342,6 +355,7 @@ export function BackgammonScreen({ navigation, route }: Props) {
             </View>
           </View>
         </View>
+        <PlaySpark sparks={sparks} />
         {showCelebration ? (
           <FireworksOverlay winnerName={snapshot.winnerName} subtitle="Backgammon" onDismiss={dismissCelebration} />
         ) : null}

@@ -3,6 +3,7 @@ import { ActivityIndicator, StyleSheet, Text, useWindowDimensions, View } from '
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { FireworksOverlay } from '../components/FireworksOverlay';
+import { PlaySpark } from '../components/PlaySpark';
 import { PyramidBoard } from '../components/PyramidBoard';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Button, Screen } from '../components/ui';
@@ -23,6 +24,7 @@ import {
 } from '../domain/pyramid';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
+import { usePlaySpark } from '../hooks/usePlaySpark';
 import { useWinCelebration } from '../hooks/useWinCelebration';
 import type { RootStackParamList } from '../navigation/types';
 import { preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
@@ -50,6 +52,7 @@ export function PyramidScreen({ navigation, route }: Props) {
     endSuppress,
     noteLocalResult,
   } = useWinCelebration();
+  const { sparks, spark } = usePlaySpark();
 
   useEffect(() => {
     const unsub = subscribeGame(
@@ -90,11 +93,20 @@ export function PyramidScreen({ navigation, route }: Props) {
 
   const pyramid = game?.pyramid ?? null;
   const moveKey = `${pyramid?.moves ?? 0}|${pyramid?.won ?? false}|${pyramid?.lastAction ?? ''}`;
+  const priorPyramid = useRef<PyramidState | null>(null);
   useEffect(() => {
     setSelection(null);
     setHintText(null);
     setConfirmDeal(false);
   }, [moveKey]);
+  useEffect(() => {
+    const prior = priorPyramid.current;
+    priorPyramid.current = pyramid;
+    if (!prior || !pyramid) return;
+    const removed = pyramid.removed.length - prior.removed.length;
+    if (removed === 1) spark('King!', 'gold');
+    else if (removed > 1) spark('Pair!', 'gold');
+  }, [pyramid, spark]);
 
   const persist = async (next: Game, celebrate: boolean) => {
     if (!template || saving.current) return;
@@ -256,6 +268,7 @@ export function PyramidScreen({ navigation, route }: Props) {
           </View>
         </View>
 
+        <PlaySpark sparks={sparks} />
         {showCelebration ? (
           <FireworksOverlay
             winnerName={snapshot.winnerName}

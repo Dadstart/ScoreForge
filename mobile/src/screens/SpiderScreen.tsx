@@ -3,6 +3,7 @@ import { ActivityIndicator, StyleSheet, Text, useWindowDimensions, View } from '
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { FireworksOverlay } from '../components/FireworksOverlay';
+import { PlaySpark } from '../components/PlaySpark';
 import { SpiderBoard } from '../components/SpiderBoard';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Screen, usePageScroll } from '../components/ui';
@@ -23,6 +24,7 @@ import {
   type SuitCount,
 } from '../domain/spider';
 import { getTemplate } from '../domain/templates';
+import { usePlaySpark } from '../hooks/usePlaySpark';
 import { useWinCelebration } from '../hooks/useWinCelebration';
 import type { RootStackParamList } from '../navigation/types';
 import { preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
@@ -52,6 +54,7 @@ export function SpiderScreen({ navigation, route }: Props) {
     endSuppress,
     noteLocalResult,
   } = useWinCelebration();
+  const { sparks, spark } = usePlaySpark();
 
   useEffect(() => {
     const unsub = subscribeGame(
@@ -92,11 +95,20 @@ export function SpiderScreen({ navigation, route }: Props) {
 
   const spider = game?.spider ?? null;
   const moveKey = `${spider?.moves ?? 0}|${spider?.won ?? false}|${spider?.lastAction ?? ''}`;
+  const priorSpider = useRef<SpiderState | null>(null);
   useEffect(() => {
     setSelection(null);
     setHintText(null);
     setConfirmDeal(false);
   }, [moveKey]);
+  useEffect(() => {
+    const prior = priorSpider.current;
+    priorSpider.current = spider;
+    if (!prior || !spider) return;
+    const added = spider.completed.length - prior.completed.length;
+    if (added === 1) spark('Suit!', 'gold');
+    else if (added > 1) spark(`${added} suits`, 'gold');
+  }, [spider, spark]);
 
   const persist = async (next: Game, celebrate: boolean) => {
     if (!template || saving.current) return;
@@ -261,6 +273,7 @@ export function SpiderScreen({ navigation, route }: Props) {
           </View>
         </View>
 
+        <PlaySpark sparks={sparks} />
         {showCelebration ? (
           <FireworksOverlay winnerName={snapshot.winnerName} subtitle="Spider" onDismiss={dismissCelebration} />
         ) : null}

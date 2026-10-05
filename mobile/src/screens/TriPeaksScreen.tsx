@@ -3,6 +3,7 @@ import { ActivityIndicator, StyleSheet, Text, useWindowDimensions, View } from '
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { FireworksOverlay } from '../components/FireworksOverlay';
+import { PlaySpark } from '../components/PlaySpark';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { TriPeaksBoard } from '../components/TriPeaksBoard';
 import { Button, Screen } from '../components/ui';
@@ -22,6 +23,7 @@ import {
 } from '../domain/tripeaks';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
+import { usePlaySpark } from '../hooks/usePlaySpark';
 import { useWinCelebration } from '../hooks/useWinCelebration';
 import type { RootStackParamList } from '../navigation/types';
 import { preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
@@ -48,6 +50,7 @@ export function TriPeaksScreen({ navigation, route }: Props) {
     endSuppress,
     noteLocalResult,
   } = useWinCelebration();
+  const { sparks, spark } = usePlaySpark();
 
   useEffect(() => {
     const unsub = subscribeGame(
@@ -88,10 +91,20 @@ export function TriPeaksScreen({ navigation, route }: Props) {
 
   const tripeaks = game?.tripeaks ?? null;
   const moveKey = `${tripeaks?.moves ?? 0}|${tripeaks?.won ?? false}|${tripeaks?.lastAction ?? ''}`;
+  const priorTriPeaks = useRef<TriPeaksState | null>(null);
   useEffect(() => {
     setHintText(null);
     setConfirmDeal(false);
   }, [moveKey]);
+  useEffect(() => {
+    const prior = priorTriPeaks.current;
+    priorTriPeaks.current = tripeaks;
+    if (!prior || !tripeaks) return;
+    const gained = tripeaks.score - prior.score;
+    if (gained <= 0) return;
+    const peak = tripeaks.lastAction.includes('peak');
+    spark(peak ? 'Peak!' : `+${gained}`, peak ? 'green' : 'gold');
+  }, [tripeaks, spark]);
 
   const persist = async (next: Game, celebrate: boolean) => {
     if (!template || saving.current) return;
@@ -242,6 +255,7 @@ export function TriPeaksScreen({ navigation, route }: Props) {
           </View>
         </View>
 
+        <PlaySpark sparks={sparks} />
         {showCelebration ? (
           <FireworksOverlay
             winnerName={snapshot.winnerName}

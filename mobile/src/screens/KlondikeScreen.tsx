@@ -4,11 +4,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { FireworksOverlay } from '../components/FireworksOverlay';
 import { KlondikeBoard } from '../components/KlondikeBoard';
+import { PlaySpark } from '../components/PlaySpark';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Screen, usePageScroll } from '../components/ui';
 import {
   buildFoundation,
   canFinish,
+  cardFace,
   createKlondikeState,
   drawStock,
   ensureKlondikeState,
@@ -25,6 +27,7 @@ import {
 import type { Game } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
+import { usePlaySpark } from '../hooks/usePlaySpark';
 import { useWinCelebration } from '../hooks/useWinCelebration';
 import type { RootStackParamList } from '../navigation/types';
 import { preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
@@ -54,6 +57,7 @@ export function KlondikeScreen({ navigation, route }: Props) {
     endSuppress,
     noteLocalResult,
   } = useWinCelebration();
+  const { sparks, spark } = usePlaySpark();
 
   useEffect(() => {
     const unsub = subscribeGame(
@@ -94,11 +98,19 @@ export function KlondikeScreen({ navigation, route }: Props) {
 
   const klondike = game?.klondike ?? null;
   const moveKey = `${klondike?.moves ?? 0}|${klondike?.won ?? false}|${klondike?.lastAction ?? ''}`;
+  const priorKlondike = useRef<KlondikeState | null>(null);
   useEffect(() => {
     setSelection(null);
     setHintText(null);
     setConfirmDeal(false);
   }, [moveKey]);
+  useEffect(() => {
+    const prior = priorKlondike.current;
+    priorKlondike.current = klondike;
+    if (!prior || !klondike) return;
+    const cheer = foundationCheer(prior, klondike);
+    if (cheer) spark(cheer.label, cheer.tone);
+  }, [klondike, spark]);
 
   const persist = async (next: Game, celebrate: boolean) => {
     if (!template || saving.current) return;
@@ -296,6 +308,7 @@ export function KlondikeScreen({ navigation, route }: Props) {
           </View>
         </View>
 
+        <PlaySpark sparks={sparks} />
         {showCelebration ? (
           <FireworksOverlay
             winnerName={snapshot.winnerName}
@@ -306,6 +319,26 @@ export function KlondikeScreen({ navigation, route }: Props) {
       </View>
     </Screen>
   );
+}
+
+function foundationCheer(
+  before: KlondikeState,
+  after: KlondikeState,
+): { label: string; tone: 'gold' } | null {
+  const gained = foundationCount(after) - foundationCount(before);
+  if (gained <= 0) return null;
+  if (gained > 1) return { label: `+${gained}`, tone: 'gold' };
+  for (let index = 0; index < 4; index++) {
+    const previous = before.foundations[index]?.length ?? 0;
+    const nextLength = after.foundations[index]?.length ?? 0;
+    if (nextLength <= previous) continue;
+    const face = cardFace(after.foundations[index]?.[nextLength - 1] ?? '');
+    if (!face) return { label: 'Home', tone: 'gold' };
+    if (face.rank === 13) return { label: 'Suit!', tone: 'gold' };
+    const word = face.name.split(' ')[0] ?? 'Home';
+    return { label: word.charAt(0).toUpperCase() + word.slice(1), tone: 'gold' };
+  }
+  return { label: 'Home', tone: 'gold' };
 }
 
 function canPick(state: KlondikeState, source: Source): boolean {
