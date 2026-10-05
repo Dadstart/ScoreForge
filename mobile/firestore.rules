@@ -23,7 +23,7 @@ service cloud.firestore {
     //   - targetScore: number 0-1000000 or null (required key)
     //   - maxRounds: number 0-1000000 or null (required key)
     //   - tokenSpaces: map (required, max 12 entries)
-    //   - sorry, backgammon, checkers, chinese, klondike, pyramid, spider: map or null (required keys)
+    //   - sorry, backgammon, checkers, chinese, klondike, pyramid, tripeaks, spider: map or null (required keys)
     //   - revision: int (required, starts at 1, increases by 1)
     //   - createdAt, updatedAt: ISO-8601 strings (createdAt immutable)
     //
@@ -107,6 +107,7 @@ service cloud.firestore {
         'chinese-checkers',
         'klondike',
         'pyramid',
+        'tripeaks',
         'spider'
       ];
     }
@@ -129,6 +130,7 @@ service cloud.firestore {
           'chinese',
           'klondike',
           'pyramid',
+          'tripeaks',
           'spider',
           'revision',
           'createdAt',
@@ -151,6 +153,7 @@ service cloud.firestore {
           'chinese',
           'klondike',
           'pyramid',
+          'tripeaks',
           'spider',
           'revision',
           'createdAt',
@@ -176,6 +179,7 @@ service cloud.firestore {
         && isBoard(data.chinese)
         && isBoard(data.klondike)
         && isBoard(data.pyramid)
+        && isBoard(data.tripeaks)
         && isBoard(data.spider)
         && data.revision is int
         && data.revision >= 1

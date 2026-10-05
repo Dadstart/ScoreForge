@@ -99,6 +99,7 @@ function pointsForPlayer(game: Game, playerId: string, template: GameTemplate): 
   if (template.id === 'klondike') return foundationCount(game.klondike);
   if (template.id === 'pyramid') return clearedCount(game.pyramid);
   if (template.id === 'spider') return completedCount(game.spider);
+  if (template.id === 'tripeaks') return game.tripeaks?.score ?? 0;
   return game.events
     .filter((e) => e.playerId === playerId)
     .reduce((sum, e) => sum + e.points, 0);
@@ -128,6 +129,7 @@ function detectCompletion(game: Game, template: GameTemplate, totals: Map<string
   if (template.id === 'klondike') return Boolean(game.klondike?.won);
   if (template.id === 'pyramid') return Boolean(game.pyramid?.won);
   if (template.id === 'spider') return Boolean(game.spider?.won);
+  if (template.id === 'tripeaks') return Boolean(game.tripeaks?.won);
 
   if (template.winCondition === 'FirstToTarget') {
     const target = game.targetScore ?? template.defaultTargetScore;
@@ -197,6 +199,12 @@ function getWinnerIds(
 
   if (template.id === 'spider') {
     if (!game.spider?.won) return new Set();
+    const winnerId = game.players[0]?.id;
+    return winnerId ? new Set([winnerId]) : new Set();
+  }
+
+  if (template.id === 'tripeaks') {
+    if (!game.tripeaks?.won) return new Set();
     const winnerId = game.players[0]?.id;
     return winnerId ? new Set([winnerId]) : new Set();
   }

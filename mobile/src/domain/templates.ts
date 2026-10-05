@@ -139,6 +139,16 @@ export const templates: GameTemplate[] = [
     maxPlayers: 1,
   },
   {
+    id: 'tripeaks',
+    name: 'TriPeaks',
+    description:
+      'Clear three peaks. Play an uncovered card one rank off the waste. A run scores, and a peak is worth 15.',
+    scoringMode: 'Instant',
+    winCondition: 'HighestTotal',
+    minPlayers: 1,
+    maxPlayers: 1,
+  },
+  {
     id: 'spider',
     name: 'Spider',
     description:
