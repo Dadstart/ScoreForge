@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MonopolyBoard } from '../components/MonopolyBoard';
 import { FireworksOverlay } from '../components/FireworksOverlay';
+import { PlaySpark } from '../components/PlaySpark';
 import { OptionSelect } from '../components/OptionSelect';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Card, Field, Screen, usePageScroll } from '../components/ui';
@@ -35,6 +36,7 @@ import { getBoardSpace } from '../domain/monopolyBoard';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
 import { useSettings } from '../hooks/useSettings';
+import { usePlaySpark } from '../hooks/usePlaySpark';
 import { useWinCelebration } from '../hooks/useWinCelebration';
 import { loadDisplayName } from '../storage/displayNameStore';
 import { preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
@@ -92,6 +94,8 @@ export function MonopolyScreen({ navigation, route }: Props) {
     endSuppress,
     noteLocalResult,
   } = useWinCelebration();
+  const { sparks, spark } = usePlaySpark();
+  const seenTokens = useRef<Record<string, number> | null>(null);
 
   useEffect(() => {
     void loadDisplayName().then(setDisplayName);
@@ -111,6 +115,18 @@ export function MonopolyScreen({ navigation, route }: Props) {
     );
     return unsub;
   }, [gameId, onSnapshot]);
+
+  useEffect(() => {
+    if (!game) return;
+    const spaces = game.tokenSpaces ?? {};
+    const prior = seenTokens.current;
+    seenTokens.current = spaces;
+    if (!prior) return;
+    const reachedGo = Object.entries(spaces).some(
+      ([id, index]) => index === 0 && prior[id] != null && prior[id] !== 0,
+    );
+    if (reachedGo) spark('Go!', 'gold');
+  }, [game, spark]);
 
   const template = game ? getTemplate(game.templateId) : undefined;
   const snapshot = useMemo(
@@ -683,6 +699,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
             style={{ alignSelf: 'stretch' }}
           />
         </Card>
+        <PlaySpark sparks={sparks} />
       </View>
 
       {showCelebration ? (

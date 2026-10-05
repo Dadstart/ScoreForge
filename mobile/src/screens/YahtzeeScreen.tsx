@@ -1,27 +1,33 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AddPlayerModal } from '../components/AddPlayerModal';
 import { FireworksOverlay } from '../components/FireworksOverlay';
+import { PlaySpark } from '../components/PlaySpark';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { YahtzeeScoreboard, YahtzeeScoreModal } from '../components/YahtzeeScoreboard';
 import { Badge, Button, Screen } from '../components/ui';
 import { findLocalPlayerId } from '../domain/localPlayer';
-import type { Game } from '../domain/models';
+import type { Game, ScoreEvent } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
 import {
   boxById,
   buildPlayerCard,
   isScorecardComplete,
+  scoreForBox,
   UPPER_BONUS,
   UPPER_BONUS_AT,
   YAHTZEE_BONUS_BOX,
+  YAHTZEE_BOXES,
   withBoxScore,
   withoutBox,
   withoutLastCardEntry,
+  yahtzeeBonusCount,
+  type YahtzeeBox,
 } from '../domain/yahtzee';
+import { usePlaySpark, type SparkTone } from '../hooks/usePlaySpark';
 import { useWinCelebration } from '../hooks/useWinCelebration';
 import type { RootStackParamList } from '../navigation/types';
 import { loadDisplayName } from '../storage/displayNameStore';
@@ -46,6 +52,7 @@ export function YahtzeeScreen({ navigation, route }: Props) {
     endSuppress,
     noteLocalResult,
   } = useWinCelebration();
+  const { sparks, spark } = usePlaySpark();
 
   useEffect(() => {
     void loadDisplayName().then(setDisplayName);
@@ -71,6 +78,19 @@ export function YahtzeeScreen({ navigation, route }: Props) {
     () => (game && template ? calculate(game, template) : null),
     [game, template],
   );
+  const seenScores = useRef<ScoreEvent[] | null>(null);
+  useEffect(() => {
+    if (!game) return;
+    const prior = seenScores.current;
+    seenScores.current = game.events;
+    if (!prior || game.events.length <= prior.length) return;
+    const added = game.events[game.events.length - 1];
+    if (!added?.box || added.box === YAHTZEE_BONUS_BOX) return;
+    const box = boxById(added.box);
+    if (!box) return;
+    const cheer = yahtzeeCheer(box, added.points, prior, game.events, added.playerId);
+    if (cheer) spark(cheer.label, cheer.tone);
+  }, [game, spark]);
   const localPlayerId = useMemo(
     () => (game ? findLocalPlayerId(game, displayName) : null),
     [game, displayName],
@@ -251,6 +271,7 @@ export function YahtzeeScreen({ navigation, route }: Props) {
         }}
       />
 
+      <PlaySpark sparks={sparks} />
       {showCelebration ? (
         <FireworksOverlay
           winnerName={snapshot.winnerName}
@@ -271,6 +292,35 @@ export function YahtzeeScreen({ navigation, route }: Props) {
         }}
       />
     </Screen>
+  );
+}
+
+function yahtzeeCheer(
+  box: YahtzeeBox,
+  points: number,
+  before: ScoreEvent[],
+  after: ScoreEvent[],
+  playerId: string,
+): { label: string; tone: SparkTone } | null {
+  if (box.id === 'yahtzee' && points === 50) return { label: 'Yahtzee!', tone: 'gold' };
+  if (yahtzeeBonusCount(after, playerId) > yahtzeeBonusCount(before, playerId)) {
+    return { label: '+100', tone: 'gold' };
+  }
+  const upperBefore = upperSum(before, playerId);
+  const upperAfter = upperSum(after, playerId);
+  if (upperBefore < UPPER_BONUS_AT && upperAfter >= UPPER_BONUS_AT) return { label: 'Bonus!', tone: 'gold' };
+  if (box.kind === 'fixed' && points > 0 && points === box.fixed) {
+    if (box.id === 'fullHouse') return { label: 'Full house!', tone: 'gold' };
+    if (box.id === 'smallStraight' || box.id === 'largeStraight') return { label: 'Straight!', tone: 'gold' };
+  }
+  if (box.kind === 'face' && box.face && points === box.face * 5) return { label: 'Five!', tone: 'gold' };
+  return null;
+}
+
+function upperSum(events: ScoreEvent[], playerId: string): number {
+  return YAHTZEE_BOXES.filter((box) => box.section === 'upper').reduce(
+    (sum, box) => sum + (scoreForBox(events, playerId, box.id) ?? 0),
+    0,
   );
 }
 

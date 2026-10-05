@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -11,12 +11,14 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AddPlayerModal } from '../components/AddPlayerModal';
 import { CribbageBoard, type CribbagePegPlayer } from '../components/CribbageBoard';
 import { FireworksOverlay } from '../components/FireworksOverlay';
+import { PlaySpark } from '../components/PlaySpark';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Screen } from '../components/ui';
 import { findLocalPlayerId } from '../domain/localPlayer';
 import { createScoreEvent, type Game } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
+import { usePlaySpark } from '../hooks/usePlaySpark';
 import { useWinCelebration } from '../hooks/useWinCelebration';
 import { loadDisplayName } from '../storage/displayNameStore';
 import { addPlayerToGame, preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
@@ -43,6 +45,7 @@ export function CribbageScreen({ navigation, route }: Props) {
     endSuppress,
     noteLocalResult,
   } = useWinCelebration();
+  const { sparks, spark } = usePlaySpark();
 
   useEffect(() => {
     void loadDisplayName().then(setDisplayName);
@@ -69,6 +72,18 @@ export function CribbageScreen({ navigation, route }: Props) {
     () => (game && template ? calculate(game, template) : null),
     [game, template],
   );
+  const seenPegs = useRef<number | null>(null);
+  useEffect(() => {
+    if (!game) return;
+    const count = game.events.length;
+    const last = game.events[count - 1];
+    if (seenPegs.current == null) {
+      seenPegs.current = count;
+      return;
+    }
+    if (count > seenPegs.current && last && last.points > 0) spark(`+${last.points}`, 'gold');
+    seenPegs.current = count;
+  }, [game, spark]);
 
   const localPlayerId = useMemo(
     () => (game ? findLocalPlayerId(game, displayName) : null),
@@ -255,6 +270,7 @@ export function CribbageScreen({ navigation, route }: Props) {
           </View>
         </View>
 
+        <PlaySpark sparks={sparks} />
         {showCelebration ? (
           <FireworksOverlay
             winnerName={snapshot.winnerName}
