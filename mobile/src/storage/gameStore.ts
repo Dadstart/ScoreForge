@@ -19,6 +19,7 @@ import { createChineseState, type ChineseSetup } from '../domain/chineseCheckers
 import { createKlondikeState, packKlondike, unpackKlondike, type DrawCount } from '../domain/klondike';
 import { createPyramidState, packPyramid, unpackPyramid } from '../domain/pyramid';
 import { createSpiderState, packSpider, unpackSpider, type SuitCount } from '../domain/spider';
+import { createTriPeaksState, packTriPeaks, unpackTriPeaks } from '../domain/tripeaks';
 import {
   isShareCode,
   normalizeShareCode,
@@ -54,6 +55,7 @@ type StoredGame = {
   klondike?: unknown;
   pyramid?: unknown;
   spider?: unknown;
+  tripeaks?: unknown;
   revision?: number;
   createdAt?: string;
   updatedAt?: string;
@@ -116,6 +118,7 @@ function toStored(game: Game): Record<string, unknown> {
     klondike: game.klondike ? packKlondike(game.klondike) : null,
     pyramid: game.pyramid ? packPyramid(game.pyramid) : null,
     spider: game.spider ? packSpider(game.spider) : null,
+    tripeaks: game.tripeaks ? packTriPeaks(game.tripeaks) : null,
     revision: game.revision,
     createdAt: game.createdAt,
     updatedAt: game.updatedAt,
@@ -141,6 +144,7 @@ function fromStored(shareCode: string, data: StoredGame, events: ScoreEvent[]): 
     klondike: unpackKlondike(data.klondike),
     pyramid: unpackPyramid(data.pyramid),
     spider: unpackSpider(data.spider),
+    tripeaks: unpackTriPeaks(data.tripeaks),
     revision: revisionOf(data),
     createdAt: typeof data.createdAt === 'string' ? data.createdAt : new Date().toISOString(),
     updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : new Date().toISOString(),
@@ -343,6 +347,9 @@ export async function createAndSaveGame(partial: {
     if (partial.templateId === 'spider') {
       const suits = partial.suits === 2 || partial.suits === 4 ? partial.suits : 1;
       game.spider = createSpiderState(suits);
+    }
+    if (partial.templateId === 'tripeaks') {
+      game.tripeaks = createTriPeaksState();
     }
     try {
       const saved = await runTransaction(db, async (transaction) => {

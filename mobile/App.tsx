@@ -16,6 +16,7 @@ import { CheckersScreen } from './src/screens/CheckersScreen';
 import { ChineseCheckersScreen } from './src/screens/ChineseCheckersScreen';
 import { KlondikeScreen } from './src/screens/KlondikeScreen';
 import { PyramidScreen } from './src/screens/PyramidScreen';
+import { TriPeaksScreen } from './src/screens/TriPeaksScreen';
 import { SpiderScreen } from './src/screens/SpiderScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { JoinScreen } from './src/screens/JoinScreen';
@@ -125,6 +126,11 @@ export default function App() {
             name="Pyramid"
             component={PyramidScreen}
             options={{ title: 'Pyramid', headerShown: false }}
+          />
+          <Stack.Screen
+            name="TriPeaks"
+            component={TriPeaksScreen}
+            options={{ title: 'TriPeaks', headerShown: false }}
           />
           <Stack.Screen
             name="Spider"

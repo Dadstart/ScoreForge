@@ -57,6 +57,7 @@ describe('navigation and sync', () => {
   it('sends each template to its screen', () => {
     assert.equal(gameScreenForTemplate('klondike'), 'Klondike');
     assert.equal(gameScreenForTemplate('spider'), 'Spider');
+    assert.equal(gameScreenForTemplate('tripeaks'), 'TriPeaks');
     assert.equal(gameScreenForTemplate('backgammon'), 'Backgammon');
     assert.equal(gameScreenForTemplate('chinese-checkers'), 'ChineseCheckers');
     assert.equal(gameScreenForTemplate('free-play'), 'Board');
