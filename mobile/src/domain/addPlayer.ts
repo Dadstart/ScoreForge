@@ -1,3 +1,4 @@
+import { ensureBackgammonState } from './backgammon';
 import { ensureCheckersState } from './checkers';
 import { ensureChineseState, playerCap } from './chineseCheckers';
 import { createPlayer, type Game } from './models';
@@ -21,11 +22,13 @@ export function withAddedPlayer(game: Game, rawName: string, maxPlayers: number)
   }
   return ensureChineseState(
     ensureCheckersState(
-      ensureSorryState({
-        ...game,
-        players: [...game.players, createPlayer(name)],
-        updatedAt: new Date().toISOString(),
-      }),
+      ensureSorryState(
+        ensureBackgammonState({
+          ...game,
+          players: [...game.players, createPlayer(name)],
+          updatedAt: new Date().toISOString(),
+        }),
+      ),
     ),
   );
 }
@@ -42,13 +45,15 @@ export function withoutPlayer(game: Game, playerId: string): Game {
   delete tokenSpaces[playerId];
   return ensureChineseState(
     ensureCheckersState(
-      ensureSorryState({
-        ...game,
-        players: game.players.filter((player) => player.id !== playerId),
-        events: game.events.filter((event) => event.playerId !== playerId),
-        tokenSpaces,
-        updatedAt: new Date().toISOString(),
-      }),
+      ensureSorryState(
+        ensureBackgammonState({
+          ...game,
+          players: game.players.filter((player) => player.id !== playerId),
+          events: game.events.filter((event) => event.playerId !== playerId),
+          tokenSpaces,
+          updatedAt: new Date().toISOString(),
+        }),
+      ),
     ),
   );
 }

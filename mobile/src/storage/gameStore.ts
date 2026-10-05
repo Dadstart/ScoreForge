@@ -13,6 +13,7 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore';
 import { withAddedPlayer } from '../domain/addPlayer';
+import { createBackgammonState } from '../domain/backgammon';
 import { createCheckersState } from '../domain/checkers';
 import { createChineseState, type ChineseSetup } from '../domain/chineseCheckers';
 import { createKlondikeState, packKlondike, unpackKlondike, type DrawCount } from '../domain/klondike';
@@ -47,6 +48,7 @@ type StoredGame = {
   maxRounds?: number | null;
   tokenSpaces?: Record<string, number>;
   sorry?: Game['sorry'];
+  backgammon?: Game['backgammon'];
   checkers?: Game['checkers'];
   chinese?: Game['chinese'];
   klondike?: unknown;
@@ -108,6 +110,7 @@ function toStored(game: Game): Record<string, unknown> {
     maxRounds: game.maxRounds ?? null,
     tokenSpaces: game.tokenSpaces ?? {},
     sorry: game.sorry ?? null,
+    backgammon: game.backgammon ?? null,
     checkers: game.checkers ?? null,
     chinese: game.chinese ?? null,
     klondike: game.klondike ? packKlondike(game.klondike) : null,
@@ -132,6 +135,7 @@ function fromStored(shareCode: string, data: StoredGame, events: ScoreEvent[]): 
     maxRounds: typeof data.maxRounds === 'number' ? data.maxRounds : null,
     tokenSpaces: data.tokenSpaces && typeof data.tokenSpaces === 'object' ? data.tokenSpaces : {},
     sorry: data.sorry ?? null,
+    backgammon: data.backgammon ?? null,
     checkers: data.checkers ?? null,
     chinese: data.chinese ?? null,
     klondike: unpackKlondike(data.klondike),
@@ -323,6 +327,7 @@ export async function createAndSaveGame(partial: {
       updatedAt: now,
     };
     if (partial.templateId === 'sorry') game.sorry = createSorryState(partial.players);
+    if (partial.templateId === 'backgammon') game.backgammon = createBackgammonState(partial.players);
     if (partial.templateId === 'checkers') {
       game.checkers = createCheckersState(partial.players, { requireJumps: partial.requireJumps !== false });
     }

@@ -99,6 +99,16 @@ export const templates: GameTemplate[] = [
     maxPlayers: 4,
   },
   {
+    id: 'backgammon',
+    name: 'Backgammon',
+    description:
+      'Race 15 checkers home. Roll two dice, hit a blot, and bear off. White moves first. Double before you roll.',
+    scoringMode: 'Instant',
+    winCondition: 'HighestTotal',
+    minPlayers: 1,
+    maxPlayers: 2,
+  },
+  {
     id: 'checkers',
     name: 'Checkers',
     description:

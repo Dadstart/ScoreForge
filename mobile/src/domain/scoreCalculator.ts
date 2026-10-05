@@ -1,5 +1,6 @@
 import type { Game, Player } from './models';
 import type { GameTemplate, WinCondition } from './templates';
+import { borneOff, playerIdForSide as backgammonPlayerId } from './backgammon';
 import { capturedCount, playerIdForSide } from './checkers';
 import { piecesHomeForPlayer, winnerPlayerIds } from './chineseCheckers';
 import { foundationCount } from './klondike';
@@ -92,6 +93,7 @@ function orderPlayers(
 function pointsForPlayer(game: Game, playerId: string, template: GameTemplate): number {
   if (template.id === 'yahtzee') return grandTotal(game.events, playerId);
   if (template.id === 'sorry' && game.sorry) return homeCount(game.sorry, playerId);
+  if (template.id === 'backgammon' && game.backgammon) return borneOff(game.backgammon, playerId);
   if (template.id === 'checkers' && game.checkers) return capturedCount(game.checkers, playerId);
   if (template.id === 'chinese-checkers' && game.chinese) return piecesHomeForPlayer(game.chinese, playerId);
   if (template.id === 'klondike') return foundationCount(game.klondike);
@@ -120,6 +122,7 @@ function roundsEveryoneReached(game: Game): number {
 
 function detectCompletion(game: Game, template: GameTemplate, totals: Map<string, number>): boolean {
   if (template.id === 'yahtzee') return isScorecardComplete(game);
+  if (template.id === 'backgammon') return Boolean(game.backgammon?.winnerSide);
   if (template.id === 'checkers') return Boolean(game.checkers?.winnerSide || game.checkers?.draw);
   if (template.id === 'chinese-checkers') return Boolean(game.chinese?.over);
   if (template.id === 'klondike') return Boolean(game.klondike?.won);
@@ -157,6 +160,12 @@ function getWinnerIds(
   game: Game,
 ): Set<string> {
   if (ordered.length === 0) return new Set();
+
+  if (template.id === 'backgammon') {
+    if (!game.backgammon?.winnerSide) return new Set();
+    const winnerId = backgammonPlayerId(game.backgammon, game.backgammon.winnerSide);
+    return winnerId ? new Set([winnerId]) : new Set();
+  }
 
   if (template.id === 'checkers') {
     if (!game.checkers || game.checkers.draw || !game.checkers.winnerSide) return new Set();

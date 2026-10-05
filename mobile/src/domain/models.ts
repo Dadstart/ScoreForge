@@ -1,3 +1,4 @@
+import type { BackgammonState } from './backgammon';
 import type { CheckersState } from './checkers';
 import type { ChineseState } from './chineseCheckers';
 import type { KlondikeState } from './klondike';
@@ -39,6 +40,8 @@ export interface Game {
   tokenSpaces?: Record<string, number>;
   /** Shared Sorry board, deck, and turn. */
   sorry?: SorryState | null;
+  /** Shared backgammon board, dice, and cube. */
+  backgammon?: BackgammonState | null;
   /** Shared checkers board and turn. */
   checkers?: CheckersState | null;
   /** Shared Chinese checkers star, seats, and turn. */

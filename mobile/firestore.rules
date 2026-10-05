@@ -23,7 +23,7 @@ service cloud.firestore {
     //   - targetScore: number 0-1000000 or null (required key)
     //   - maxRounds: number 0-1000000 or null (required key)
     //   - tokenSpaces: map (required, max 12 entries)
-    //   - sorry, checkers, chinese, klondike, pyramid, spider: map or null (required keys)
+    //   - sorry, backgammon, checkers, chinese, klondike, pyramid, spider: map or null (required keys)
     //   - revision: int (required, starts at 1, increases by 1)
     //   - createdAt, updatedAt: ISO-8601 strings (createdAt immutable)
     //
@@ -102,6 +102,7 @@ service cloud.firestore {
         'monopoly',
         'yahtzee',
         'sorry',
+        'backgammon',
         'checkers',
         'chinese-checkers',
         'klondike',
@@ -123,6 +124,7 @@ service cloud.firestore {
           'maxRounds',
           'tokenSpaces',
           'sorry',
+          'backgammon',
           'checkers',
           'chinese',
           'klondike',
@@ -144,6 +146,7 @@ service cloud.firestore {
           'maxRounds',
           'tokenSpaces',
           'sorry',
+          'backgammon',
           'checkers',
           'chinese',
           'klondike',
@@ -168,6 +171,7 @@ service cloud.firestore {
         && data.tokenSpaces is map
         && data.tokenSpaces.size() <= 12
         && isBoard(data.sorry)
+        && isBoard(data.backgammon)
         && isBoard(data.checkers)
         && isBoard(data.chinese)
         && isBoard(data.klondike)
