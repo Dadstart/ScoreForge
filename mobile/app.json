@@ -9,7 +9,10 @@
     "scheme": "scoreforge",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.dadstart.scoreforge"
+      "bundleIdentifier": "com.dadstart.scoreforge",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -25,6 +28,11 @@
       "favicon": "./assets/favicon.png",
       "bundler": "metro",
       "output": "single"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "ff596208-7fc4-4bed-ac6b-2cc78b64e5c6"
+      }
     }
   }
 }
