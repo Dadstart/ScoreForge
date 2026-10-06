@@ -12,6 +12,8 @@ import { AddPlayerModal } from '../components/AddPlayerModal';
 import { CribbageBoard, type CribbagePegPlayer } from '../components/CribbageBoard';
 import { FireworksOverlay } from '../components/FireworksOverlay';
 import { PlaySpark } from '../components/PlaySpark';
+import { GameHelp } from '../components/GameHelp';
+import { HomeButton } from '../components/HomeButton';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Screen } from '../components/ui';
 import { findLocalPlayerId } from '../domain/localPlayer';
@@ -214,8 +216,9 @@ export function CribbageScreen({ navigation, route }: Props) {
             <Text style={typography.title}>{game.name}</Text>
             <Badge label="Cribbage" tone="accent" />
           </View>
+          <GameHelp templateId="cribbage" />
           <ShareCodePanel shareCode={game.shareCode} />
-          <Button label="Home" variant="ghost" onPress={() => navigation.navigate('Home')} />
+          <HomeButton onPress={() => navigation.navigate('Home')} />
         </View>
 
         <View style={styles.banner}>

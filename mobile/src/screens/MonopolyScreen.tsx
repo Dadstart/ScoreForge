@@ -7,6 +7,8 @@ import { MonopolyBoard } from '../components/MonopolyBoard';
 import { FireworksOverlay } from '../components/FireworksOverlay';
 import { PlaySpark } from '../components/PlaySpark';
 import { OptionSelect } from '../components/OptionSelect';
+import { GameHelp } from '../components/GameHelp';
+import { HomeButton } from '../components/HomeButton';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Card, Field, Screen, usePageScroll } from '../components/ui';
 import { withoutPlayer } from '../domain/addPlayer';
@@ -398,8 +400,9 @@ export function MonopolyScreen({ navigation, route }: Props) {
             <Text style={typography.title}>{game.name}</Text>
             <Badge label="Monopoly" tone="accent" />
           </View>
+          <GameHelp templateId="monopoly" />
           <ShareCodePanel shareCode={game.shareCode} />
-          <Button label="Home" variant="ghost" onPress={() => navigation.navigate('Home')} />
+          <HomeButton onPress={() => navigation.navigate('Home')} />
         </View>
 
         <View style={styles.banner}>

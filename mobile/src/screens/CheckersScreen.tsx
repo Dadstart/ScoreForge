@@ -6,6 +6,8 @@ import { AddPlayerModal } from '../components/AddPlayerModal';
 import { CheckersBoard } from '../components/CheckersBoard';
 import { FireworksOverlay } from '../components/FireworksOverlay';
 import { PlaySpark } from '../components/PlaySpark';
+import { GameHelp } from '../components/GameHelp';
+import { HomeButton } from '../components/HomeButton';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Screen } from '../components/ui';
 import {
@@ -287,8 +289,9 @@ export function CheckersScreen({ navigation, route }: Props) {
             <Text style={typography.title}>{game.name}</Text>
             <Badge label="Checkers" tone="accent" />
           </View>
+          <GameHelp templateId="checkers" />
           <ShareCodePanel shareCode={game.shareCode} />
-          <Button label="Home" variant="ghost" onPress={() => navigation.navigate('Home')} />
+          <HomeButton onPress={() => navigation.navigate('Home')} />
         </View>
 
         <View style={styles.banner}>
