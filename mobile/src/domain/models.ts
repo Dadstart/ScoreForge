@@ -6,6 +6,7 @@ import type { PyramidState } from './pyramid';
 import type { SpiderState } from './spider';
 import type { TriPeaksState } from './tripeaks';
 import type { SorryState } from './sorry';
+import { fillRandom, randomId } from './secureRandom';
 
 export type GameStatus = 'InProgress' | 'Completed';
 
@@ -125,10 +126,7 @@ export function isShareCode(code: string): boolean {
 /** Cryptographic share code. 32 symbols and a multiple of the byte range, so modulo is unbiased. */
 export function generateShareCode(): string {
   const bytes = new Uint8Array(SHARE_CODE_LENGTH);
-  if (typeof crypto === 'undefined' || typeof crypto.getRandomValues !== 'function') {
-    throw new Error('Secure random numbers are not available on this device.');
-  }
-  crypto.getRandomValues(bytes);
+  fillRandom(bytes);
   let code = '';
   for (let i = 0; i < SHARE_CODE_LENGTH; i++) {
     code += SHARE_CODE_ALPHABET[bytes[i] % SHARE_CODE_ALPHABET.length];
@@ -141,13 +139,5 @@ export function normalizeShareCode(raw: string): string {
 }
 
 function cryptoRandomId(): string {
-  // Works on web and modern RN; fallback for older runtimes
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID();
-  }
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
+  return randomId();
 }

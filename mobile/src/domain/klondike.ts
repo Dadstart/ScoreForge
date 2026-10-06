@@ -1,4 +1,5 @@
 import type { Game } from './models';
+import { fillRandom } from './secureRandom';
 
 /**
  * Klondike solitaire.
@@ -726,7 +727,7 @@ function randomInt(maxExclusive: number): number {
   const buf = new Uint32Array(1);
   let value = 0;
   do {
-    crypto.getRandomValues(buf);
+    fillRandom(buf);
     value = buf[0];
   } while (value >= limit);
   return value % maxExclusive;
