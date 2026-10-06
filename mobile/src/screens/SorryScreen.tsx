@@ -12,6 +12,8 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AddPlayerModal } from '../components/AddPlayerModal';
 import { FireworksOverlay } from '../components/FireworksOverlay';
 import { PlaySpark } from '../components/PlaySpark';
+import { GameHelp } from '../components/GameHelp';
+import { HomeButton } from '../components/HomeButton';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { SorryBoard } from '../components/SorryBoard';
 import { Badge, Button, Screen } from '../components/ui';
@@ -326,8 +328,9 @@ export function SorryScreen({ navigation, route }: Props) {
             <Text style={typography.title}>{game.name}</Text>
             <Badge label="Sorry" tone="accent" />
           </View>
+          <GameHelp templateId="sorry" />
           <ShareCodePanel shareCode={game.shareCode} />
-          <Button label="Home" variant="ghost" onPress={() => navigation.navigate('Home')} />
+          <HomeButton onPress={() => navigation.navigate('Home')} />
         </View>
 
         <View style={styles.banner}>

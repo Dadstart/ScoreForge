@@ -6,6 +6,8 @@ import { AddPlayerModal } from '../components/AddPlayerModal';
 import { BackgammonBoard } from '../components/BackgammonBoard';
 import { FireworksOverlay } from '../components/FireworksOverlay';
 import { PlaySpark } from '../components/PlaySpark';
+import { GameHelp } from '../components/GameHelp';
+import { HomeButton } from '../components/HomeButton';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Screen } from '../components/ui';
 import {
@@ -243,8 +245,9 @@ export function BackgammonScreen({ navigation, route }: Props) {
             <Text style={typography.title}>{game.name}</Text>
             <Badge label="Backgammon" tone="accent" />
           </View>
+          <GameHelp templateId="backgammon" />
           <ShareCodePanel shareCode={game.shareCode} />
-          <Button label="Home" variant="ghost" onPress={() => navigation.navigate('Home')} />
+          <HomeButton onPress={() => navigation.navigate('Home')} />
         </View>
 
         <View style={styles.banner}>

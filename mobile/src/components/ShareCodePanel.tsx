@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import Svg, { Circle, Path } from 'react-native-svg';
+import { HeaderIconButton } from './HeaderIconButton';
 import { Button } from './ui';
 import { createJoinShareUrl } from '../linking/shareLinks';
 import { colors, radii, typography } from '../theme';
@@ -16,7 +17,7 @@ type Props = {
   shareCode: string;
 };
 
-function ShareIcon({ size = 20, color = colors.accent }: { size?: number; color?: string }) {
+function ShareIcon({ size = 18, color = colors.accent }: { size?: number; color?: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Circle cx="18" cy="5" r="3" stroke={color} strokeWidth="2" />
@@ -33,14 +34,9 @@ export function ShareCodePanel({ shareCode }: Props) {
 
   return (
     <>
-      <Pressable
-        style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.85 }]}
-        onPress={() => setOpen(true)}
-        accessibilityRole="button"
-        accessibilityLabel="Share game code"
-      >
+      <HeaderIconButton label="Share game code" onPress={() => setOpen(true)}>
         <ShareIcon />
-      </Pressable>
+      </HeaderIconButton>
 
       <Modal
         visible={open}
@@ -75,16 +71,6 @@ export function ShareCodePanel({ shareCode }: Props) {
 }
 
 const styles = StyleSheet.create({
-  iconBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.md,
-    backgroundColor: colors.accentSoft,
-    borderWidth: 1,
-    borderColor: 'rgba(212, 168, 75, 0.4)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   backdrop: {
     flex: 1,
     backgroundColor: colors.overlay,
