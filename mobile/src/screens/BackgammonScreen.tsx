@@ -1,5 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import {
+  AccessibilityInfo,
+  ActivityIndicator,
+  Animated,
+  Easing,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AddPlayerModal } from '../components/AddPlayerModal';
@@ -24,6 +35,7 @@ import {
   rollDice,
   stake,
   undoMove,
+  type BackgammonMove,
   type BackgammonState,
   type Side,
 } from '../domain/backgammon';
@@ -260,19 +272,22 @@ export function BackgammonScreen({ navigation, route }: Props) {
         <View style={wide ? styles.wide : styles.stack}>
           <View style={[styles.boardPane, wide && styles.boardPaneWide]}>
             <View style={styles.diceRow}>
+              <DicePair dice={board.dice} finished={finished} />
               {board.dice ? (
-                <>
-                  <Die value={board.dice[0]} />
-                  <Die value={board.dice[1]} />
-                  <Text style={styles.diceNote}>
-                    {board.dice[0] === board.dice[1] ? 'Double' : 'Dice'}
-                    {board.remaining.length > 0 ? ` · ${board.remaining.length} to play` : ''}
-                  </Text>
-                </>
-              ) : (
-                <Text style={styles.diceNote}>{finished ? 'Game over' : 'Roll to move'}</Text>
-              )}
+                <Text style={styles.diceNote}>
+                  {board.dice[0] === board.dice[1] ? 'Doubles' : 'Dice'}
+                  {board.remaining.length > 0 ? ` · ${board.remaining.length} to play` : ''}
+                </Text>
+              ) : null}
             </View>
+            <MoveHints
+              board={board}
+              moves={finished || board.offer ? [] : moves}
+              selected={selected}
+              localSide={localSide}
+              onSelect={setSelection}
+              onPlay={play}
+            />
             <BackgammonBoard
               state={board}
               moves={finished || board.offer ? [] : moves}
@@ -283,11 +298,6 @@ export function BackgammonScreen({ navigation, route }: Props) {
               onBar={onBar}
               onBearOff={onBearOff}
             />
-            <Text style={styles.hint}>
-              White moves toward 1. Black moves toward 24. Bear off through the tray beside your home. A single checker
-              can be hit to the bar. Tap a checker, then a highlighted point. Offer the cube before you roll.
-              {localSide ? ` Your ${BACKGAMMON_SIDES[localSide].name} checkers sit at the bottom.` : ''}
-            </Text>
           </View>
 
           <View style={styles.panel}>
@@ -382,11 +392,243 @@ function ownerName(board: BackgammonState, game: Game, side: Side): string {
   return game.players.find((player) => board.sides[player.id] === side)?.name ?? BACKGAMMON_SIDES[side].name;
 }
 
-function Die({ value }: { value: number }) {
+function MoveHints({
+  board,
+  moves,
+  selected,
+  localSide,
+  onSelect,
+  onPlay,
+}: {
+  board: BackgammonState;
+  moves: readonly BackgammonMove[];
+  selected: Selection | null;
+  localSide?: Side;
+  onSelect: (origin: Selection) => void;
+  onPlay: (from: Selection, to: number | 'off') => void;
+}) {
+  if (board.winnerSide) return null;
+  if (board.offer) {
+    return (
+      <View style={styles.hintCard}>
+        <Text style={styles.hintTitle}>Doubling cube</Text>
+        <Text style={styles.hintBody}>Take to play on, or drop to concede.</Text>
+      </View>
+    );
+  }
+  if (!board.dice) {
+    return (
+      <View style={styles.hintCard}>
+        <Text style={styles.hintTitle}>Roll to move</Text>
+        <Text style={styles.hintBody}>
+          Checkers you can move will light up, and each option shows its die.
+          {localSide ? ` Your ${BACKGAMMON_SIDES[localSide].name} checkers sit at the bottom.` : ''}
+        </Text>
+      </View>
+    );
+  }
+  if (moves.length === 0) {
+    return (
+      <View style={styles.hintCard}>
+        <Text style={styles.hintTitle}>No legal move</Text>
+        <Text style={styles.hintBody}>These dice cannot be played. Pass the turn.</Text>
+      </View>
+    );
+  }
+
+  const origins = uniqueOrigins(moves);
+  const active = selected != null && moves.some((move) => move.from === selected) ? selected : null;
+  const options = active == null ? [] : moves.filter((move) => move.from === active);
+  const others = active == null ? [] : origins.filter((origin) => origin !== active);
+
   return (
-    <View style={styles.die}>
-      <Text style={styles.dieText}>{value}</Text>
+    <View style={styles.hintCard}>
+      <Text style={styles.hintTitle}>{active == null ? 'Choose a checker' : `Move from ${placeName(active)}`}</Text>
+      <View style={styles.chipRow}>
+        {active == null
+          ? origins.map((origin) => (
+              <Pressable
+                key={String(origin)}
+                accessibilityRole="button"
+                accessibilityLabel={`Move the checker on ${placeName(origin)}`}
+                onPress={() => onSelect(origin)}
+                style={styles.chip}
+              >
+                <Text style={styles.chipText}>{placeName(origin)}</Text>
+              </Pressable>
+            ))
+          : options.map((move) => (
+              <Pressable
+                key={`${move.from}-${move.to}-${move.die}`}
+                accessibilityRole="button"
+                accessibilityLabel={optionSentence(move)}
+                onPress={() => onPlay(move.from, move.to)}
+                style={[styles.chip, move.hit && styles.chipHit]}
+              >
+                <Text style={[styles.chipText, move.hit && styles.chipHitText]}>{optionLabel(move)}</Text>
+              </Pressable>
+            ))}
+      </View>
+      {others.length > 0 ? (
+        <View style={styles.chipRow}>
+          {others.map((origin) => (
+            <Pressable
+              key={String(origin)}
+              accessibilityRole="button"
+              accessibilityLabel={`Or move from ${placeName(origin)}`}
+              onPress={() => onSelect(origin)}
+              style={styles.chipQuiet}
+            >
+              <Text style={styles.chipQuietText}>{placeName(origin)}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
     </View>
+  );
+}
+
+function uniqueOrigins(moves: readonly BackgammonMove[]): Selection[] {
+  const seen = new Set<Selection>();
+  const list: Selection[] = [];
+  for (const move of moves) {
+    if (seen.has(move.from)) continue;
+    seen.add(move.from);
+    list.push(move.from);
+  }
+  return list;
+}
+
+function placeName(place: Selection): string {
+  return place === 'bar' ? 'Bar' : `Point ${place}`;
+}
+
+function optionLabel(move: BackgammonMove): string {
+  const hit = move.hit ? ' · hit' : '';
+  if (move.to === 'off') return `Bear off · ${move.die}`;
+  if (move.from === 'bar') return `Enter ${move.to} · ${move.die}${hit}`;
+  return `To ${move.to} · ${move.die}${hit}`;
+}
+
+function optionSentence(move: BackgammonMove): string {
+  const die = `using ${move.die}`;
+  const hit = move.hit ? ', hitting a blot' : '';
+  if (move.to === 'off') return `Bear off from ${placeName(move.from)} ${die}`;
+  if (move.from === 'bar') return `Enter on ${move.to} ${die}${hit}`;
+  return `Move from ${move.from} to ${move.to} ${die}${hit}`;
+}
+
+const PIPS: Record<number, boolean[]> = {
+  1: [false, false, false, false, true, false, false, false, false],
+  2: [true, false, false, false, false, false, false, false, true],
+  3: [true, false, false, false, true, false, false, false, true],
+  4: [true, false, true, false, false, false, true, false, true],
+  5: [true, false, true, false, true, false, true, false, true],
+  6: [true, false, true, true, false, true, true, false, true],
+};
+
+let nativeReduced = false;
+if (Platform.OS !== 'web') {
+  void AccessibilityInfo.isReduceMotionEnabled().then((value) => {
+    nativeReduced = value;
+  });
+  AccessibilityInfo.addEventListener('reduceMotionChanged', (value) => {
+    nativeReduced = value;
+  });
+}
+
+function reducedMotion(): boolean {
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+  return nativeReduced;
+}
+
+function DicePair({ dice, finished }: { dice: readonly [number, number] | null; finished: boolean }) {
+  const token = dice ? `${dice[0]}-${dice[1]}` : '';
+  const [rolling, setRolling] = useState(false);
+  const seen = useRef<string | null>(null);
+
+  useEffect(() => {
+    const first = seen.current === null;
+    seen.current = token;
+    if (first || !token || reducedMotion()) {
+      setRolling(false);
+      return;
+    }
+    setRolling(true);
+    const timer = setTimeout(() => setRolling(false), 560);
+    return () => clearTimeout(timer);
+  }, [token]);
+
+  if (!dice) {
+    return <Text style={styles.diceNote}>{finished ? 'Game over' : 'Roll to move'}</Text>;
+  }
+  return (
+    <>
+      <PipDie face={dice[0]} rolling={rolling} delay={0} />
+      <PipDie face={dice[1]} rolling={rolling} delay={80} />
+    </>
+  );
+}
+
+function PipDie({ face, rolling, delay }: { face: number; rolling: boolean; delay: number }) {
+  const [shown, setShown] = useState(face);
+  const motion = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!rolling) {
+      setShown(face);
+      motion.setValue(0);
+      return;
+    }
+    let step = 0;
+    let interval: ReturnType<typeof setInterval> | undefined;
+    const starter = setTimeout(() => {
+      interval = setInterval(() => {
+        step += 1;
+        if (step >= 5) {
+          if (interval) clearInterval(interval);
+          setShown(face);
+          return;
+        }
+        const next = ((face + step - 1) % 6) + 1;
+        setShown(next === face ? (next % 6) + 1 : next);
+      }, 70);
+    }, delay);
+    motion.setValue(0);
+    const animation = Animated.timing(motion, {
+      toValue: 1,
+      duration: 420,
+      delay,
+      easing: Easing.out(Easing.cubic),
+      isInteraction: false,
+      useNativeDriver: Platform.OS !== 'web',
+    });
+    animation.start();
+    return () => {
+      clearTimeout(starter);
+      if (interval) clearInterval(interval);
+      animation.stop();
+    };
+  }, [rolling, face, delay, motion]);
+
+  const lift = motion.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0, -8, 0] });
+  const rock = motion.interpolate({ inputRange: [0, 0.5, 1], outputRange: ['0deg', '8deg', '0deg'] });
+  const pips = PIPS[shown] ?? PIPS[1];
+
+  return (
+    <Animated.View style={{ transform: [{ translateY: lift }, { rotate: rock }] }}>
+      <View style={styles.die}>
+        <View style={styles.pips}>
+          {pips.map((on, index) => (
+            <View key={index} style={styles.pipSlot}>
+              {on ? <View style={styles.pip} /> : null}
+            </View>
+          ))}
+        </View>
+      </View>
+    </Animated.View>
   );
 }
 
@@ -408,17 +650,50 @@ const styles = StyleSheet.create({
   stack: { gap: 12, paddingBottom: 28 },
   boardPane: { gap: 8, width: '100%' },
   boardPaneWide: { flex: 1.2, minWidth: 360 },
-  diceRow: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 36 },
+  diceRow: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 },
   die: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: '#f7f1e6',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: '#f6f0e3',
+    borderWidth: 1,
+    borderColor: '#e4d3b0',
   },
-  dieText: { color: '#2a2118', fontSize: 18, fontWeight: '700' },
+  pips: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', padding: 4 },
+  pipSlot: { width: '33.33%', height: '33.33%', alignItems: 'center', justifyContent: 'center' },
+  pip: { width: '72%', height: '72%', borderRadius: 999, backgroundColor: '#241c14' },
   diceNote: { ...typography.body, color: colors.textDim },
+  hintCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 10,
+    gap: 8,
+  },
+  hintTitle: { ...typography.label, color: colors.accent },
+  hintBody: { ...typography.body, fontSize: 13 },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: radii.pill,
+    backgroundColor: colors.accentSoft,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 168, 75, 0.5)',
+  },
+  chipHit: { backgroundColor: colors.dangerSoft, borderColor: 'rgba(232, 106, 92, 0.7)' },
+  chipText: { ...typography.label },
+  chipHitText: { color: colors.danger },
+  chipQuiet: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  chipQuietText: { ...typography.label, color: colors.textDim },
   hint: { ...typography.body, fontSize: 13 },
   panel: {
     flex: 1,
