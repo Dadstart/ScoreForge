@@ -20,6 +20,7 @@ import { createKlondikeState, packKlondike, unpackKlondike, type DrawCount } fro
 import { createPyramidState, packPyramid, unpackPyramid } from '../domain/pyramid';
 import { createSpiderState, packSpider, unpackSpider, type SuitCount } from '../domain/spider';
 import { createTriPeaksState, packTriPeaks, unpackTriPeaks } from '../domain/tripeaks';
+import { createYahtzeeState } from '../domain/yahtzee';
 import {
   isShareCode,
   normalizeShareCode,
@@ -56,6 +57,7 @@ type StoredGame = {
   pyramid?: unknown;
   spider?: unknown;
   tripeaks?: unknown;
+  yahtzee?: Game['yahtzee'];
   revision?: number;
   createdAt?: string;
   updatedAt?: string;
@@ -119,6 +121,7 @@ function toStored(game: Game): Record<string, unknown> {
     pyramid: game.pyramid ? packPyramid(game.pyramid) : null,
     spider: game.spider ? packSpider(game.spider) : null,
     tripeaks: game.tripeaks ? packTriPeaks(game.tripeaks) : null,
+    yahtzee: game.yahtzee ?? null,
     revision: game.revision,
     createdAt: game.createdAt,
     updatedAt: game.updatedAt,
@@ -145,6 +148,7 @@ function fromStored(shareCode: string, data: StoredGame, events: ScoreEvent[]): 
     pyramid: unpackPyramid(data.pyramid),
     spider: unpackSpider(data.spider),
     tripeaks: unpackTriPeaks(data.tripeaks),
+    yahtzee: data.yahtzee ?? null,
     revision: revisionOf(data),
     createdAt: typeof data.createdAt === 'string' ? data.createdAt : new Date().toISOString(),
     updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : new Date().toISOString(),
@@ -350,6 +354,9 @@ export async function createAndSaveGame(partial: {
     }
     if (partial.templateId === 'tripeaks') {
       game.tripeaks = createTriPeaksState();
+    }
+    if (partial.templateId === 'yahtzee') {
+      game.yahtzee = createYahtzeeState(partial.players);
     }
     try {
       const saved = await runTransaction(db, async (transaction) => {
