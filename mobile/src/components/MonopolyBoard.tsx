@@ -318,6 +318,7 @@ function BoardCanvas({
         const bar = Math.max(10, Math.round(cell * 0.22));
         const label = Math.max(11, Math.round(cell * 0.13));
         const lane = !isCorner && (col === 0 || col === 10) ? sideLane(cell) : tokenLane(cell);
+        const mark = space.name === 'Chance' ? 'chance' : space.name === 'Community Chest' ? 'chest' : null;
         const fitted = space.propertyId
           ? fitPropertyLabel(space.name, labelBounds(row, col, cell, bar, isRailroad), label)
           : null;
@@ -327,7 +328,7 @@ function BoardCanvas({
             accessibilityLabel={space.name}
             style={[
               styles.cell,
-              isCorner ? null : spacePadding(row, col, lane, isRailroad ? 0 : bar),
+              isCorner ? null : spacePadding(row, col, lane, swatch ? bar : 0),
               {
                 left: `${(col * 100) / 11}%`,
                 top: `${(row * 100) / 11}%`,
@@ -345,19 +346,23 @@ function BoardCanvas({
                   <View style={[styles.swatch, barEdge(row, col, bar), { backgroundColor: swatch }]} />
                 ) : null}
                 {isRailroad ? <TrainMark row={row} col={col} cell={cell} /> : null}
-                <Text
-                  style={[
-                    styles.cellText,
-                    {
-                      fontSize: fitted?.fontSize ?? label,
-                      lineHeight: fitted?.lineHeight ?? Math.round(label * 1.15),
-                      width: '100%',
-                    },
-                  ]}
-                  numberOfLines={fitted?.lines ?? 2}
-                >
-                  {fitted?.text ?? space.short}
-                </Text>
+                {mark === 'chance' ? <ChanceMark row={row} col={col} cell={cell} /> : null}
+                {mark === 'chest' ? <ChestMark row={row} col={col} cell={cell} /> : null}
+                {mark ? null : (
+                  <Text
+                    style={[
+                      styles.cellText,
+                      {
+                        fontSize: fitted?.fontSize ?? label,
+                        lineHeight: fitted?.lineHeight ?? Math.round(label * 1.15),
+                        width: '100%',
+                      },
+                    ]}
+                    numberOfLines={fitted?.lines ?? 2}
+                  >
+                    {fitted?.text ?? space.short}
+                  </Text>
+                )}
               </>
             )}
           </View>
@@ -614,6 +619,58 @@ function TrainMark({ row, col, cell }: { row: number; col: number; cell: number 
         <TrainSvg width={long} height={short} />
       </View>
     </View>
+  );
+}
+
+function cardMarkSize(row: number, col: number, cell: number) {
+  const lane = row === 0 || row === 10 ? tokenLane(cell) : sideLane(cell);
+  const along = col === 0 || col === 10 ? cell - 6 : cell - lane - 6;
+  const across = row === 0 || row === 10 ? cell - 6 : cell - lane - 6;
+  return Math.max(16, Math.round(Math.min(cell * 0.46, along, across)));
+}
+
+function ChanceMark({ row, col, cell }: { row: number; col: number; cell: number }) {
+  const size = cardMarkSize(row, col, cell);
+  return (
+    <Text
+      pointerEvents="none"
+      style={{
+        fontFamily: fonts.display,
+        fontSize: size,
+        lineHeight: size,
+        fontWeight: '700',
+        color: '#c2410c',
+        textAlign: 'center',
+        width: '100%',
+      }}
+    >
+      ?
+    </Text>
+  );
+}
+
+function ChestMark({ row, col, cell }: { row: number; col: number; cell: number }) {
+  const size = cardMarkSize(row, col, cell);
+  return (
+    <View pointerEvents="none" style={{ width: size, height: size }}>
+      <ChestSvg size={size} />
+    </View>
+  );
+}
+
+function ChestSvg({ size }: { size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 64 64">
+      <Path d="M10 30c0-12 9-20 22-20s22 8 22 20v2H10v-2z" fill="#8d4e28" />
+      <Path d="M14 22c2-7 8-12 18-12s16 5 18 12" fill="none" stroke="#e2b34a" strokeWidth="3" />
+      <Rect x="8" y="30" width="48" height="8" rx="2" fill="#e2b34a" />
+      <Path d="M8 36h48v16c0 3-2 5-5 5H13c-3 0-5-2-5-5V36z" fill="#6b3a1c" />
+      <Rect x="28" y="30" width="8" height="27" fill="#e2b34a" />
+      <Circle cx="32" cy="44" r="5.5" fill="#f3d78a" />
+      <Circle cx="32" cy="44" r="2.2" fill="#6b4a16" />
+      <Rect x="12" y="55" width="8" height="4" rx="1" fill="#3a2212" />
+      <Rect x="44" y="55" width="8" height="4" rx="1" fill="#3a2212" />
+    </Svg>
   );
 }
 
