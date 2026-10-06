@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   PanResponder,
   Pressable,
@@ -20,7 +20,7 @@ import {
   type BoardSpace,
 } from '../domain/monopolyBoard';
 import { getProperty, playerToken } from '../domain/monopoly';
-import { clampPan, clampZoom, panForZoom } from '../domain/monopolyZoom';
+import { clampPan, clampZoom, panForWheel, panForZoom } from '../domain/monopolyZoom';
 import { colors, fonts, radii } from '../theme';
 
 const TOKEN_COLORS = ['#e86a5c', '#6fbf8a', '#7eb6ff', '#d4a84b', '#d93a96', '#f7941d', '#c5d0c9', '#f2e3a0'];
@@ -173,6 +173,34 @@ function PhoneBoard({ onDragging, ...props }: Props) {
     setPan(nextPan);
   };
 
+  useEffect(() => {
+    const node = viewportRef.current as unknown as {
+      addEventListener?: (type: string, listener: (event: WheelEvent) => void, options?: { passive: boolean }) => void;
+      removeEventListener?: (type: string, listener: (event: WheelEvent) => void) => void;
+    } | null;
+    if (!node?.addEventListener || !node.removeEventListener) return;
+    const onWheel = (event: WheelEvent) => {
+      const next = panForWheel(
+        panRef.current,
+        {
+          deltaX: event.deltaX,
+          deltaY: event.deltaY,
+          deltaMode: event.deltaMode,
+          ctrlKey: event.ctrlKey,
+          metaKey: event.metaKey,
+        },
+        zoomRef.current,
+        viewportRefSize.current,
+      );
+      if (!next) return;
+      event.preventDefault();
+      panRef.current = next;
+      setPan(next);
+    };
+    node.addEventListener('wheel', onWheel, { passive: false });
+    return () => node.removeEventListener?.('wheel', onWheel);
+  }, []);
+
   const boardSize = viewport * zoom;
 
   return (
@@ -232,7 +260,7 @@ function PhoneBoard({ onDragging, ...props }: Props) {
           </Pressable>
         </View>
       </View>
-      <Text style={styles.phoneHint}>Drag the board to look around. Pinch, or use + and −, to zoom.</Text>
+      <Text style={styles.phoneHint}>Drag the board to look around, or roll the wheel over it. Pinch, or use + and −, to zoom.</Text>
     </View>
   );
 }

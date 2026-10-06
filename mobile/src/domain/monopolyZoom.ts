@@ -15,6 +15,26 @@ export function clampPan(pan: { x: number; y: number }, zoom: number, viewport: 
   };
 }
 
+type BoardWheel = {
+  deltaX: number;
+  deltaY: number;
+  deltaMode: number;
+  ctrlKey?: boolean;
+  metaKey?: boolean;
+};
+
+/** Pan the board from the mouse wheel. Ctrl or Meta leaves the gesture for the browser. */
+export function panForWheel(pan: { x: number; y: number }, wheel: BoardWheel, zoom: number, viewport: number) {
+  if (wheel.ctrlKey || wheel.metaKey) return null;
+  if (wheel.deltaX === 0 && wheel.deltaY === 0) return null;
+  const scale = wheel.deltaMode === 1 ? 40 : wheel.deltaMode === 2 ? viewport : 1;
+  return clampPan(
+    { x: pan.x - wheel.deltaX * scale, y: pan.y - wheel.deltaY * scale },
+    zoom,
+    viewport,
+  );
+}
+
 /**
  * The felt center has no spaces. Button zoom keeps the nearest board edge
  * (or corner) fixed so the property track stays on screen.

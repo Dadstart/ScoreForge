@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { panForZoom } from './monopolyZoom';
+import { panForWheel, panForZoom } from './monopolyZoom';
 
 const viewport = 100;
 const track = 10 / 11;
@@ -65,5 +65,15 @@ describe('monopoly zoom', () => {
     };
     assert.ok(Math.abs(mid.x - fraction.x) < 0.001);
     assert.ok(Math.abs(mid.y - fraction.y) < 0.001);
+  });
+
+  it('pans the board with the mouse wheel and ignores ctrl-wheel', () => {
+    const start = { x: -40, y: -40 };
+    assert.deepEqual(panForWheel(start, { deltaX: 25, deltaY: 0, deltaMode: 0 }, 2, viewport), { x: -65, y: -40 });
+    assert.deepEqual(panForWheel(start, { deltaX: 0, deltaY: 30, deltaMode: 0 }, 2, viewport), { x: -40, y: -70 });
+    assert.deepEqual(panForWheel(start, { deltaX: -10, deltaY: 2, deltaMode: 0 }, 2, viewport), { x: -30, y: -42 });
+    assert.deepEqual(panForWheel(start, { deltaX: 0, deltaY: 1, deltaMode: 1 }, 2, viewport), { x: -40, y: -80 });
+    assert.equal(panForWheel(start, { deltaX: 0, deltaY: 30, deltaMode: 0, ctrlKey: true }, 2, viewport), null);
+    assert.equal(panForWheel(start, { deltaX: 0, deltaY: 0, deltaMode: 0 }, 2, viewport), null);
   });
 });
