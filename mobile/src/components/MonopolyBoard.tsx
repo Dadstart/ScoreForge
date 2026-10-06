@@ -20,6 +20,7 @@ import {
   type BoardSpace,
 } from '../domain/monopolyBoard';
 import { getProperty, playerToken } from '../domain/monopoly';
+import { clampPan, clampZoom, panForZoom } from '../domain/monopolyZoom';
 import { colors, fonts, radii } from '../theme';
 
 const TOKEN_COLORS = ['#e86a5c', '#6fbf8a', '#7eb6ff', '#d4a84b', '#d93a96', '#f7941d', '#c5d0c9', '#f2e3a0'];
@@ -36,20 +37,6 @@ type Origin = { x: number; y: number; size: number };
 
 const PHONE_LAYOUT = 760;
 const START_ZOOM = 2;
-const MIN_ZOOM = 1;
-const MAX_ZOOM = 3.5;
-
-function clampZoom(zoom: number) {
-  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
-}
-
-function clampPan(pan: { x: number; y: number }, zoom: number, viewport: number) {
-  const min = Math.min(0, viewport * (1 - zoom));
-  return {
-    x: Math.min(0, Math.max(min, pan.x)),
-    y: Math.min(0, Math.max(min, pan.y)),
-  };
-}
 
 function touchDistance(a: { pageX: number; pageY: number }, b: { pageX: number; pageY: number }) {
   return Math.hypot(a.pageX - b.pageX, a.pageY - b.pageY);
@@ -179,17 +166,7 @@ function PhoneBoard({ onDragging, ...props }: Props) {
   const changeZoom = (delta: number) => {
     const prev = zoomRef.current;
     const next = clampZoom(prev + delta);
-    const size = viewportRefSize.current;
-    const focus = size / 2;
-    const current = panRef.current;
-    const nextPan = clampPan(
-      {
-        x: focus - ((focus - current.x) * next) / prev,
-        y: focus - ((focus - current.y) * next) / prev,
-      },
-      next,
-      size,
-    );
+    const nextPan = panForZoom(panRef.current, prev, next, viewportRefSize.current);
     zoomRef.current = next;
     panRef.current = nextPan;
     setZoom(next);

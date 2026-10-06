@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { AddPlayerModal } from '../components/AddPlayerModal';
 import { MonopolyBoard } from '../components/MonopolyBoard';
 import { FireworksOverlay } from '../components/FireworksOverlay';
 import { PlaySpark } from '../components/PlaySpark';
@@ -41,7 +42,7 @@ import { useSettings } from '../hooks/useSettings';
 import { usePlaySpark } from '../hooks/usePlaySpark';
 import { useWinCelebration } from '../hooks/useWinCelebration';
 import { loadDisplayName } from '../storage/displayNameStore';
-import { preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
+import { addPlayerToGame, preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
 import { colors, radii, space, typography } from '../theme';
 import type { RootStackParamList } from '../navigation/types';
 
@@ -85,6 +86,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
   const [landNote, setLandNote] = useState<string | null>(null);
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
   const [confirmingRemoveId, setConfirmingRemoveId] = useState<string | null>(null);
+  const [addingPlayer, setAddingPlayer] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
   const [cashDraft, setCashDraft] = useState('');
   const [tokenDraft, setTokenDraft] = useState(INITIAL_TOKEN);
@@ -428,6 +430,9 @@ export function MonopolyScreen({ navigation, route }: Props) {
             variant="ghost"
             onPress={() => navigation.navigate('Settings', { gameId })}
           />
+          {game.players.length < template.maxPlayers ? (
+            <Button label="Add player" onPress={() => setAddingPlayer(true)} />
+          ) : null}
           {!complete ? (
             <Button
               label="Mark complete"
@@ -712,6 +717,17 @@ export function MonopolyScreen({ navigation, route }: Props) {
           onDismiss={dismissCelebration}
         />
       ) : null}
+      <AddPlayerModal
+        visible={addingPlayer}
+        maxPlayers={template.maxPlayers}
+        currentCount={game.players.length}
+        onCancel={() => setAddingPlayer(false)}
+        onAdd={async (name) => {
+          const saved = await addPlayerToGame(game.shareCode, name, template.maxPlayers);
+          setGame((current) => preferNewerGame(current, saved));
+          setError(null);
+        }}
+      />
 
     </Screen>
   );

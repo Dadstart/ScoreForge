@@ -1,7 +1,8 @@
 import { ensureBackgammonState } from './backgammon';
 import { ensureCheckersState } from './checkers';
 import { ensureChineseState, playerCap } from './chineseCheckers';
-import { createPlayer, type Game } from './models';
+import { createPlayer, type Game, type Player } from './models';
+import { PLAYER_TOKENS } from './monopoly';
 import { ensureSorryState } from './sorry';
 
 /** Add a named player to a game, enforcing uniqueness and max capacity. */
@@ -25,12 +26,21 @@ export function withAddedPlayer(game: Game, rawName: string, maxPlayers: number)
       ensureSorryState(
         ensureBackgammonState({
           ...game,
-          players: [...game.players, createPlayer(name)],
+          players: [...game.players, seatedPlayer(game, name)],
           updatedAt: new Date().toISOString(),
         }),
       ),
     ),
   );
+}
+
+/** A new Monopoly player gets the first unused piece. Other games stay nameless of tokens. */
+function seatedPlayer(game: Game, name: string): Player {
+  const player = createPlayer(name);
+  if (game.templateId !== 'monopoly') return player;
+  const taken = new Set(game.players.map((entry) => entry.token).filter((token) => token));
+  const free = PLAYER_TOKENS.find((token) => !taken.has(token.id));
+  return free ? { ...player, token: free.id } : player;
 }
 
 /** Remove a player and any cash events recorded for them. */

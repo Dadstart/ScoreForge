@@ -53,7 +53,7 @@ const INSTRUCTIONS: Record<string, GameInstructions> = {
   monopoly: {
     title: 'Monopoly',
     lines: [
-      'Everyone starts with $1,500. Play the board at the table and track the cash here.',
+      'Everyone starts with $1,500. Add a player from the game; they start with $1,500 and a free token.',
       'Choose who is paying and who is receiving, then enter the amount.',
       'Open a property to look up the rent for its houses, hotel, railroads, or utilities.',
       'You change your own cash. The richest player wins.',

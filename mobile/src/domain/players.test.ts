@@ -25,6 +25,16 @@ describe('players', () => {
     assert.throws(() => withAddedPlayer(full, 'Ed', 4), /maximum of 4/);
   });
 
+  it('gives a new Monopoly player the first free token', () => {
+    const game = fresh('monopoly');
+    const host = game.players[0];
+    assert.ok(host);
+    host.token = 'car';
+    const added = withAddedPlayer(game, 'Bea', 8);
+    assert.equal(added.players[1]?.token, 'dog');
+    assert.equal(added.events.length, 0);
+  });
+
   it('removes a player and that player’s scores, and keeps the last one', () => {
     const game = fresh();
     const added = withAddedPlayer(game, 'Bea', 4);
