@@ -24,6 +24,8 @@ import { clampPan, clampZoom, panForWheel, panForZoom } from '../domain/monopoly
 import { colors, fonts, radii } from '../theme';
 
 const TOKEN_COLORS = ['#e86a5c', '#6fbf8a', '#7eb6ff', '#d4a84b', '#d93a96', '#f7941d', '#c5d0c9', '#f2e3a0'];
+/** Cells at least this wide show names and prices. Smaller cells are a color map. */
+const CLOSE_CELL = 96;
 
 type Props = {
   players: Player[];
@@ -37,6 +39,7 @@ type Origin = { x: number; y: number; size: number };
 
 const PHONE_LAYOUT = 760;
 const START_ZOOM = 2;
+const VIEW_FRAME = 2;
 
 function touchDistance(a: { pageX: number; pageY: number }, b: { pageX: number; pageY: number }) {
   return Math.hypot(a.pageX - b.pageX, a.pageY - b.pageY);
@@ -209,7 +212,7 @@ function PhoneBoard({ onDragging, ...props }: Props) {
         ref={viewportRef}
         style={styles.viewport}
         onLayout={(event) => {
-          const width = event.nativeEvent.layout.width;
+          const width = Math.max(0, event.nativeEvent.layout.width - VIEW_FRAME * 2);
           if (width <= 0 || width === viewportRefSize.current) return;
           const first = viewportRefSize.current === 0;
           viewportRefSize.current = width;
@@ -241,12 +244,21 @@ function PhoneBoard({ onDragging, ...props }: Props) {
             style={{ position: 'absolute', width: boardSize, height: boardSize, left: pan.x, top: pan.y }}
           />
         ) : null}
-        <View style={styles.zoomDock} pointerEvents="box-none">
+        <View
+          pointerEvents="box-none"
+          style={[
+            styles.zoomDock,
+            {
+              top: pan.y + boardSize / 11 + 12,
+              right: viewport - (pan.x + (boardSize * 10) / 11) + 12,
+            },
+          ]}
+        >
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Zoom in"
             onPress={() => changeZoom(0.5)}
-            style={styles.zoomBtn}
+            style={({ pressed }) => [styles.zoomBtn, pressed && styles.zoomBtnPressed]}
           >
             <Text style={styles.zoomLabel}>+</Text>
           </Pressable>
@@ -254,7 +266,7 @@ function PhoneBoard({ onDragging, ...props }: Props) {
             accessibilityRole="button"
             accessibilityLabel="Zoom out"
             onPress={() => changeZoom(-0.5)}
-            style={styles.zoomBtn}
+            style={({ pressed }) => [styles.zoomBtn, pressed && styles.zoomBtnPressed]}
           >
             <Text style={styles.zoomLabel}>−</Text>
           </Pressable>
@@ -300,6 +312,9 @@ function BoardCanvas({
     return cellToSpace(row, col);
   };
 
+  const cell = size > 0 ? size / 11 : 48;
+  const detail = cell >= CLOSE_CELL;
+
   return (
     <View
       ref={boardRef}
@@ -312,23 +327,42 @@ function BoardCanvas({
         const { row, col } = spaceToCell(space.index);
         const property = space.propertyId ? getProperty(space.propertyId) : undefined;
         const isRailroad = property?.kind === 'railroad';
+        const isUtility = property?.kind === 'utility';
         const isCorner = space.index % 10 === 0;
-        const swatch = property && !isRailroad ? property.swatch : undefined;
-        const cell = size > 0 ? size / 11 : 48;
-        const bar = Math.max(10, Math.round(cell * 0.22));
-        const label = Math.max(11, Math.round(cell * 0.13));
+        const swatch = property && !isRailroad && !isUtility ? property.swatch : undefined;
+        const bar = swatch
+          ? detail
+            ? Math.max(12, Math.round(cell * 0.18))
+            : Math.max(8, Math.round(cell * 0.36))
+          : 0;
+        const label = detail ? Math.max(12, Math.round(cell * 0.13)) : Math.max(10, Math.round(cell * 0.2));
         const lane = !isCorner && (col === 0 || col === 10) ? sideLane(cell) : tokenLane(cell);
         const mark = space.name === 'Chance' ? 'chance' : space.name === 'Community Chest' ? 'chest' : null;
-        const fitted = space.propertyId
-          ? fitPropertyLabel(space.name, labelBounds(row, col, cell, bar, isRailroad), label)
-          : null;
+        const priceLine = detail && (property || space.tax) ? Math.max(12, Math.round(cell * 0.11)) : 0;
+        const utility = isUtility ? utilityExtent(cell, detail) : 0;
+        const bounds = labelBounds(row, col, cell, bar, isRailroad, detail, priceLine, utility);
+        const nameText = mark
+          ? null
+          : !detail && space.tax
+            ? `$${space.tax}`
+            : detail
+              ? (property?.name ?? space.name)
+              : space.short;
+        const fitted =
+          nameText && bounds.width >= 22 && bounds.height >= 16
+            ? fitPropertyLabel(nameText, bounds, label)
+            : null;
+        const barLabel = !detail && swatch && !fitted ? space.short : null;
+        const barTurn = col === 0 ? '-90deg' : col === 10 ? '90deg' : null;
+        const amount = detail && fitted ? (property?.price ?? space.tax) : undefined;
         return (
           <View
             key={space.index}
             accessibilityLabel={space.name}
             style={[
               styles.cell,
-              isCorner ? null : spacePadding(row, col, lane, swatch ? bar : 0),
+              { backgroundColor: spaceTint(space.name, property?.kind) },
+              isCorner ? null : spacePadding(row, col, lane, swatch ? bar : 0, cell),
               {
                 left: `${(col * 100) / 11}%`,
                 top: `${(row * 100) / 11}%`,
@@ -338,43 +372,132 @@ function BoardCanvas({
           >
             {isCorner ? (
               <View pointerEvents="none" style={cornerFrame(row, col, cell, lane)}>
-                <CornerArt index={space.index} cell={Math.max(36, cell - lane)} />
+                <CornerArt index={space.index} cell={Math.max(36, cell - lane)} detail={detail} />
               </View>
             ) : (
               <>
                 {swatch ? (
-                  <View style={[styles.swatch, barEdge(row, col, bar), { backgroundColor: swatch }]} />
+                  <View
+                    style={[
+                      styles.swatch,
+                      barEdge(row, col, bar),
+                      {
+                        backgroundColor: swatch,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        overflow: 'hidden',
+                      },
+                    ]}
+                  >
+                    {barLabel && barTurn ? (
+                      <View
+                        style={{
+                          position: 'absolute',
+                          width: cell - 4,
+                          height: bar,
+                          left: (bar - (cell - 4)) / 2,
+                          top: (cell - bar) / 2,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          transform: [{ rotate: barTurn }],
+                        }}
+                      >
+                        <Text
+                          style={{
+                            color: inkOn(swatch),
+                            fontFamily: fonts.body,
+                            fontWeight: '800',
+                            fontSize: fitSize(barLabel, cell - 8, Math.max(8, bar - 4)),
+                            lineHeight: Math.max(10, bar - 2),
+                            width: cell - 8,
+                            textAlign: 'center',
+                          }}
+                          numberOfLines={1}
+                        >
+                          {barLabel}
+                        </Text>
+                      </View>
+                    ) : barLabel ? (
+                      <Text
+                        style={{
+                          color: inkOn(swatch),
+                          fontFamily: fonts.body,
+                          fontWeight: '800',
+                          fontSize: fitSize(barLabel, cell - 6, Math.max(8, bar - 4)),
+                          lineHeight: Math.max(10, bar - 2),
+                          textAlign: 'center',
+                        }}
+                        numberOfLines={1}
+                      >
+                        {barLabel}
+                      </Text>
+                    ) : null}
+                  </View>
                 ) : null}
-                {isRailroad ? <TrainMark row={row} col={col} cell={cell} /> : null}
-                {mark === 'chance' ? <ChanceMark row={row} col={col} cell={cell} /> : null}
-                {mark === 'chest' ? <ChestMark row={row} col={col} cell={cell} /> : null}
-                {mark ? null : (
+                {isRailroad ? <TrainMark row={row} col={col} cell={cell} detail={detail} /> : null}
+                {isUtility ? (
+                  <UtilityMark kind={property?.id === 'water' ? 'water' : 'electric'} size={utility} />
+                ) : null}
+                {mark === 'chance' ? <ChanceMark row={row} col={col} cell={cell} detail={detail} /> : null}
+                {mark === 'chest' ? <ChestMark row={row} col={col} cell={cell} detail={detail} /> : null}
+                {fitted ? (
                   <Text
                     style={[
                       styles.cellText,
                       {
-                        fontSize: fitted?.fontSize ?? label,
-                        lineHeight: fitted?.lineHeight ?? Math.round(label * 1.15),
+                        fontSize: fitted.fontSize,
+                        lineHeight: fitted.lineHeight,
                         width: '100%',
                       },
                     ]}
-                    numberOfLines={fitted?.lines ?? 2}
+                    numberOfLines={fitted.lines}
                   >
-                    {fitted?.text ?? space.short}
+                    {fitted.text}
                   </Text>
-                )}
+                ) : null}
+                {detail && mark ? (
+                  <Text
+                    style={[
+                      styles.cellText,
+                      {
+                        fontSize: Math.max(10, Math.round(cell * 0.11)),
+                        lineHeight: Math.max(12, Math.round(cell * 0.13)),
+                        width: '100%',
+                      },
+                    ]}
+                  >
+                    {mark === 'chance' ? 'Chance' : 'Chest'}
+                  </Text>
+                ) : null}
+                {amount != null ? (
+                  <Text
+                    style={[
+                      styles.cellPrice,
+                      {
+                        fontSize: Math.max(10, priceLine - 2),
+                        lineHeight: priceLine,
+                      },
+                    ]}
+                  >
+                    ${amount}
+                  </Text>
+                ) : null}
               </>
             )}
           </View>
         );
       })}
       <View style={styles.center} pointerEvents="none">
-        {showCenter ? (
-          <>
-            <Text style={styles.centerTitle}>Board</Text>
-            <Text style={styles.centerHint}>Drag a piece onto a space</Text>
-          </>
-        ) : null}
+        <Text
+          style={[
+            styles.centerTitle,
+            { fontSize: Math.min(96, Math.max(18, Math.round(cell * 0.62))), letterSpacing: 1 },
+          ]}
+        >
+          MONOPOLY
+        </Text>
+        <View style={styles.centerRule} />
+        {showCenter && detail ? <Text style={styles.centerHint}>Drag a piece onto a space</Text> : null}
       </View>
       {size > 0
         ? players.map((player, index) => {
@@ -426,17 +549,27 @@ function BoardCanvas({
   );
 }
 
-function CornerArt({ index, cell }: { index: number; cell: number }) {
-  if (index === 0) return <GoCorner cell={cell} />;
-  if (index === 10) return <JailCorner cell={cell} />;
-  if (index === 20) return <FreeParkingCorner cell={cell} />;
-  return <GoToJailCorner cell={cell} />;
+function spaceTint(name: string, kind?: string) {
+  if (name === 'Chance') return '#f6e2cf';
+  if (name === 'Community Chest') return '#f3ead0';
+  if (name === 'Income Tax' || name === 'Luxury Tax') return '#f6e0dc';
+  if (kind === 'railroad') return '#e3ebf1';
+  if (kind === 'utility') return '#f6f0d2';
+  if (name === 'Go' || name === 'Jail' || name === 'Free Parking' || name === 'Go to Jail') return '#f3ead8';
+  return '#f7f1e6';
 }
 
-function GoCorner({ cell }: { cell: number }) {
-  const go = Math.round(cell * 0.36);
-  const fine = Math.max(7, Math.round(cell * 0.095));
-  const arrowW = Math.round(cell * 0.62);
+function CornerArt({ index, cell, detail }: { index: number; cell: number; detail: boolean }) {
+  if (index === 0) return <GoCorner cell={cell} detail={detail} />;
+  if (index === 10) return <JailCorner cell={cell} detail={detail} />;
+  if (index === 20) return <FreeParkingCorner cell={cell} detail={detail} />;
+  return <GoToJailCorner cell={cell} detail={detail} />;
+}
+
+function GoCorner({ cell, detail }: { cell: number; detail: boolean }) {
+  const go = Math.round(cell * (detail ? 0.34 : 0.48));
+  const fine = Math.max(7, Math.round(cell * 0.09));
+  const arrowW = Math.round(cell * (detail ? 0.58 : 0.7));
   const arrowH = Math.round(cell * 0.14);
   return (
     <View style={styles.corner}>
@@ -444,16 +577,20 @@ function GoCorner({ cell }: { cell: number }) {
       <Svg width={arrowW} height={arrowH} viewBox="0 0 72 16">
         <Path d="M72 5H24V1L4 8l20 7V11h48V5z" fill="#ed1b24" />
       </Svg>
-      <Text style={[styles.cornerFine, { fontSize: fine, lineHeight: fine + 2 }]}>COLLECT $200</Text>
-      <Text style={[styles.cornerFine, { fontSize: fine, lineHeight: fine + 2 }]}>AS YOU PASS</Text>
+      {detail ? (
+        <>
+          <Text style={[styles.cornerFine, { fontSize: fine, lineHeight: fine + 2 }]}>COLLECT $200</Text>
+          <Text style={[styles.cornerFine, { fontSize: fine, lineHeight: fine + 2 }]}>AS YOU PASS</Text>
+        </>
+      ) : null}
     </View>
   );
 }
 
-function JailCorner({ cell }: { cell: number }) {
-  const title = Math.max(8, Math.round(cell * 0.13));
+function JailCorner({ cell, detail }: { cell: number; detail: boolean }) {
+  const title = Math.max(8, Math.round(cell * (detail ? 0.12 : 0.16)));
   const sub = Math.max(7, Math.round(cell * 0.1));
-  const box = Math.round(cell * 0.62);
+  const box = Math.round(cell * (detail ? 0.58 : 0.72));
   return (
     <View style={styles.corner}>
       <View style={[styles.jail, { width: box, height: Math.round(box * 0.78) }]}>
@@ -465,41 +602,44 @@ function JailCorner({ cell }: { cell: number }) {
           <View style={styles.jailBar} />
         </View>
       </View>
-      <Text style={[styles.cornerFine, { fontSize: sub, lineHeight: sub + 2 }]}>JUST VISITING</Text>
+      {detail ? (
+        <Text style={[styles.cornerFine, { fontSize: sub, lineHeight: sub + 2 }]}>JUST VISITING</Text>
+      ) : null}
     </View>
   );
 }
 
-function FreeParkingCorner({ cell }: { cell: number }) {
-  const title = Math.max(10, Math.round(cell * 0.16));
+function FreeParkingCorner({ cell, detail }: { cell: number; detail: boolean }) {
+  const title = fitSize('PARKING', cell - 8, Math.max(10, Math.round(cell * (detail ? 0.15 : 0.2))));
   return (
     <View style={styles.corner}>
-      <Svg width={Math.round(cell * 0.58)} height={Math.round(cell * 0.26)} viewBox="0 0 64 30">
-        <Path
-          d="M6 18c0-4 3-6 8-7l6-7h18l8 7h8c4 0 8 2 8 6v3H6v-2z"
-          fill="#ed1b24"
-        />
-        <Path d="M22 8h16l6 6H18z" fill="#b9d7ea" />
-        <Circle cx="18" cy="23" r="5" fill="#1a1408" />
-        <Circle cx="46" cy="23" r="5" fill="#1a1408" />
-        <Circle cx="18" cy="23" r="2" fill="#f4efe4" />
-        <Circle cx="46" cy="23" r="2" fill="#f4efe4" />
-      </Svg>
+      {detail ? (
+        <Svg width={Math.round(cell * 0.52)} height={Math.round(cell * 0.24)} viewBox="0 0 64 30">
+          <Path d="M6 18c0-4 3-6 8-7l6-7h18l8 7h8c4 0 8 2 8 6v3H6v-2z" fill="#ed1b24" />
+          <Path d="M22 8h16l6 6H18z" fill="#b9d7ea" />
+          <Circle cx="18" cy="23" r="5" fill="#1a1408" />
+          <Circle cx="46" cy="23" r="5" fill="#1a1408" />
+          <Circle cx="18" cy="23" r="2" fill="#f4efe4" />
+          <Circle cx="46" cy="23" r="2" fill="#f4efe4" />
+        </Svg>
+      ) : null}
       <Text style={[styles.cornerTitle, { fontSize: title, lineHeight: title + 1 }]}>FREE</Text>
       <Text style={[styles.cornerTitle, { fontSize: title, lineHeight: title + 1 }]}>PARKING</Text>
     </View>
   );
 }
 
-function GoToJailCorner({ cell }: { cell: number }) {
+function GoToJailCorner({ cell, detail }: { cell: number; detail: boolean }) {
   const kicker = Math.max(8, Math.round(cell * 0.12));
-  const title = Math.max(12, Math.round(cell * 0.2));
+  const title = Math.max(12, Math.round(cell * (detail ? 0.18 : 0.26)));
   const fine = Math.max(6, Math.round(cell * 0.08));
   return (
     <View style={styles.corner}>
-      <Text style={[styles.cornerFine, { fontSize: kicker, lineHeight: kicker + 1 }]}>GO TO</Text>
+      {detail ? (
+        <Text style={[styles.cornerFine, { fontSize: kicker, lineHeight: kicker + 1 }]}>GO TO</Text>
+      ) : null}
       <Text style={[styles.cornerGo, { fontSize: title, lineHeight: title }]}>JAIL</Text>
-      <Svg width={Math.round(cell * 0.34)} height={Math.round(cell * 0.28)} viewBox="0 0 40 36">
+      <Svg width={Math.round(cell * 0.32)} height={Math.round(cell * 0.26)} viewBox="0 0 40 36">
         <Path d="M10 12h20l-2 4H12z" fill="#1d4e89" />
         <Rect x="6" y="15" width="28" height="3" rx="1" fill="#1d4e89" />
         <Circle cx="20" cy="22" r="4.5" fill="#f0c9a0" />
@@ -507,8 +647,12 @@ function GoToJailCorner({ cell }: { cell: number }) {
         <Path d="M13 31 L2 27h11z" fill="#1d4e89" />
         <Circle cx="24" cy="31" r="1.5" fill="#f2d36b" />
       </Svg>
-      <Text style={[styles.cornerFine, { fontSize: fine, lineHeight: fine + 1 }]}>Do not pass GO</Text>
-      <Text style={[styles.cornerFine, { fontSize: fine, lineHeight: fine + 1 }]}>Do not collect $200</Text>
+      {detail ? (
+        <>
+          <Text style={[styles.cornerFine, { fontSize: fine, lineHeight: fine + 1 }]}>Do not pass GO</Text>
+          <Text style={[styles.cornerFine, { fontSize: fine, lineHeight: fine + 1 }]}>Do not collect $200</Text>
+        </>
+      ) : null}
     </View>
   );
 }
@@ -523,6 +667,21 @@ const GLYPH_WIDTH: Record<string, number> = {
   s: 9.03, t: 7.33, u: 10.47, v: 9.57, w: 13.89, x: 9.71, y: 10.27, z: 8.3,
   '.': 4.27, '&': 13.26, ' ': 3.99,
 };
+
+function fitSize(text: string, maxWidth: number, start: number) {
+  let size = start;
+  while (size > 7 && textWidth(text, size) > maxWidth) size -= 1;
+  return size;
+}
+
+function inkOn(swatch: string) {
+  const hex = swatch.replace('#', '');
+  const r = Number.parseInt(hex.slice(0, 2), 16);
+  const g = Number.parseInt(hex.slice(2, 4), 16);
+  const b = Number.parseInt(hex.slice(4, 6), 16);
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum > 0.62 ? '#1a1408' : '#f7f1e6';
+}
 
 function textWidth(text: string, fontSize: number) {
   const scale = fontSize / 17;
@@ -556,14 +715,27 @@ function packWords(words: string[], maxWidth: number, fontSize: number) {
   return lines;
 }
 
-function trainExtent(cell: number, col: number) {
-  const long = Math.max(28, Math.round(cell * 0.5));
+function trainExtent(cell: number, col: number, detail: boolean) {
+  const long = detail ? Math.max(26, Math.round(cell * 0.46)) : Math.max(16, Math.round(cell * 0.36));
   const short = Math.round(long * 0.56);
   const sideways = col === 0 || col === 10;
   return { long, short, sideways, height: sideways ? long : short };
 }
 
-function labelBounds(row: number, col: number, cell: number, bar: number, railroad: boolean) {
+function utilityExtent(cell: number, detail: boolean) {
+  return detail ? Math.max(22, Math.round(cell * 0.28)) : Math.max(16, Math.round(cell * 0.38));
+}
+
+function labelBounds(
+  row: number,
+  col: number,
+  cell: number,
+  bar: number,
+  railroad: boolean,
+  detail: boolean,
+  priceLine: number,
+  utility = 0,
+) {
   const border = 2;
   const lane = row === 0 || row === 10 ? tokenLane(cell) : sideLane(cell);
   let width = cell - border;
@@ -571,9 +743,11 @@ function labelBounds(row: number, col: number, cell: number, bar: number, railro
   const horizontal = row === 0 || row === 10;
   if (horizontal) height -= lane;
   else width -= lane;
-  if (railroad) height -= trainExtent(cell, col).height;
+  if (railroad) height -= trainExtent(cell, col, detail).height;
+  else if (utility) height -= utility;
   else if (horizontal) height -= bar;
   else width -= bar;
+  height -= priceLine;
   return { width: Math.max(8, width), height: Math.max(8, height) };
 }
 
@@ -599,8 +773,18 @@ function fitPropertyLabel(
   return { text: lines.join('\n'), fontSize: minSize, lineHeight, lines: lines.length };
 }
 
-function TrainMark({ row, col, cell }: { row: number; col: number; cell: number }) {
-  const { long, short, sideways } = trainExtent(cell, col);
+function TrainMark({
+  row,
+  col,
+  cell,
+  detail,
+}: {
+  row: number;
+  col: number;
+  cell: number;
+  detail: boolean;
+}) {
+  const { long, short, sideways } = trainExtent(cell, col, detail);
   const transform =
     row === 10
       ? [{ scaleX: -1 as const }]
@@ -622,15 +806,58 @@ function TrainMark({ row, col, cell }: { row: number; col: number; cell: number 
   );
 }
 
-function cardMarkSize(row: number, col: number, cell: number) {
+function cardMarkSize(row: number, col: number, cell: number, detail: boolean) {
   const lane = row === 0 || row === 10 ? tokenLane(cell) : sideLane(cell);
   const along = col === 0 || col === 10 ? cell - 6 : cell - lane - 6;
   const across = row === 0 || row === 10 ? cell - 6 : cell - lane - 6;
-  return Math.max(16, Math.round(Math.min(cell * 0.46, along, across)));
+  const fraction = detail ? 0.3 : 0.48;
+  return Math.max(detail ? 18 : 14, Math.round(Math.min(cell * fraction, along, across)));
 }
 
-function ChanceMark({ row, col, cell }: { row: number; col: number; cell: number }) {
-  const size = cardMarkSize(row, col, cell);
+function UtilityMark({ kind, size }: { kind: 'electric' | 'water'; size: number }) {
+  return (
+    <View pointerEvents="none" style={{ width: size, height: size }}>
+      {kind === 'water' ? <WaterSvg size={size} /> : <BulbSvg size={size} />}
+    </View>
+  );
+}
+
+function BulbSvg({ size }: { size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 32 32">
+      <Path
+        d="M16 1.5c-5.4 0-9.2 4.1-9.2 9.4 0 3.3 1.7 5.8 3.6 7.6.9.9 1.4 1.9 1.4 3v1.3h8.4v-1.3c0-1.1.5-2.1 1.4-3 1.9-1.8 3.6-4.3 3.6-7.6 0-5.3-3.8-9.4-9.2-9.4z"
+        fill="#f2c14b"
+      />
+      <Path d="M11.2 9.2c1-2.4 2.8-3.8 4.8-3.8" fill="none" stroke="#fff6d4" strokeWidth="1.6" strokeLinecap="round" />
+      <Rect x="11.6" y="23.2" width="8.8" height="2.1" rx="0.4" fill="#7a5a22" />
+      <Rect x="12.2" y="26" width="7.6" height="1.8" rx="0.4" fill="#7a5a22" />
+      <Rect x="13" y="28.4" width="6" height="2.2" rx="0.7" fill="#4e3912" />
+    </Svg>
+  );
+}
+
+function WaterSvg({ size }: { size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 32 32">
+      <Path d="M16 2c5.2 7.2 11 12.2 11 18.2a11 11 0 1 1-22 0C5 14.2 10.8 9.2 16 2z" fill="#2b86c4" />
+      <Path d="M11.5 18.5c1.2 4 3.4 6 6.8 6.8" fill="none" stroke="#d7f1fb" strokeWidth="1.8" strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+function ChanceMark({
+  row,
+  col,
+  cell,
+  detail,
+}: {
+  row: number;
+  col: number;
+  cell: number;
+  detail: boolean;
+}) {
+  const size = cardMarkSize(row, col, cell, detail);
   return (
     <Text
       pointerEvents="none"
@@ -649,8 +876,18 @@ function ChanceMark({ row, col, cell }: { row: number; col: number; cell: number
   );
 }
 
-function ChestMark({ row, col, cell }: { row: number; col: number; cell: number }) {
-  const size = cardMarkSize(row, col, cell);
+function ChestMark({
+  row,
+  col,
+  cell,
+  detail,
+}: {
+  row: number;
+  col: number;
+  cell: number;
+  detail: boolean;
+}) {
+  const size = cardMarkSize(row, col, cell, detail);
   return (
     <View pointerEvents="none" style={{ width: size, height: size }}>
       <ChestSvg size={size} />
@@ -710,17 +947,20 @@ function sideLane(cell: number) {
   return Math.round(pieceSize(cell) * 0.55);
 }
 
-function spacePadding(row: number, col: number, lane: number, bar: number) {
+function spacePadding(row: number, col: number, lane: number, bar: number, cell: number) {
+  const inner = Math.max(0, cell - 4);
+  const edge = Math.min(bar, inner);
+  const room = Math.min(lane, Math.max(0, inner - edge));
   if (row === 10) {
-    return { paddingTop: lane, paddingBottom: bar, paddingLeft: 2, paddingRight: 2, justifyContent: 'flex-end' as const };
+    return { paddingTop: room, paddingBottom: edge, paddingLeft: 2, paddingRight: 2, justifyContent: 'flex-end' as const };
   }
   if (row === 0) {
-    return { paddingBottom: lane, paddingTop: bar, paddingLeft: 2, paddingRight: 2, justifyContent: 'flex-start' as const };
+    return { paddingBottom: room, paddingTop: edge, paddingLeft: 2, paddingRight: 2, justifyContent: 'flex-start' as const };
   }
   if (col === 0) {
     return {
-      paddingRight: lane,
-      paddingLeft: bar,
+      paddingRight: room,
+      paddingLeft: edge,
       paddingTop: 2,
       paddingBottom: 2,
       alignItems: 'flex-start' as const,
@@ -728,8 +968,8 @@ function spacePadding(row: number, col: number, lane: number, bar: number) {
     };
   }
   return {
-    paddingLeft: lane,
-    paddingRight: bar,
+    paddingLeft: room,
+    paddingRight: edge,
     paddingTop: 2,
     paddingBottom: 2,
     alignItems: 'flex-end' as const,
@@ -909,14 +1149,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderRadius: radii.md,
     backgroundColor: colors.woodDark,
-    borderWidth: 2,
+    borderWidth: VIEW_FRAME,
     borderColor: colors.wood,
     position: 'relative',
   },
   zoomDock: {
     position: 'absolute',
-    top: 8,
-    right: 8,
     gap: 8,
     zIndex: 40,
   },
@@ -924,17 +1162,25 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
+    backgroundColor: colors.accent,
+    borderWidth: 2,
+    borderColor: '#f7f1e6',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#0c1612',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.55,
+    shadowRadius: 4,
+    elevation: 6,
+  },
+  zoomBtnPressed: {
+    backgroundColor: colors.accentPressed,
   },
   zoomLabel: {
-    color: colors.accent,
-    fontSize: 24,
-    fontWeight: '700',
-    lineHeight: 28,
+    color: colors.accentText,
+    fontSize: 26,
+    fontWeight: '800',
+    lineHeight: 30,
   },
   phoneHint: {
     fontFamily: fonts.body,
@@ -956,12 +1202,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: `${100 / 11}%`,
     height: `${100 / 11}%`,
-    backgroundColor: '#f4efe4',
+    backgroundColor: '#f7f1e6',
     borderWidth: 1,
     borderColor: '#c4b49a',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 1,
+    overflow: 'hidden',
   },
   cellHover: {
     borderColor: colors.accent,
@@ -973,6 +1220,13 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#1a1408',
     textAlign: 'center',
+  },
+  cellPrice: {
+    fontFamily: fonts.body,
+    fontWeight: '700',
+    color: '#6b4e32',
+    textAlign: 'center',
+    width: '100%',
   },
   corner: {
     width: '100%',
@@ -1023,6 +1277,8 @@ const styles = StyleSheet.create({
   },
   swatch: {
     position: 'absolute',
+    borderWidth: 1,
+    borderColor: 'rgba(26, 20, 8, 0.28)',
   },
   center: {
     position: 'absolute',
@@ -1031,10 +1287,18 @@ const styles = StyleSheet.create({
     width: `${(100 * 9) / 11}%`,
     height: `${(100 * 9) / 11}%`,
     backgroundColor: '#14352c',
+    borderWidth: 2,
+    borderColor: 'rgba(212, 168, 75, 0.55)',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 12,
-    gap: 4,
+    gap: 6,
+  },
+  centerRule: {
+    width: '22%',
+    height: 2,
+    backgroundColor: colors.accent,
+    opacity: 0.85,
   },
   centerTitle: {
     fontFamily: fonts.display,
