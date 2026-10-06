@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { cardFace, isFree, playableSpots, wasteCard, type Spot, type TriPeaksState } from '../domain/tripeaks';
 import { colors, fonts, radii } from '../theme';
+import { CardFlip, flipDelay, isFaceUpCode, useFreshFaces } from './CardFlip';
 
 type Props = {
   state: TriPeaksState;
@@ -37,6 +38,12 @@ function Layout({ width, state, disabled, onCard, onStock }: Props & { width: nu
   const tableauHeight = overlap * 3 + cardHeight;
   const playable = playableSpots(state);
   const current = wasteCard(state);
+  const faceIds: string[] = [];
+  for (const row of state.rows) {
+    for (const code of row) if (code && isFaceUpCode(code)) faceIds.push(code.toUpperCase());
+  }
+  for (const code of state.waste) if (isFaceUpCode(code)) faceIds.push(code.toUpperCase());
+  const fresh = useFreshFaces(faceIds);
 
   return (
     <View style={{ width: tableauWidth, height: tableauHeight + 28 + cardHeight + 22, alignSelf: 'center' }}>
@@ -46,6 +53,7 @@ function Layout({ width, state, disabled, onCard, onStock }: Props & { width: nu
           const spot: Spot = { row: rowIndex, index };
           const free = isFree(state, spot);
           const canPlay = playable.some((item) => item.row === rowIndex && item.index === index);
+          const id = code.toUpperCase();
           return (
             <View
               key={`${rowIndex}-${index}`}
@@ -63,6 +71,8 @@ function Layout({ width, state, disabled, onCard, onStock }: Props & { width: nu
                 width={cardWidth}
                 height={cardHeight}
                 playable={canPlay}
+                play={fresh.has(id)}
+                delay={flipDelay(id, faceIds, fresh)}
                 disabled={disabled || !free}
                 onPress={() => onCard(spot)}
               />
@@ -80,7 +90,12 @@ function Layout({ width, state, disabled, onCard, onStock }: Props & { width: nu
           onPress={onStock}
         />
         <View style={{ width: cardWidth, gap: 4 }}>
-          <Waste code={current?.code ?? null} width={cardWidth} height={cardHeight} />
+          <Waste
+            code={current?.code ?? null}
+            play={current ? fresh.has(current.code.toUpperCase()) : false}
+            width={cardWidth}
+            height={cardHeight}
+          />
           <Text style={styles.streak}>Streak {state.streak}</Text>
         </View>
       </View>
@@ -107,6 +122,8 @@ function PlayingCard({
   width,
   height,
   playable,
+  play = false,
+  delay = 0,
   disabled,
   onPress,
 }: {
@@ -114,22 +131,44 @@ function PlayingCard({
   width: number;
   height: number;
   playable?: boolean;
+  play?: boolean;
+  delay?: number;
   disabled?: boolean;
   onPress: () => void;
 }) {
   const face = cardFace(code);
   if (!face) return null;
+  const ink = face.red ? '#c23b3b' : '#1c1612';
+  const flip = (
+    <CardFlip
+      up={face.up}
+      play={play}
+      delay={delay}
+      width={width}
+      height={height}
+      front={
+        <View style={[styles.face, { width, height }, playable && styles.playable, disabled && styles.idle]}>
+          <Text style={[styles.corner, { color: ink, fontSize: Math.max(9, width * 0.28) }]}>
+            {face.rankLabel}
+            {face.symbol}
+          </Text>
+          <Text style={[styles.pip, { color: ink, fontSize: Math.max(14, width * 0.42) }]}>{face.symbol}</Text>
+        </View>
+      }
+      back={
+        <View style={[styles.back, { width, height }]}>
+          <View style={[styles.diamond, { width: width * 0.22, height: width * 0.22 }]} />
+        </View>
+      }
+    />
+  );
   if (!face.up) {
     return (
-      <View
-        accessibilityLabel="Face-down card"
-        style={[styles.back, { width, height }]}
-      >
-        <View style={[styles.diamond, { width: width * 0.22, height: width * 0.22 }]} />
+      <View accessibilityLabel="Face-down card" style={{ width, height }}>
+        {flip}
       </View>
     );
   }
-  const ink = face.red ? '#c23b3b' : '#1c1612';
   return (
     <Pressable
       accessibilityRole="button"
@@ -137,13 +176,9 @@ function PlayingCard({
       accessibilityState={{ disabled: Boolean(disabled) }}
       disabled={disabled}
       onPress={onPress}
-      style={[styles.face, { width, height }, playable && styles.playable, disabled && styles.idle]}
+      style={{ width, height }}
     >
-      <Text style={[styles.corner, { color: ink, fontSize: Math.max(9, width * 0.28) }]}>
-        {face.rankLabel}
-        {face.symbol}
-      </Text>
-      <Text style={[styles.pip, { color: ink, fontSize: Math.max(14, width * 0.42) }]}>{face.symbol}</Text>
+      {flip}
     </Pressable>
   );
 }
@@ -181,7 +216,7 @@ function Stock({
   );
 }
 
-function Waste({ code, width, height }: { code: string | null; width: number; height: number }) {
+function Waste({ code, play, width, height }: { code: string | null; play: boolean; width: number; height: number }) {
   if (!code) {
     return (
       <View style={[styles.empty, { width, height }]} accessibilityLabel="Empty waste">
@@ -193,16 +228,27 @@ function Waste({ code, width, height }: { code: string | null; width: number; he
   if (!face) return null;
   const ink = face.red ? '#c23b3b' : '#1c1612';
   return (
-    <View
-      accessibilityLabel={`Waste, ${face.name}`}
-      style={[styles.face, styles.current, { width, height }]}
-    >
-      <Text style={[styles.corner, { color: ink, fontSize: Math.max(9, width * 0.28) }]}>
-        {face.rankLabel}
-        {face.symbol}
-      </Text>
-      <Text style={[styles.pip, { color: ink, fontSize: Math.max(14, width * 0.42) }]}>{face.symbol}</Text>
-    </View>
+    <CardFlip
+      key={code}
+      up
+      play={play}
+      width={width}
+      height={height}
+      front={
+        <View accessibilityLabel={`Waste, ${face.name}`} style={[styles.face, styles.current, { width, height }]}>
+          <Text style={[styles.corner, { color: ink, fontSize: Math.max(9, width * 0.28) }]}>
+            {face.rankLabel}
+            {face.symbol}
+          </Text>
+          <Text style={[styles.pip, { color: ink, fontSize: Math.max(14, width * 0.42) }]}>{face.symbol}</Text>
+        </View>
+      }
+      back={
+        <View style={[styles.back, { width, height }]}>
+          <View style={[styles.diamond, { width: width * 0.28, height: width * 0.28 }]} />
+        </View>
+      }
+    />
   );
 }
 
