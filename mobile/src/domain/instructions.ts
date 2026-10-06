@@ -89,7 +89,7 @@ const INSTRUCTIONS: Record<string, GameInstructions> = {
     title: 'Backgammon',
     lines: [
       'White moves toward the low numbers and bears off from points 1–6. Black moves the other way and bears off from 19–24.',
-      'White moves first. Tap a checker, then a highlighted point.',
+      'White moves first. Lit checkers can move. The chips list each option, with the die and a hit when there is one. Tap a chip, or tap the checker and then the point.',
       'Play both dice when you can. If only one number fits, play the larger one. Doubles are four moves.',
       'A lone checker is a blot. A hit sends it to the bar, and it must re-enter before anything else moves.',
       'You may offer the doubling cube before you roll.',
