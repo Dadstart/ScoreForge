@@ -2,7 +2,7 @@ import { ensureBackgammonState } from './backgammon';
 import { ensureCheckersState } from './checkers';
 import { ensureChineseState, playerCap } from './chineseCheckers';
 import { createPlayer, type Game, type Player } from './models';
-import { PLAYER_TOKENS } from './monopoly';
+import { PLAYER_TOKENS, playerToken } from './monopoly';
 import { ensureSorryState } from './sorry';
 
 /** Add a named player to a game, enforcing uniqueness and max capacity. */
@@ -38,8 +38,10 @@ export function withAddedPlayer(game: Game, rawName: string, maxPlayers: number)
 function seatedPlayer(game: Game, name: string): Player {
   const player = createPlayer(name);
   if (game.templateId !== 'monopoly') return player;
-  const taken = new Set(game.players.map((entry) => entry.token).filter((token) => token));
-  const free = PLAYER_TOKENS.find((token) => !taken.has(token.id));
+  const taken = new Set(
+    game.players.map((entry) => playerToken(entry.token)?.emoji).filter((emoji) => emoji),
+  );
+  const free = PLAYER_TOKENS.find((token) => !taken.has(token.emoji));
   return free ? { ...player, token: free.id } : player;
 }
 

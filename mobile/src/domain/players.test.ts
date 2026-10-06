@@ -33,6 +33,8 @@ describe('players', () => {
     const added = withAddedPlayer(game, 'Bea', 8);
     assert.equal(added.players[1]?.token, 'dog');
     assert.equal(added.events.length, 0);
+    host.token = '🚗';
+    assert.equal(withAddedPlayer(game, 'Cy', 8).players[1]?.token, 'dog');
   });
 
   it('removes a player and that player’s scores, and keeps the last one', () => {

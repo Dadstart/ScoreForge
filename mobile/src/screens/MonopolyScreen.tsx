@@ -8,6 +8,7 @@ import { MonopolyBoard } from '../components/MonopolyBoard';
 import { FireworksOverlay } from '../components/FireworksOverlay';
 import { PlaySpark } from '../components/PlaySpark';
 import { OptionSelect } from '../components/OptionSelect';
+import { TokenPicker } from '../components/TokenPicker';
 import { GameHelp } from '../components/GameHelp';
 import { HomeButton } from '../components/HomeButton';
 import { ShareCodePanel } from '../components/ShareCodePanel';
@@ -17,12 +18,12 @@ import { findLocalPlayerId } from '../domain/localPlayer';
 import { type Game, createScoreEvent } from '../domain/models';
 import {
   BANK_PARTY_ID,
-  PLAYER_TOKENS,
   PURCHASE_OPTION,
   RAILROAD_COUNTS,
   STARTING_CASH,
   STREET_LEVELS,
   playerToken,
+  singleEmoji,
   UTILITY_COUNTS,
   cashFromDelta,
   formatMoney,
@@ -90,6 +91,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
   const [nameDraft, setNameDraft] = useState('');
   const [cashDraft, setCashDraft] = useState('');
   const [tokenDraft, setTokenDraft] = useState(INITIAL_TOKEN);
+  const [emojiDraft, setEmojiDraft] = useState('');
   const {
     showCelebration,
     onSnapshot,
@@ -289,7 +291,9 @@ export function MonopolyScreen({ navigation, route }: Props) {
     setEditingPlayerId(playerId);
     setNameDraft(name);
     setCashDraft(String(cash));
-    setTokenDraft(playerToken(token)?.id ?? INITIAL_TOKEN);
+    const piece = playerToken(token);
+    setTokenDraft(piece?.id ?? INITIAL_TOKEN);
+    setEmojiDraft(piece && piece.label === 'Custom' ? piece.emoji : '');
     setConfirmingRemoveId(null);
     setError(null);
   };
@@ -312,7 +316,21 @@ export function MonopolyScreen({ navigation, route }: Props) {
       return false;
     }
     const name = nameDraft.trim();
-    const token = playerToken(tokenDraft)?.id ?? null;
+    const typed = emojiDraft.trim();
+    const typedEmoji = typed ? singleEmoji(typed) : null;
+    if (typed && !typedEmoji) {
+      setError('Enter one emoji.');
+      return false;
+    }
+    const token = playerToken(typedEmoji ?? tokenDraft)?.id ?? null;
+    const mark = playerToken(token)?.emoji;
+    const taken = game.players.some(
+      (player) => player.id !== playerId && playerToken(player.token)?.emoji === mark,
+    );
+    if (mark && taken) {
+      setError('That piece is already taken.');
+      return false;
+    }
     const delta = nextCash - cashFromDelta(standing.total);
     await applyGame(
       (g) => {
@@ -369,15 +387,10 @@ export function MonopolyScreen({ navigation, route }: Props) {
           ? PURCHASE_OPTION
           : String(streetLevel);
 
-  const tokenOptions = [
-    { id: INITIAL_TOKEN, label: 'Initial' },
-    ...PLAYER_TOKENS.filter((token) => {
-      const taken = game.players.some(
-        (player) => player.id !== editingPlayerId && player.token === token.id,
-      );
-      return !taken || token.id === tokenDraft;
-    }).map((token) => ({ id: token.id, label: `${token.emoji} ${token.label}` })),
-  ];
+  const takenTokens = game.players
+    .filter((player) => player.id !== editingPlayerId)
+    .map((player) => playerToken(player.token)?.emoji)
+    .filter((emoji): emoji is string => Boolean(emoji));
 
   const developmentLabel =
     property.kind === 'railroad'
@@ -528,14 +541,13 @@ export function MonopolyScreen({ navigation, route }: Props) {
                   </Text>
                 )}
                 {editing ? (
-                  <View style={styles.tokenSelect}>
-                    <OptionSelect
-                      label="Token"
-                      value={tokenDraft}
-                      options={tokenOptions}
-                      onChange={setTokenDraft}
-                    />
-                  </View>
+                  <TokenPicker
+                    value={tokenDraft}
+                    text={emojiDraft}
+                    taken={takenTokens}
+                    onChange={setTokenDraft}
+                    onText={setEmojiDraft}
+                  />
                 ) : null}
                 {editing ? (
                   <Field
@@ -826,7 +838,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   tileBadge: { alignSelf: 'center' },
-  tokenSelect: { alignSelf: 'stretch' },
   removeBtn: { alignSelf: 'stretch' },
   removeConfirm: { alignSelf: 'stretch', gap: 6 },
   removePrompt: {

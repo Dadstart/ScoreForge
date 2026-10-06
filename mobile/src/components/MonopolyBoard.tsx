@@ -876,15 +876,9 @@ function Piece({
     <View
       {...responder.panHandlers}
       accessibilityRole="button"
-      accessibilityLabel={emoji ? `${name} ${emoji.label} piece` : `${name} piece`}
+      accessibilityLabel={emoji ? `${name} ${emoji.emoji} piece` : `${name} piece`}
       style={[
         styles.token,
-        emoji
-          ? styles.tokenEmoji
-          : {
-              borderRadius: piece / 2,
-              backgroundColor: color,
-            },
         {
           left,
           top,
@@ -899,7 +893,7 @@ function Piece({
         style={
           emoji
             ? [styles.tokenEmojiText, { fontSize: Math.round(piece * 0.78), lineHeight: Math.round(piece * 0.9) }]
-            : [styles.tokenText, { fontSize: Math.round(piece * 0.5) }]
+            : [styles.tokenText, { fontSize: Math.round(piece * 0.72), color }]
         }
       >
         {emoji?.emoji ?? (name.trim().charAt(0).toUpperCase() || '?')}
@@ -1056,18 +1050,13 @@ const styles = StyleSheet.create({
   },
   token: {
     position: 'absolute',
-    borderWidth: 2,
-    borderColor: '#1a1408',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  tokenEmoji: {
-    borderWidth: 0,
     backgroundColor: 'transparent',
   },
   tokenText: {
-    color: '#1a1408',
     fontWeight: '800',
+    textAlign: 'center',
   },
   tokenEmojiText: {
     textAlign: 'center',
