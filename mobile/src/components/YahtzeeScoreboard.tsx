@@ -61,13 +61,21 @@ function rowHeight(row: ScoreRow): number {
 
 const CARD_H = HEADER_H + ROWS.reduce((sum, row) => sum + rowHeight(row), 0);
 
+type Suggestions = {
+  playerId: string;
+  scores: Record<string, number | null>;
+};
+
 type Props = {
   players: PlayerCard[];
   locked: boolean;
+  activePlayerId?: string | null;
+  /** Open boxes for the player about to score. Null until the dice have been rolled. */
+  suggestions?: Suggestions | null;
   onPressBox: (playerId: string, boxId: string) => void;
 };
 
-export function YahtzeeScoreboard({ players, locked, onPressBox }: Props) {
+export function YahtzeeScoreboard({ players, locked, activePlayerId, suggestions, onPressBox }: Props) {
   const colWidth = players.length <= 1 ? 156 : players.length === 2 ? 124 : 96;
 
   return (
@@ -97,6 +105,8 @@ export function YahtzeeScoreboard({ players, locked, onPressBox }: Props) {
               pip={PIPS[index % PIPS.length]}
               width={colWidth}
               locked={locked}
+              active={player.playerId === activePlayerId}
+              suggestion={suggestions?.playerId === player.playerId ? suggestions.scores : null}
               onPressBox={onPressBox}
             />
           ))}
@@ -111,39 +121,55 @@ function PlayerColumn({
   pip,
   width,
   locked,
+  active,
+  suggestion,
   onPressBox,
 }: {
   player: PlayerCard;
   pip: string;
   width: number;
   locked: boolean;
+  active: boolean;
+  suggestion: Record<string, number | null> | null;
   onPressBox: (playerId: string, boxId: string) => void;
 }) {
   const you = player.isYou;
   return (
     <View style={{ width, flexGrow: 1 }}>
-      <Cell height={HEADER_H} you={you} header>
+      <Cell height={HEADER_H} you={you} active={active} header>
         <View style={[styles.pip, { backgroundColor: pip }]} />
         <Text style={styles.playerName} numberOfLines={1}>
           {player.name}
         </Text>
         <Text style={styles.playerMeta}>
-          {player.isWinner ? 'Winner' : you ? 'You' : player.isLeader && player.grand > 0 ? 'Lead' : ' '}
+          {player.isWinner
+            ? 'Winner'
+            : active
+              ? you
+                ? 'Your turn'
+                : 'Turn'
+              : you
+                ? 'You'
+                : player.isLeader && player.grand > 0
+                  ? 'Lead'
+                  : ' '}
         </Text>
         <Text style={styles.playerTotal}>{player.grand}</Text>
       </Cell>
       {ROWS.map((row) => {
         const height = rowHeight(row);
+        const best = bestOffer(suggestion);
         if (row.kind === 'section') {
           return <Cell key={rowKey(row)} height={height} row={row} you={you} />;
         }
-        const text = cellText(player, row);
+        const offered = row.kind === 'box' && openBox(player, row.box.id) ? suggestion?.[row.box.id] : undefined;
+        const text = offered != null ? String(offered) : cellText(player, row);
         const scratch = row.kind === 'box' && player.boxes[row.box.id] === 0;
-        const open = row.kind === 'box' && player.boxes[row.box.id] == null;
-        const pressable = !locked && row.kind === 'box';
+        const open = row.kind === 'box' && player.boxes[row.box.id] == null && offered == null;
+        const pressable = !locked && offered != null;
         const label =
           row.kind === 'box'
-            ? `${row.box.label} for ${player.name}, ${open ? 'empty' : text}`
+            ? `${row.box.label} for ${player.name}, ${offered != null ? `score ${offered}` : open ? 'empty' : text}`
             : undefined;
         return (
           <Cell
@@ -157,7 +183,17 @@ function PlayerColumn({
               if (row.kind === 'box') onPressBox(player.playerId, row.box.id);
             }}
           >
-            {row.kind === 'total' || row.kind === 'box' ? (
+            {offered != null ? (
+              <View
+                style={[
+                  styles.previewChip,
+                  offered > 0 ? styles.previewChipScore : styles.previewChipZero,
+                  offered > 0 && offered === best && styles.previewChipBest,
+                ]}
+              >
+                <Text style={[styles.previewText, offered === 0 && styles.previewTextZero]}>{text}</Text>
+              </View>
+            ) : row.kind === 'total' || row.kind === 'box' ? (
               <Text
                 style={[
                   styles.score,
@@ -175,6 +211,19 @@ function PlayerColumn({
       })}
     </View>
   );
+}
+
+function openBox(player: PlayerCard, boxId: string): boolean {
+  return player.boxes[boxId] == null;
+}
+
+function bestOffer(suggestion: Record<string, number | null> | null): number {
+  if (!suggestion) return 0;
+  let best = 0;
+  for (const points of Object.values(suggestion)) {
+    if (points != null && points > best) best = points;
+  }
+  return best;
 }
 
 function cellText(player: PlayerCard, row: ScoreRow): string {
@@ -259,6 +308,7 @@ function Cell({
   header,
   row,
   you,
+  active,
   pressable,
   onPress,
   accessibilityLabel,
@@ -268,6 +318,7 @@ function Cell({
   header?: boolean;
   row?: ScoreRow;
   you?: boolean;
+  active?: boolean;
   pressable?: boolean;
   onPress?: () => void;
   accessibilityLabel?: string;
@@ -281,7 +332,7 @@ function Cell({
     header && styles.headerCell,
     row && bandStyle(row),
     you && !keepBand && styles.youCell,
-    you && header && styles.youHeader,
+    (you || active) && header && styles.youHeader,
   ];
   if (pressable && onPress) {
     return (
@@ -508,6 +559,32 @@ const styles = StyleSheet.create({
   },
   scratch: { color: INK_MUTED },
   openScore: { color: '#c3b49a', fontWeight: '500' },
+  previewChip: {
+    minWidth: 36,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    alignItems: 'center',
+  },
+  previewChipScore: { backgroundColor: '#d4a84b' },
+  previewChipBest: {
+    backgroundColor: '#f2c14e',
+    borderWidth: 2,
+    borderColor: '#6b4a10',
+    paddingHorizontal: 10,
+  },
+  previewChipZero: {
+    backgroundColor: '#efe4d0',
+    borderWidth: 1,
+    borderColor: '#a89880',
+  },
+  previewText: {
+    fontFamily: fonts.body,
+    color: '#1a1408',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  previewTextZero: { color: '#6d5c48', fontWeight: '700' },
   backdrop: {
     flex: 1,
     backgroundColor: colors.overlay,

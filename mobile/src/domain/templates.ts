@@ -81,7 +81,7 @@ export const templates: GameTemplate[] = [
     id: 'yahtzee',
     name: 'Yahtzee',
     description:
-      'Fill any column on the score card. Upper bonus at 63, Yahtzee bonus +100. Highest total wins.',
+      'Roll five dice, keep any, and roll twice more. Score each box from the dice. Upper bonus at 63. Highest total wins.',
     scoringMode: 'Rounds',
     winCondition: 'HighestTotal',
     minPlayers: 1,

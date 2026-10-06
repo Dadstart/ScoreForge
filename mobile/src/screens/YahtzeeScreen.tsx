@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AddPlayerModal } from '../components/AddPlayerModal';
 import { FireworksOverlay } from '../components/FireworksOverlay';
 import { PlaySpark } from '../components/PlaySpark';
 import { ShareCodePanel } from '../components/ShareCodePanel';
-import { YahtzeeScoreboard, YahtzeeScoreModal } from '../components/YahtzeeScoreboard';
+import { YahtzeeDice } from '../components/YahtzeeDice';
+import { YahtzeeScoreboard } from '../components/YahtzeeScoreboard';
 import { Badge, Button, Screen } from '../components/ui';
 import { findLocalPlayerId } from '../domain/localPlayer';
 import type { Game, ScoreEvent } from '../domain/models';
@@ -15,15 +16,19 @@ import { getTemplate } from '../domain/templates';
 import {
   boxById,
   buildPlayerCard,
+  createYahtzeeState,
+  ensureYahtzeeState,
   isScorecardComplete,
+  rollDice,
+  scoreDice,
   scoreForBox,
+  scorePreview,
+  toggleHold,
+  undoYahtzee,
   UPPER_BONUS,
   UPPER_BONUS_AT,
   YAHTZEE_BONUS_BOX,
   YAHTZEE_BOXES,
-  withBoxScore,
-  withoutBox,
-  withoutLastCardEntry,
   yahtzeeBonusCount,
   type YahtzeeBox,
 } from '../domain/yahtzee';
@@ -43,7 +48,7 @@ export function YahtzeeScreen({ navigation, route }: Props) {
   const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [addingPlayer, setAddingPlayer] = useState(false);
-  const [editing, setEditing] = useState<{ playerId: string; boxId: string } | null>(null);
+  const [scratch, setScratch] = useState<{ boxId: string; label: string } | null>(null);
   const {
     showCelebration,
     onSnapshot,
@@ -84,13 +89,27 @@ export function YahtzeeScreen({ navigation, route }: Props) {
     const prior = seenScores.current;
     seenScores.current = game.events;
     if (!prior || game.events.length <= prior.length) return;
-    const added = game.events[game.events.length - 1];
-    if (!added?.box || added.box === YAHTZEE_BONUS_BOX) return;
-    const box = boxById(added.box);
+    const priorIds = new Set(prior.map((event) => event.id));
+    const scored = [...game.events]
+      .reverse()
+      .find((event) => !priorIds.has(event.id) && event.box && event.box !== YAHTZEE_BONUS_BOX);
+    if (!scored?.box) return;
+    const box = boxById(scored.box);
     if (!box) return;
-    const cheer = yahtzeeCheer(box, added.points, prior, game.events, added.playerId);
+    const cheer = yahtzeeCheer(box, scored.points, prior, game.events, scored.playerId);
     if (cheer) spark(cheer.label, cheer.tone);
   }, [game, spark]);
+
+  useEffect(() => {
+    if (!game) return;
+    const next = ensureYahtzeeState(game);
+    if (next === game) return;
+    void saveGame(next)
+      .then((saved) => setGame((current) => preferNewerGame(current, saved)))
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : 'Could not start the turn');
+      });
+  }, [game]);
   const localPlayerId = useMemo(
     () => (game ? findLocalPlayerId(game, displayName) : null),
     [game, displayName],
@@ -107,9 +126,6 @@ export function YahtzeeScreen({ navigation, route }: Props) {
       });
     });
   }, [game, snapshot, localPlayerId]);
-
-  const editingCard = cards.find((card) => card.playerId === editing?.playerId) ?? null;
-  const editingBox = editing ? (boxById(editing.boxId) ?? null) : null;
 
   const persist = async (next: Game) => {
     const saved = await saveGame(next);
@@ -162,11 +178,25 @@ export function YahtzeeScreen({ navigation, route }: Props) {
   }
 
   const locked = snapshot.isComplete;
+  const board = ensureYahtzeeState(game).yahtzee ?? null;
+  const turnName = game.players.find((player) => player.id === board?.turn.playerId)?.name ?? 'Player';
+  const preview = board?.turn.dice ? scorePreview(board.turn.dice, game.events, board.turn.playerId) : null;
   const banner = locked
     ? snapshot.winnerName
       ? `${snapshot.winnerName} wins with ${snapshot.standings.find((row) => row.isWinner)?.total ?? 0}`
       : 'Card complete'
-    : 'Tap a box in any column.';
+    : turnBanner(turnName, board?.turn.dice ?? null, board?.turn.rollsLeft ?? 3);
+
+  const scoreBox = (boxId: string) => {
+    setScratch(null);
+    void applyGame((current) => {
+      const base = ensureYahtzeeState(current);
+      if (!base.yahtzee) return current;
+      const scored = scoreDice(base.yahtzee, base.events, base.players, boxId);
+      if (!scored) return current;
+      return { ...base, yahtzee: scored.state, events: scored.events };
+    });
+  };
 
   return (
     <Screen>
@@ -192,15 +222,45 @@ export function YahtzeeScreen({ navigation, route }: Props) {
           <Text style={styles.bannerText}>{banner}</Text>
         </View>
 
+        {!locked && board ? (
+          <YahtzeeDice
+            dice={board.turn.dice}
+            held={board.turn.held}
+            rollsLeft={board.turn.rollsLeft}
+            offers={rollOffers(preview)}
+            onScore={scoreBox}
+            onRoll={() => {
+              if (board.turn.rollsLeft <= 0) return;
+              void applyGame((current) => {
+                const base = ensureYahtzeeState(current);
+                if (!base.yahtzee) return current;
+                const rolled = rollDice(base.yahtzee);
+                return rolled ? { ...base, yahtzee: rolled } : current;
+              });
+            }}
+            onToggleHold={(index) => {
+              if (!toggleHold(board, index)) return;
+              void applyGame((current) => {
+                const base = ensureYahtzeeState(current);
+                if (!base.yahtzee) return current;
+                const held = toggleHold(base.yahtzee, index);
+                return held ? { ...base, yahtzee: held } : current;
+              });
+            }}
+          />
+        ) : null}
+
         <View style={styles.row}>
           <Button
             label="Undo"
             onPress={() => {
               void applyGame(
-                (current) => ({
-                  ...current,
-                  events: withoutLastCardEntry(current.events),
-                }),
+                (current) => {
+                  if (!current.yahtzee) return current;
+                  const undone = undoYahtzee(current.yahtzee, current.events);
+                  if (!undone) return current;
+                  return { ...current, yahtzee: undone.state, events: undone.events };
+                },
                 { suppressWin: true },
               );
             }}
@@ -210,7 +270,12 @@ export function YahtzeeScreen({ navigation, route }: Props) {
             label="Reset card"
             onPress={() =>
               void applyGame(
-                (current) => ({ ...current, events: [], status: 'InProgress' }),
+                (current) => ({
+                  ...current,
+                  events: [],
+                  yahtzee: createYahtzeeState(current.players),
+                  status: 'InProgress',
+                }),
                 { suppressWin: true },
               )
             }
@@ -231,45 +296,46 @@ export function YahtzeeScreen({ navigation, route }: Props) {
         <YahtzeeScoreboard
           players={cards}
           locked={locked}
-          onPressBox={(playerId, boxId) => setEditing({ playerId, boxId })}
+          activePlayerId={locked ? null : board?.turn.playerId}
+          suggestions={preview && board ? { playerId: board.turn.playerId, scores: preview } : null}
+          onPressBox={(_playerId, boxId) => {
+            const points = preview?.[boxId];
+            if (points == null) return;
+            if (points === 0) {
+              setScratch({ boxId, label: boxById(boxId)?.label ?? 'this box' });
+              return;
+            }
+            scoreBox(boxId);
+          }}
         />
 
         <Text style={styles.note}>
-          Upper section bonus is {UPPER_BONUS} once that section reaches {UPPER_BONUS_AT}. After a 50 in
-          Yahtzee, each other five-of-a-kind adds 100. Enter 0 to scratch a box. Highest total wins.
+          Roll up to three times. Tap a die to keep it. Gold numbers are what this roll scores. Tap one to
+          take it. A zero scratches that box. Upper bonus is {UPPER_BONUS} at {UPPER_BONUS_AT}. After a 50
+          in Yahtzee, each extra Yahtzee adds 100. Highest total wins.
         </Text>
       </View>
 
-      <YahtzeeScoreModal
-        visible={editing != null && editingBox != null && !locked}
-        box={editingBox}
-        playerName={editingCard?.name}
-        current={editingBox ? (editingCard?.boxes[editingBox.id] ?? null) : null}
-        onClose={() => setEditing(null)}
-        onSave={(points) => {
-          if (!editing || !editingBox) return;
-          const playerId = editing.playerId;
-          const boxId = editingBox.id;
-          setEditing(null);
-          void applyGame((current) => ({
-            ...current,
-            events: withBoxScore(current.events, playerId, boxId, points),
-          }));
-        }}
-        onClear={() => {
-          if (!editing || !editingBox) return;
-          const playerId = editing.playerId;
-          const boxId = editingBox.id;
-          setEditing(null);
-          void applyGame(
-            (current) => ({
-              ...current,
-              events: withoutBox(current.events, playerId, boxId),
-            }),
-            { suppressWin: true },
-          );
-        }}
-      />
+      <Modal visible={scratch != null && !locked} transparent animationType="fade" onRequestClose={() => setScratch(null)}>
+        <View style={styles.backdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setScratch(null)} accessibilityLabel="Cancel scratch" />
+          <View style={styles.sheet}>
+            <Text style={styles.sheetTitle}>Scratch {scratch?.label}?</Text>
+            <Text style={typography.subtitle}>This roll scores 0 there.</Text>
+            <View style={styles.sheetRow}>
+              <Button label="Cancel" variant="ghost" onPress={() => setScratch(null)} />
+              <Button
+                label="Scratch"
+                variant="danger"
+                onPress={() => {
+                  if (scratch) scoreBox(scratch.boxId);
+                }}
+                style={{ flex: 1 }}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <PlaySpark sparks={sparks} />
       {showCelebration ? (
@@ -293,6 +359,32 @@ export function YahtzeeScreen({ navigation, route }: Props) {
       />
     </Screen>
   );
+}
+
+function rollOffers(preview: Record<string, number | null> | null): { id: string; label: string; points: number }[] {
+  if (!preview) return [];
+  return YAHTZEE_BOXES.flatMap((box) => {
+    const points = preview[box.id];
+    return points != null && points > 0 ? [{ id: box.id, label: box.label, points }] : [];
+  }).sort((left, right) => right.points - left.points || left.label.localeCompare(right.label));
+}
+
+function turnBanner(name: string, dice: readonly number[] | null, rollsLeft: number): string {
+  if (!dice) return `${name}, roll the dice.`;
+  if (isFive(dice)) {
+    return rollsLeft > 0
+      ? `${name} rolled a Yahtzee. Score it, or roll again.`
+      : `${name} rolled a Yahtzee. Score it.`;
+  }
+  if (rollsLeft > 0) {
+    const left = rollsLeft === 1 ? '1 roll left' : `${rollsLeft} rolls left`;
+    return `${name} · ${left}. Keep dice, roll again, or take a score.`;
+  }
+  return `${name}, take a score.`;
+}
+
+function isFive(dice: readonly number[]): boolean {
+  return dice.length === 5 && dice.every((face) => face === dice[0]);
 }
 
 function yahtzeeCheer(
@@ -339,4 +431,23 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   error: { color: colors.danger },
   note: { ...typography.body, fontSize: 13 },
+  backdrop: {
+    flex: 1,
+    backgroundColor: colors.overlay,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  sheet: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    padding: 22,
+    gap: 12,
+  },
+  sheetTitle: { ...typography.title, fontSize: 22 },
+  sheetRow: { flexDirection: 'row', gap: 8 },
 });
