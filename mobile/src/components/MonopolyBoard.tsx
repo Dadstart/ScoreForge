@@ -340,8 +340,11 @@ function BoardCanvas({
         const mark = space.name === 'Chance' ? 'chance' : space.name === 'Community Chest' ? 'chest' : null;
         const priceLine = detail && (property || space.tax) ? Math.max(12, Math.round(cell * 0.11)) : 0;
         const utility = isUtility ? utilityExtent(cell, detail) : 0;
+        const farRail = !detail && isRailroad && (row === 0 || row === 10);
+        const railCaption = farRail ? Math.max(12, Math.round(cell * 0.26)) : 0;
+        const padLane = farRail ? Math.min(lane, Math.max(8, cell - railCaption - 18)) : lane;
         const bounds = labelBounds(row, col, cell, bar, isRailroad, detail, priceLine, utility);
-        const nameText = mark
+        const nameText = mark || farRail
           ? null
           : !detail && space.tax
             ? `$${space.tax}`
@@ -362,7 +365,7 @@ function BoardCanvas({
             style={[
               styles.cell,
               { backgroundColor: spaceTint(space.name, property?.kind) },
-              isCorner ? null : spacePadding(row, col, lane, swatch ? bar : 0, cell),
+              isCorner ? null : spacePadding(row, col, padLane, swatch ? bar : 0, cell, railCaption),
               {
                 left: `${(col * 100) / 11}%`,
                 top: `${(row * 100) / 11}%`,
@@ -435,6 +438,15 @@ function BoardCanvas({
                   </View>
                 ) : null}
                 {isRailroad ? <TrainMark row={row} col={col} cell={cell} detail={detail} /> : null}
+                {railCaption > 0 ? (
+                  <Text
+                    pointerEvents="none"
+                    style={[styles.cellText, railName(row, cell, railCaption, space.short)]}
+                    numberOfLines={1}
+                  >
+                    {space.short}
+                  </Text>
+                ) : null}
                 {isUtility ? (
                   <UtilityMark kind={property?.id === 'water' ? 'water' : 'electric'} size={utility} />
                 ) : null}
@@ -947,9 +959,20 @@ function sideLane(cell: number) {
   return Math.round(pieceSize(cell) * 0.55);
 }
 
-function spacePadding(row: number, col: number, lane: number, bar: number, cell: number) {
+function railName(row: number, cell: number, caption: number, text: string) {
+  return {
+    position: 'absolute' as const,
+    left: 1,
+    right: 1,
+    ...(row === 0 ? { top: 1 } : { bottom: 1 }),
+    fontSize: fitSize(text, cell - 6, Math.max(8, caption - 2)),
+    lineHeight: caption - 1,
+  };
+}
+
+function spacePadding(row: number, col: number, lane: number, bar: number, cell: number, caption = 0) {
   const inner = Math.max(0, cell - 4);
-  const edge = Math.min(bar, inner);
+  const edge = Math.min(bar + caption, inner);
   const room = Math.min(lane, Math.max(0, inner - edge));
   if (row === 10) {
     return { paddingTop: room, paddingBottom: edge, paddingLeft: 2, paddingRight: 2, justifyContent: 'flex-end' as const };
