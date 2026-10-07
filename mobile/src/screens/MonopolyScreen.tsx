@@ -440,26 +440,13 @@ export function MonopolyScreen({ navigation, route }: Props) {
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <View style={{ gap: 8 }}>
-          <MonopolyBoard
-            players={game.players}
-            tokenSpaces={game.tokenSpaces}
-            tokenRoute={tokenRoute}
-            drawnCards={drawnCards}
-            chanceCount={play.chance.length}
-            chestCount={play.chest.length}
-            moneyFlight={moneyFlight}
-            onDragging={setBoardDragging}
-            felt={
-              <View style={styles.felt} pointerEvents="box-none">
-                <View style={styles.feltStatus}>
-                  <Text style={styles.bannerText}>{banner}</Text>
-                  {landNote ? <Text style={styles.feltNote}>{landNote}</Text> : null}
-                </View>
-                <View style={styles.feltActions}>
+        <View style={styles.banner}>
+          <Text style={styles.bannerText}>{banner}</Text>
+          {landNote ? <Text style={styles.bannerNote}>{landNote}</Text> : null}
+        </View>
+        <View style={styles.actions}>
                   <Button
                     label="Undo"
-                    style={styles.feltBtn}
                     onPress={() => {
                       setMoneyFlight(null);
                       setDrawnCards([]);
@@ -485,7 +472,6 @@ export function MonopolyScreen({ navigation, route }: Props) {
                   <Button
                     label={rollingDice ? 'Rolling…' : inJail ? 'Roll for doubles' : `Roll for ${turnPlayer?.name ?? 'player'}`}
                     variant="primary"
-                    style={styles.feltBtn}
                     disabled={!canBank || rollingDice || play.pending != null || !turnPlayer}
                     onPress={rollForPlayer}
                   />
@@ -494,13 +480,11 @@ export function MonopolyScreen({ navigation, route }: Props) {
                       <Button
                         label={`Buy ${formatMoney(pendingProperty.price)}`}
                         variant="primary"
-                        style={styles.feltBtn}
                         disabled={!canBank || turnCash < pendingProperty.price}
                         onPress={() => void commitPlay(buyProperty(play, game.tokenSpaces ?? {}, game.players, turnCash))}
                       />
                       <Button
                         label="No thanks"
-                        style={styles.feltBtn}
                         disabled={!canBank}
                         onPress={() => void commitPlay(declineProperty(play, game.tokenSpaces ?? {}, game.players))}
                       />
@@ -510,14 +494,12 @@ export function MonopolyScreen({ navigation, route }: Props) {
                     <>
                       <Button
                         label="Pay $50"
-                        style={styles.feltBtn}
                         disabled={!canBank || turnCash < 50}
                         onPress={() => void commitPlay(payToLeaveJail(play, game.tokenSpaces ?? {}, game.players, turnCash))}
                       />
                       {jailCards > 0 ? (
                         <Button
                           label="Use Get Out of Jail Free"
-                          style={styles.feltBtn}
                           disabled={!canBank}
                           onPress={() => void commitPlay(useJailCard(play, game.tokenSpaces ?? {}, game.players))}
                         />
@@ -525,12 +507,11 @@ export function MonopolyScreen({ navigation, route }: Props) {
                     </>
                   ) : null}
                   {game.players.length < template.maxPlayers ? (
-                    <Button label="Add player" style={styles.feltBtn} onPress={() => setAddingPlayer(true)} />
+                    <Button label="Add player" onPress={() => setAddingPlayer(true)} />
                   ) : null}
                   {!complete ? (
                     <Button
                       label="Mark complete"
-                      style={styles.feltBtn}
                       onPress={() =>
                         void applyGame((g) => {
                           g.status = 'Completed';
@@ -539,12 +520,18 @@ export function MonopolyScreen({ navigation, route }: Props) {
                       }
                     />
                   ) : null}
-                </View>
-              </View>
-            }
-            diceRoll={diceRoll}
-          />
         </View>
+        <MonopolyBoard
+          players={game.players}
+          tokenSpaces={game.tokenSpaces}
+          tokenRoute={tokenRoute}
+          drawnCards={drawnCards}
+          chanceCount={play.chance.length}
+          chestCount={play.chest.length}
+          moneyFlight={moneyFlight}
+          onDragging={setBoardDragging}
+          diceRoll={diceRoll}
+        />
 
         <View style={styles.wrap}>
           {snapshot.standings.map((standing) => {
@@ -870,43 +857,21 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: space.lg, gap: 12 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  felt: {
-    flex: 1,
-    height: '100%',
-    justifyContent: 'space-between',
-    padding: 14,
-  },
-  feltStatus: {
-    marginRight: 56,
-    gap: 4,
-    backgroundColor: 'rgba(10, 22, 18, 0.55)',
+  banner: {
+    backgroundColor: colors.accentSoft,
     borderWidth: 1,
-    borderColor: 'rgba(212, 168, 75, 0.4)',
+    borderColor: 'rgba(212, 168, 75, 0.35)',
+    padding: 12,
     borderRadius: radii.md,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    gap: 4,
   },
-  feltNote: {
+  bannerNote: {
     ...typography.label,
     fontSize: 13,
     color: colors.textDim,
   },
-  feltActions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    justifyContent: 'center',
-  },
-  feltBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    minHeight: 40,
-  },
-  bannerText: {
-    ...typography.label,
-    fontSize: 15,
-    color: colors.text,
-  },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  bannerText: { ...typography.label, fontSize: 15 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   error: { color: colors.danger },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },

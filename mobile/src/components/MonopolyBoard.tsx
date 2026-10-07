@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -41,8 +41,6 @@ type Props = {
   moneyFlight?: MoneyFlight | null;
   onDragging: (dragging: boolean) => void;
   diceRoll?: DiceRollView | null;
-  /** Turn status and actions, drawn on the green center. */
-  felt?: ReactNode;
 };
 
 const VIEW_FRAME = 0;
@@ -80,19 +78,7 @@ function zoomDockSpot(pan: { x: number; y: number }, zoom: number, viewport: num
   return { top, right };
 }
 
-function feltBox(pan: { x: number; y: number }, zoom: number, viewport: number) {
-  const board = viewport * zoom;
-  const inset = TRACK_DEPTH * board;
-  const size = Math.max(0, board - inset * 2);
-  return {
-    left: pan.x + inset,
-    top: pan.y + inset,
-    width: size,
-    height: size,
-  };
-}
-
-function PhoneBoard({ onDragging, diceRoll, felt, startZoom = 1, ...props }: Props & { startZoom?: number }) {
+function PhoneBoard({ onDragging, diceRoll, startZoom = 1, ...props }: Props & { startZoom?: number }) {
   const viewportRef = useRef<View>(null);
   const [viewport, setViewport] = useState(0);
   const [zoom, setZoom] = useState(startZoom);
@@ -249,11 +235,6 @@ function PhoneBoard({ onDragging, diceRoll, felt, startZoom = 1, ...props }: Pro
         {diceRoll ? (
           <View pointerEvents="none" style={styles.diceLayer}>
             <MonopolyDice roll={diceRoll} />
-          </View>
-        ) : null}
-        {viewport > 0 && felt ? (
-          <View pointerEvents="box-none" style={[styles.feltDock, feltBox(pan, zoom, viewport)]}>
-            {felt}
           </View>
         ) : null}
         <View
@@ -1405,10 +1386,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     zIndex: 25,
-  },
-  feltDock: {
-    position: 'absolute',
-    zIndex: 32,
   },
   zoomBtn: {
     width: 44,
