@@ -35,6 +35,7 @@ export function SettingsScreen({ navigation, route }: Props) {
         events: [],
         status: 'InProgress',
         tokenSpaces: {},
+        monopoly: null,
         updatedAt: new Date().toISOString(),
       });
       setGame((current) => preferNewerGame(current, saved));

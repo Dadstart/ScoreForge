@@ -6,6 +6,7 @@ import type { PyramidState } from './pyramid';
 import type { SpiderState } from './spider';
 import type { TriPeaksState } from './tripeaks';
 import type { SorryState } from './sorry';
+import type { MonopolyPlay } from './monopolyPlay';
 import type { YahtzeeState } from './yahtzee';
 import { fillRandom, randomId } from './secureRandom';
 
@@ -59,6 +60,8 @@ export interface Game {
   tripeaks?: TriPeaksState | null;
   /** Yahtzee dice, holds, and whose turn it is. */
   yahtzee?: YahtzeeState | null;
+  /** Monopoly turn, ownership, deeds, and decks. */
+  monopoly?: MonopolyPlay | null;
   /**
    * Increments on every successful save. A write is stored only when it was
    * based on this revision, so two devices cannot overwrite each other.

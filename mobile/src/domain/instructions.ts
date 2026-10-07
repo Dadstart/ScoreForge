@@ -53,11 +53,13 @@ const INSTRUCTIONS: Record<string, GameInstructions> = {
   monopoly: {
     title: 'Monopoly',
     lines: [
-      'Everyone starts with $1,500. Add a player from the game; they start with $1,500 and a free token. Edit a player to pick a Monopoly piece, or any emoji from your keyboard.',
-      'Select who is moving, then roll. The dice tumble across the board and that player advances. Doubles means roll again. Passing GO collects $200.',
-      'Choose who is paying and who is receiving, then enter the amount.',
-      'Open a property to look up the rent for its houses, hotel, railroads, or utilities.',
-      'You change your own cash. The richest player wins.',
+      'Everyone starts with $1,500. The first player rolls. The dice move that token.',
+      'Passing GO collects $200. Doubles means roll again. Three doubles in a row sends you to jail.',
+      'An unowned property can be bought or passed. Landing on someone else’s property pays them rent. A full color group with no houses charges double rent.',
+      'Build houses evenly on a color you own. Mortgage a property for half its price after the houses on that color are sold.',
+      'In jail, roll doubles to leave, pay $50, or use a Get Out of Jail Free card. The third miss makes you pay $50 and move.',
+      'Chance and Community Chest play themselves. Adjust cash covers a trade or any other payment.',
+      'The richest player wins when the game is marked complete.',
     ],
   },
   yahtzee: {

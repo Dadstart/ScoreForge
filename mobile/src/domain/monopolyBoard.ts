@@ -115,3 +115,42 @@ export function tokenSpace(spaces: Record<string, number> | undefined, playerId:
   const index = spaces?.[playerId];
   return typeof index === 'number' && index >= 0 && index < 40 ? Math.trunc(index) : 0;
 }
+
+function wrapSpace(index: number) {
+  return ((Math.trunc(index) % 40) + 40) % 40;
+}
+
+/** Spaces visited walking clockwise, including both ends. */
+export function forwardSpaces(from: number, to: number): number[] {
+  const start = wrapSpace(from);
+  const end = wrapSpace(to);
+  const steps = (end - start + 40) % 40;
+  const spaces = [start];
+  for (let i = 1; i <= steps; i += 1) spaces.push((start + i) % 40);
+  return spaces;
+}
+
+/** Spaces visited walking back toward Go, including both ends. */
+export function backwardSpaces(from: number, to: number): number[] {
+  const start = wrapSpace(from);
+  const end = wrapSpace(to);
+  const steps = (start - end + 40) % 40;
+  const spaces = [start];
+  for (let i = 1; i <= steps; i += 1) spaces.push((start - i + 40) % 40);
+  return spaces;
+}
+
+/**
+ * Path for a move whose direction was not recorded.
+ * Short trips follow the track. A long jump, such as being sent to jail, slides straight across.
+ */
+export function tokenSpacesBetween(from: number, to: number): number[] {
+  const start = wrapSpace(from);
+  const end = wrapSpace(to);
+  if (start === end) return [start];
+  const forward = (end - start + 40) % 40;
+  const back = (start - end + 40) % 40;
+  if (forward <= 12) return forwardSpaces(start, end);
+  if (back <= 12) return backwardSpaces(start, end);
+  return [start, end];
+}

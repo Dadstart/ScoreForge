@@ -1,5 +1,7 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
+  Animated,
+  Easing,
   PanResponder,
   Pressable,
   StyleSheet,
@@ -11,11 +13,11 @@ import {
 } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import type { Player } from '../domain/models';
-import { boardSpaces, cellToSpace, fractionToIndex, spaceToCell, tokenSpace, TRACK_DEPTH, cellBox, type BoardSpace } from '../domain/monopolyBoard';
+import { boardSpaces, cellToSpace, fractionToIndex, spaceToCell, tokenSpace, tokenSpacesBetween, TRACK_DEPTH, cellBox, type BoardSpace } from '../domain/monopolyBoard';
 import { getProperty, playerToken } from '../domain/monopoly';
 import { fitBoardLabel, fitSize } from '../domain/monopolyLabel';
 import { clampPan, clampZoom, panForZoom, stepZoom } from '../domain/monopolyZoom';
-import { MonopolyDice } from './MonopolyDice';
+import { diceMotionMs, MonopolyDice } from './MonopolyDice';
 import { colors, fonts, radii } from '../theme';
 
 const TOKEN_COLORS = ['#e86a5c', '#6fbf8a', '#7eb6ff', '#d4a84b', '#d93a96', '#f7941d', '#c5d0c9', '#f2e3a0'];
@@ -24,9 +26,12 @@ const CLOSE_CELL = 96;
 
 type DiceRollView = { id: number; faces: [number, number] };
 
+export type TokenRouteView = { id: number; playerId: string; spaces: number[] };
+
 type Props = {
   players: Player[];
   tokenSpaces?: Record<string, number>;
+  tokenRoute?: TokenRouteView | null;
   enabled: boolean;
   onLand: (playerId: string, space: BoardSpace) => void;
   onDragging: (dragging: boolean) => void;
@@ -272,6 +277,7 @@ function PhoneBoard({ onDragging, diceRoll, startZoom = 1, ...props }: Props & {
 function BoardCanvas({
   players,
   tokenSpaces,
+  tokenRoute = null,
   enabled,
   onLand,
   onDragging,
@@ -288,6 +294,7 @@ function BoardCanvas({
 }) {
   const boardRef = useRef<View>(null);
   const origin = useRef<Origin>({ x: 0, y: 0, size: 0 });
+  const snapIds = useRef(new Set<string>());
   const [size, setSize] = useState(0);
   const [hover, setHover] = useState<number | null>(null);
 
@@ -553,17 +560,26 @@ function BoardCanvas({
               (other) => tokenSpace(tokenSpaces, other.id) === spaceIndex,
             );
             const slot = sharing.findIndex((other) => other.id === player.id);
+            const route =
+              tokenRoute &&
+              tokenRoute.playerId === player.id &&
+              tokenRoute.spaces[tokenRoute.spaces.length - 1] === spaceIndex
+                ? tokenRoute
+                : null;
             return (
               <Piece
                 key={player.id}
+                playerId={player.id}
                 name={player.name}
                 token={player.token}
                 color={TOKEN_COLORS[index % TOKEN_COLORS.length]}
-                row={row}
-                col={col}
+                spaceIndex={spaceIndex}
                 slot={slot}
                 size={size}
                 enabled={enabled}
+                routeId={route?.id ?? 0}
+                routeSpaces={route?.spaces ?? null}
+                snapIds={snapIds.current}
                 onDragStart={() => {
                   rememberOrigin();
                   onDragging(true);
@@ -580,7 +596,10 @@ function BoardCanvas({
                     const center = tokenCenter(origin.current, row, col, slot, dx, dy);
                     const landed = spaceAt(center.x, center.y);
                     const space = landed == null ? undefined : boardSpaces[landed];
-                    if (space) onLand(player.id, space);
+                    if (space) {
+                      if (space.index !== spaceIndex) snapIds.current.add(player.id);
+                      onLand(player.id, space);
+                    }
                   });
                 }}
                 onDragCancel={() => {
@@ -1133,40 +1152,98 @@ function tokenCenter(
   };
 }
 
+function piecePlace(index: number, size: number, slot: number) {
+  const { row, col } = spaceToCell(index);
+  const frame = cellBox(row, col);
+  const width = frame.w * size;
+  const height = frame.h * size;
+  const piece = fittedPiece(width, height);
+  const offset = pieceOffset(row, col, width, height, piece, slot);
+  return { left: frame.x * size + offset.x, top: frame.y * size + offset.y, piece };
+}
+
+function adjacentSpaces(a: number, b: number) {
+  const delta = (a - b + 40) % 40;
+  return delta === 1 || delta === 39;
+}
+
+function inwardHop(index: number) {
+  const { row, col } = spaceToCell(index);
+  if (row === 10) return { x: 0, y: -1 };
+  if (row === 0) return { x: 0, y: 1 };
+  if (col === 0) return { x: 1, y: 0 };
+  return { x: -1, y: 0 };
+}
+
+function stepMs(spaces: number[]) {
+  const hops = Math.max(1, spaces.length - 1);
+  if (hops > 16) return 90;
+  if (hops > 8) return 130;
+  return 180;
+}
+
+function travelSpaces(from: number, to: number, route: number[] | null, last: number[] | null) {
+  if (route && route.length > 1 && route[0] === from && route[route.length - 1] === to) return route;
+  if (last && last.length > 1 && last[last.length - 1] === from && last[0] === to) return [...last].reverse();
+  return tokenSpacesBetween(from, to);
+}
+
 function Piece({
+  playerId,
   name,
   token,
   color,
-  row,
-  col,
+  spaceIndex,
   slot,
   size,
   enabled,
+  routeId,
+  routeSpaces,
+  snapIds,
   onDragStart,
   onDragMove,
   onDragEnd,
   onDragCancel,
 }: {
+  playerId: string;
   name: string;
   token?: string | null;
   color: string;
-  row: number;
-  col: number;
+  spaceIndex: number;
   slot: number;
   size: number;
   enabled: boolean;
+  routeId: number;
+  routeSpaces: number[] | null;
+  snapIds: Set<string>;
   onDragStart: () => void;
   onDragMove: (dx: number, dy: number) => void;
   onDragEnd: (dx: number, dy: number) => void;
   onDragCancel: () => void;
 }) {
   const [drag, setDrag] = useState<{ dx: number; dy: number } | null>(null);
+  const [flying, setFlying] = useState(false);
+  const resting = piecePlace(spaceIndex, size, slot);
+  const left = useRef(new Animated.Value(resting.left)).current;
+  const top = useRef(new Animated.Value(resting.top)).current;
+  const liftX = useRef(new Animated.Value(0)).current;
+  const liftY = useRef(new Animated.Value(0)).current;
+  const bulge = useRef(new Animated.Value(1)).current;
+  const settled = useRef(spaceIndex);
+  const lastPath = useRef<number[] | null>(null);
+  const flyingRef = useRef(false);
+  const sizeRef = useRef(size);
+  const slotRef = useRef(slot);
+  sizeRef.current = size;
+  slotRef.current = slot;
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
   const startRef = useRef(onDragStart);
   const moveRef = useRef(onDragMove);
   const endRef = useRef(onDragEnd);
   const cancelRef = useRef(onDragCancel);
+  const routeRef = useRef(routeSpaces);
+  routeRef.current = routeSpaces;
   startRef.current = onDragStart;
   moveRef.current = onDragMove;
   endRef.current = onDragEnd;
@@ -1174,10 +1251,10 @@ function Piece({
 
   const responder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => enabledRef.current,
-      onStartShouldSetPanResponderCapture: () => enabledRef.current,
-      onMoveShouldSetPanResponder: () => enabledRef.current,
-      onMoveShouldSetPanResponderCapture: () => enabledRef.current,
+      onStartShouldSetPanResponder: () => enabledRef.current && !flyingRef.current,
+      onStartShouldSetPanResponderCapture: () => enabledRef.current && !flyingRef.current,
+      onMoveShouldSetPanResponder: () => enabledRef.current && !flyingRef.current,
+      onMoveShouldSetPanResponderCapture: () => enabledRef.current && !flyingRef.current,
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
         startRef.current();
@@ -1198,17 +1275,106 @@ function Piece({
     }),
   ).current;
 
-  const frame = cellBox(row, col);
-  const width = frame.w * size;
-  const height = frame.h * size;
-  const piece = fittedPiece(width, height);
-  const offset = pieceOffset(row, col, width, height, piece, slot);
-  const left = frame.x * size + offset.x;
-  const top = frame.y * size + offset.y;
+  useEffect(() => {
+    if (flyingRef.current || settled.current !== spaceIndex) return;
+    const place = piecePlace(spaceIndex, size, slot);
+    left.setValue(place.left);
+    top.setValue(place.top);
+  }, [left, size, slot, spaceIndex, top]);
+
+  useEffect(() => {
+    if (spaceIndex === settled.current) return;
+    const from = settled.current;
+    const snap = snapIds.has(playerId);
+    if (snap) snapIds.delete(playerId);
+    const recorded =
+      routeRef.current != null &&
+      routeRef.current.length > 1 &&
+      routeRef.current[0] === from &&
+      routeRef.current[routeRef.current.length - 1] === spaceIndex;
+    const placeAt = (index: number, atSlot: number) => piecePlace(index, sizeRef.current, atSlot);
+    if ((snap && !recorded) || diceMotionMs() === 0) {
+      settled.current = spaceIndex;
+      lastPath.current = null;
+      flyingRef.current = false;
+      setFlying(false);
+      const place = placeAt(spaceIndex, slotRef.current);
+      left.setValue(place.left);
+      top.setValue(place.top);
+      return;
+    }
+    const spaces = travelSpaces(from, spaceIndex, routeRef.current, lastPath.current);
+    if (spaces.length < 2) {
+      settled.current = spaceIndex;
+      const place = placeAt(spaceIndex, slotRef.current);
+      left.setValue(place.left);
+      top.setValue(place.top);
+      return;
+    }
+    settled.current = spaceIndex;
+    lastPath.current = spaces;
+    flyingRef.current = true;
+    setFlying(true);
+    const hop = Math.max(8, Math.round(placeAt(spaces[0], 0).piece * 0.22));
+    const pace = stepMs(spaces);
+    const steps = spaces.slice(1).map((index, step) => {
+      const place = placeAt(index, step === spaces.length - 2 ? slotRef.current : 0);
+      const along = adjacentSpaces(spaces[step], index);
+      const dir = along ? inwardHop(spaces[step]) : { x: 0, y: 0 };
+      const duration = along ? pace : Math.round(pace * 2.4);
+      const half = duration / 2;
+      return Animated.parallel([
+        Animated.timing(left, { toValue: place.left, duration, easing: Easing.inOut(Easing.quad), useNativeDriver: false }),
+        Animated.timing(top, { toValue: place.top, duration, easing: Easing.inOut(Easing.quad), useNativeDriver: false }),
+        Animated.sequence([
+          Animated.timing(liftX, { toValue: dir.x * hop, duration: half, useNativeDriver: false }),
+          Animated.timing(liftX, { toValue: 0, duration: half, useNativeDriver: false }),
+        ]),
+        Animated.sequence([
+          Animated.timing(liftY, { toValue: dir.y * hop, duration: half, useNativeDriver: false }),
+          Animated.timing(liftY, { toValue: 0, duration: half, useNativeDriver: false }),
+        ]),
+        Animated.sequence([
+          Animated.timing(bulge, { toValue: along ? 1.1 : 1.06, duration: half, useNativeDriver: false }),
+          Animated.timing(bulge, { toValue: 1, duration: half, useNativeDriver: false }),
+        ]),
+      ]);
+    });
+    const animation = Animated.sequence(steps);
+    let finished = false;
+    animation.start(({ finished: done }) => {
+      finished = done;
+      if (!done) return;
+      flyingRef.current = false;
+      setFlying(false);
+      const place = placeAt(settled.current, slotRef.current);
+      left.setValue(place.left);
+      top.setValue(place.top);
+      liftX.setValue(0);
+      liftY.setValue(0);
+      bulge.setValue(1);
+    });
+    return () => {
+      animation.stop();
+      if (!finished) {
+        flyingRef.current = false;
+        settled.current = from;
+        setFlying(false);
+        const place = placeAt(from, slotRef.current);
+        left.setValue(place.left);
+        top.setValue(place.top);
+        liftX.setValue(0);
+        liftY.setValue(0);
+        bulge.setValue(1);
+      }
+    };
+  }, [bulge, left, liftX, liftY, playerId, routeId, snapIds, spaceIndex, top]);
+
   const emoji = playerToken(token);
+  const piece = resting.piece;
 
   return (
-    <View
+    <Animated.View
       {...responder.panHandlers}
       accessibilityRole="button"
       accessibilityLabel={emoji ? `${name} ${emoji.emoji} piece` : `${name} piece`}
@@ -1219,8 +1385,10 @@ function Piece({
           top,
           width: piece,
           height: piece,
-          zIndex: drag ? 30 : 10 + slot,
-          transform: drag ? [{ translateX: drag.dx }, { translateY: drag.dy }] : undefined,
+          zIndex: drag || flying ? 30 : 10 + slot,
+          transform: drag
+            ? [{ translateX: drag.dx }, { translateY: drag.dy }]
+            : [{ translateX: liftX }, { translateY: liftY }, { scale: bulge }],
         },
       ]}
     >
@@ -1233,7 +1401,7 @@ function Piece({
       >
         {emoji?.emoji ?? (name.trim().charAt(0).toUpperCase() || '?')}
       </Text>
-    </View>
+    </Animated.View>
   );
 }
 

@@ -3,6 +3,7 @@ import { ensureCheckersState } from './checkers';
 import { ensureChineseState, playerCap } from './chineseCheckers';
 import { createPlayer, type Game, type Player } from './models';
 import { PLAYER_TOKENS, playerToken } from './monopoly';
+import { withoutMonopolyPlayer } from './monopolyPlay';
 import { ensureSorryState } from './sorry';
 
 /** Add a named player to a game, enforcing uniqueness and max capacity. */
@@ -55,14 +56,17 @@ export function withoutPlayer(game: Game, playerId: string): Game {
   }
   const tokenSpaces = { ...(game.tokenSpaces ?? {}) };
   delete tokenSpaces[playerId];
+  const remaining = game.players.filter((player) => player.id !== playerId);
+  const monopoly = game.monopoly ? withoutMonopolyPlayer(game.monopoly, playerId, game.players) : game.monopoly;
   return ensureChineseState(
     ensureCheckersState(
       ensureSorryState(
         ensureBackgammonState({
           ...game,
-          players: game.players.filter((player) => player.id !== playerId),
+          players: remaining,
           events: game.events.filter((event) => event.playerId !== playerId),
           tokenSpaces,
+          monopoly,
           updatedAt: new Date().toISOString(),
         }),
       ),

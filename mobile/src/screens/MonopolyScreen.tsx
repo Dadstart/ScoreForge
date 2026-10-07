@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AddPlayerModal } from '../components/AddPlayerModal';
-import { MonopolyBoard } from '../components/MonopolyBoard';
+import { MonopolyBoard, type TokenRouteView } from '../components/MonopolyBoard';
 import { FireworksOverlay } from '../components/FireworksOverlay';
 import { PlaySpark } from '../components/PlaySpark';
 import { OptionSelect } from '../components/OptionSelect';
@@ -18,27 +18,41 @@ import { findLocalPlayerId } from '../domain/localPlayer';
 import { type Game, createScoreEvent } from '../domain/models';
 import {
   BANK_PARTY_ID,
-  PURCHASE_OPTION,
-  RAILROAD_COUNTS,
-  STARTING_CASH,
-  STREET_LEVELS,
-  playerToken,
-  singleEmoji,
-  UTILITY_COUNTS,
   cashFromDelta,
   formatMoney,
   getProperty,
+  playerToken,
   properties,
-  quoteRent,
+  singleEmoji,
   transferEvents,
   withoutLastCashAction,
-  type RailroadCount,
-  type StreetLevel,
-  type UtilityCount,
 } from '../domain/monopoly';
 import { diceMotionMs } from '../components/MonopolyDice';
-import { getBoardSpace, tokenSpace } from '../domain/monopolyBoard';
-import { boardStep, GO_PAYOUT, rollMonopolyDice } from '../domain/monopolyDice';
+import { rollMonopolyDice, type DiceRoll } from '../domain/monopolyDice';
+import {
+  buildHouse,
+  buildingCost,
+  buyProperty,
+  canBuild,
+  canMortgage,
+  canSellBuilding,
+  cashOf,
+  createMonopolyPlay,
+  declineProperty,
+  mortgageProperty,
+  mortgageValue,
+  payToLeaveJail,
+  rentDue,
+  resolveRoll,
+  sellBuilding,
+  turnPrompt,
+  undoForCash,
+  undoMonopoly,
+  unmortgageCost,
+  unmortgageProperty,
+  useJailCard,
+  type PlayOutcome,
+} from '../domain/monopolyPlay';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
 import { usePlaySpark } from '../hooks/usePlaySpark';
@@ -66,18 +80,8 @@ function parseDice(raw: string): number | null {
   return value;
 }
 
-type RollLanding = {
-  faces: [number, number];
-  doubles: boolean;
-  passedGo: boolean;
-};
-
-function rollSentence(playerName: string, spaceName: string, landing?: RollLanding): string {
-  const rolled = landing
-    ? `Rolled ${landing.faces[0]} and ${landing.faces[1]}${landing.doubles ? ', doubles' : ''}. `
-    : '';
-  const salary = landing?.passedGo ? ` Collected ${formatMoney(GO_PAYOUT)} for passing GO.` : '';
-  return `${rolled}${playerName} landed on ${spaceName}.${salary}${landing?.doubles ? ' Roll again.' : ''}`;
+function isPlay(result: PlayOutcome | { error: string }): result is PlayOutcome {
+  return !('error' in result);
 }
 
 export function MonopolyScreen({ navigation, route }: Props) {
@@ -90,12 +94,10 @@ export function MonopolyScreen({ navigation, route }: Props) {
   const [payerId, setPayerId] = useState<string | null>(null);
   const [receiverId, setReceiverId] = useState(BANK_PARTY_ID);
   const [propertyId, setPropertyId] = useState(properties[0].id);
-  const [streetLevel, setStreetLevel] = useState<StreetLevel>(0);
-  const [purchasing, setPurchasing] = useState(false);
-  const [railroadsOwned, setRailroadsOwned] = useState<RailroadCount>(1);
-  const [utilitiesOwned, setUtilitiesOwned] = useState<UtilityCount>(1);
   const [dice, setDice] = useState('7');
   const [diceRoll, setDiceRoll] = useState<{ id: number; faces: [number, number] } | null>(null);
+  const [tokenRoute, setTokenRoute] = useState<TokenRouteView | null>(null);
+  const routeSerial = useRef(0);
   const [rollingDice, setRollingDice] = useState(false);
   const rollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [boardDragging, setBoardDragging] = useState(false);
@@ -118,9 +120,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
   } = useWinCelebration();
   const { sparks, spark } = usePlaySpark();
   const seenTokens = useRef<Record<string, number> | null>(null);
-  const placeRef = useRef<
-    (playerId: string, spaceIndex: number, landing?: RollLanding) => void
-  >(() => {});
+  const rollRef = useRef<(rolled: DiceRoll) => void>(() => {});
 
   useEffect(() => {
     return () => {
@@ -164,6 +164,10 @@ export function MonopolyScreen({ navigation, route }: Props) {
     () => (game && template ? calculate(game, template) : null),
     [game, template],
   );
+  const play = useMemo(() => {
+    if (!game) return null;
+    return game.monopoly ?? createMonopolyPlay(game.players.map((player) => player.id));
+  }, [game]);
   const localPlayerId = useMemo(
     () => (game ? findLocalPlayerId(game, displayName) : null),
     [game, displayName],
@@ -177,25 +181,13 @@ export function MonopolyScreen({ navigation, route }: Props) {
   const resolvedReceiver = knownParty(receiverId) ? receiverId : BANK_PARTY_ID;
   const property = getProperty(propertyId) ?? properties[0];
   const diceTotal = parseDice(dice);
-  const rent = useMemo(
-    () =>
-      quoteRent({
-        propertyId,
-        streetLevel,
-        railroadsOwned,
-        utilitiesOwned,
-        dice: diceTotal ?? 0,
-        purchase: purchasing && property.kind === 'street',
-      }),
-    [propertyId, streetLevel, railroadsOwned, utilitiesOwned, diceTotal, purchasing, property.kind],
-  );
 
   const persist = async (next: Game) => {
     const saved = await saveGame(next);
     setGame((current) => preferNewerGame(current, saved));
   };
 
-  if (!game || !template || !snapshot) {
+  if (!game || !template || !snapshot || !play) {
     return (
       <Screen>
         <View style={styles.center}>
@@ -206,7 +198,6 @@ export function MonopolyScreen({ navigation, route }: Props) {
   }
 
   const complete = snapshot.isComplete;
-  const localPlayer = game.players.find((player) => player.id === localPlayerId) ?? null;
   const canBank = !complete;
   const sameParty = resolvedPayer === resolvedReceiver;
 
@@ -256,6 +247,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
     if (legs.length === 0) return;
     await applyGame((g) => {
       g.events.push(...legs);
+      if (g.monopoly) g.monopoly = undoForCash(g.monopoly, g.tokenSpaces ?? {}, legs.length);
       return g;
     });
   };
@@ -270,67 +262,48 @@ export function MonopolyScreen({ navigation, route }: Props) {
     setAmount('');
   };
 
-  const applyRent = async () => {
-    if (!rent) {
-      setError(
-        property.kind === 'utility'
-          ? 'Enter a dice total from 2 to 12.'
-          : 'Choose a property to look up rent.',
-      );
+  const commitPlay = async (result: PlayOutcome | { error: string }) => {
+    if (!isPlay(result)) {
+      setError(result.error);
       return;
     }
-    await transfer(rent.amount);
-  };
-
-  const placePiece = (playerId: string, spaceIndex: number, landing?: RollLanding) => {
-    const space = getBoardSpace(spaceIndex);
-    const player = game.players.find((entry) => entry.id === playerId);
-    if (!space || !player || !canBank) return;
-    void applyGame(
+    setLandNote(result.note);
+    if (result.route && result.route.spaces.length > 1) {
+      routeSerial.current += 1;
+      setTokenRoute({ id: routeSerial.current, playerId: result.route.playerId, spaces: result.route.spaces });
+    }
+    await applyGame(
       (g) => {
-        g.tokenSpaces = { ...(g.tokenSpaces ?? {}), [playerId]: spaceIndex };
-        if (landing?.passedGo) g.events.push(...transferEvents(BANK_PARTY_ID, playerId, GO_PAYOUT));
+        g.monopoly = result.play;
+        g.tokenSpaces = result.tokens;
+        g.events.push(...result.events);
         return g;
       },
       { suppressWin: true },
     );
-    const note = rollSentence(player.name, space.name, landing);
-    if (space.propertyId) {
-      setPropertyId(space.propertyId);
-      setPayerId(playerId);
-      setLandNote(`${note} Rent property is set.`);
-      return;
-    }
-    if (space.tax) {
-      setAmount(String(space.tax));
-      setPayerId(playerId);
-      setReceiverId(BANK_PARTY_ID);
-      setError(null);
-      setLandNote(`${note} ${formatMoney(space.tax)} is in Adjust cash.`);
-      return;
-    }
-    setLandNote(note);
   };
-  placeRef.current = placePiece;
+
+  const turnId = play?.turn ?? game.players[0]?.id ?? '';
+  const turnPlayer = game.players.find((player) => player.id === turnId) ?? null;
+  const inJail = play?.jail[turnId] != null;
+  const turnCash = cashOf(game.events, turnId);
+
+  rollRef.current = (rolled: DiceRoll) => {
+    if (!play || play.pending) return;
+    const result = resolveRoll(play, game.tokenSpaces ?? {}, game.players, rolled);
+    void commitPlay(result);
+  };
 
   const rollForPlayer = () => {
-    if (!canBank || rollingDice || resolvedPayer === BANK_PARTY_ID) return;
-    const player = game.players.find((entry) => entry.id === resolvedPayer);
-    if (!player) return;
+    if (!canBank || rollingDice || !play || play.pending || !turnPlayer) return;
     const rolled = rollMonopolyDice();
-    const from = tokenSpace(game.tokenSpaces, player.id);
-    const landed = boardStep(from, rolled.total);
     setDice(String(rolled.total));
     setDiceRoll({ id: Date.now(), faces: rolled.faces });
     setRollingDice(true);
     setError(null);
     if (rollTimer.current) clearTimeout(rollTimer.current);
     rollTimer.current = setTimeout(() => {
-      placeRef.current(player.id, landed.index, {
-        faces: rolled.faces,
-        doubles: rolled.doubles,
-        passedGo: landed.passedGo,
-      });
+      rollRef.current(rolled);
       setRollingDice(false);
     }, diceMotionMs());
   };
@@ -385,7 +358,10 @@ export function MonopolyScreen({ navigation, route }: Props) {
         g.players = g.players.map((player) =>
           player.id === playerId ? { ...player, name: name || player.name, token } : player,
         );
-        if (delta !== 0) g.events.push(createScoreEvent(playerId, delta));
+        if (delta !== 0) {
+          g.events.push(createScoreEvent(playerId, delta));
+          if (g.monopoly) g.monopoly = undoForCash(g.monopoly, g.tokenSpaces ?? {}, 1);
+        }
         return g;
       },
       { suppressWin: true },
@@ -399,9 +375,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
     ? snapshot.winnerName
       ? `${snapshot.winnerName} wins with the most cash`
       : 'Game complete'
-    : localPlayer
-      ? `Playing as ${localPlayer.name} · Everyone starts with ${formatMoney(STARTING_CASH)}`
-      : `Everyone starts with ${formatMoney(STARTING_CASH)}`;
+    : turnPrompt(play, game.players);
 
   const partyOptions = [
     { id: BANK_PARTY_ID, label: 'The Bank' },
@@ -412,40 +386,20 @@ export function MonopolyScreen({ navigation, route }: Props) {
   ];
 
   const parsedAmount = parsePositiveAmount(amount);
-  const paymentPreview = sameParty
-    ? 'Choose a different payer and receiver.'
-    : null;
-
-  const developmentOptions =
-    property.kind === 'railroad'
-      ? RAILROAD_COUNTS.map((entry) => ({ id: String(entry.id), label: entry.label }))
-      : property.kind === 'utility'
-        ? UTILITY_COUNTS.map((entry) => ({ id: String(entry.id), label: entry.label }))
-        : [
-            ...STREET_LEVELS.map((entry) => ({ id: String(entry.id), label: entry.label })),
-            { id: PURCHASE_OPTION, label: 'Purchase' },
-          ];
-
-  const developmentValue =
-    property.kind === 'railroad'
-      ? String(railroadsOwned)
-      : property.kind === 'utility'
-        ? String(utilitiesOwned)
-        : purchasing
-          ? PURCHASE_OPTION
-          : String(streetLevel);
+  const paymentPreview = sameParty ? 'Choose a different payer and receiver.' : null;
 
   const takenTokens = game.players
     .filter((player) => player.id !== editingPlayerId)
     .map((player) => playerToken(player.token)?.emoji)
     .filter((emoji): emoji is string => Boolean(emoji));
 
-  const developmentLabel =
-    property.kind === 'railroad'
-      ? 'Railroads owned'
-      : property.kind === 'utility'
-        ? 'Utilities owned'
-        : 'Houses / hotel';
+  const ownedDeeds = properties.filter((entry) => play.owned[entry.id]);
+  const pendingProperty = play.pending ? getProperty(play.pending.propertyId) : undefined;
+  const jailCards = (play.chanceFree[turnId] ?? 0) + (play.chestFree[turnId] ?? 0);
+  const canDevelop = canBank && !play.pending && play.doubles === 0;
+  const quoteDice = diceTotal ?? 7;
+  const quoteOwner = play.owned[property.id];
+  const quoteRentAmount = quoteOwner ? rentDue(play, property.id, quoteDice) : null;
 
   return (
     <Screen>
@@ -478,20 +432,60 @@ export function MonopolyScreen({ navigation, route }: Props) {
             onPress={() =>
               void applyGame(
                 (g) => {
+                  if (g.monopoly?.undo) {
+                    const restored = undoMonopoly(g.monopoly, g.events);
+                    if (restored) {
+                      g.monopoly = restored.play;
+                      g.tokenSpaces = restored.tokens;
+                      g.events = restored.events;
+                      return g;
+                    }
+                  }
                   g.events = withoutLastCashAction(g.events);
                   return g;
                 },
                 { suppressWin: true },
               )
             }
-            disabled={game.events.length === 0}
+            disabled={!play.undo && game.events.length === 0}
           />
           <Button
-            label={rollingDice ? 'Rolling…' : `Roll for ${partyName(resolvedPayer)}`}
+            label={rollingDice ? 'Rolling…' : inJail ? 'Roll for doubles' : `Roll for ${turnPlayer?.name ?? 'player'}`}
             variant="primary"
-            disabled={!canBank || rollingDice || resolvedPayer === BANK_PARTY_ID}
+            disabled={!canBank || rollingDice || play.pending != null || !turnPlayer}
             onPress={rollForPlayer}
           />
+          {play.pending && pendingProperty ? (
+            <>
+              <Button
+                label={`Buy ${formatMoney(pendingProperty.price)}`}
+                variant="primary"
+                disabled={!canBank || turnCash < pendingProperty.price}
+                onPress={() => void commitPlay(buyProperty(play, game.tokenSpaces ?? {}, game.players, turnCash))}
+              />
+              <Button
+                label="No thanks"
+                disabled={!canBank}
+                onPress={() => void commitPlay(declineProperty(play, game.tokenSpaces ?? {}, game.players))}
+              />
+            </>
+          ) : null}
+          {inJail && !play.pending ? (
+            <>
+              <Button
+                label="Pay $50"
+                disabled={!canBank || turnCash < 50}
+                onPress={() => void commitPlay(payToLeaveJail(play, game.tokenSpaces ?? {}, game.players, turnCash))}
+              />
+              {jailCards > 0 ? (
+                <Button
+                  label="Use Get Out of Jail Free"
+                  disabled={!canBank}
+                  onPress={() => void commitPlay(useJailCard(play, game.tokenSpaces ?? {}, game.players))}
+                />
+              ) : null}
+            </>
+          ) : null}
           {game.players.length < template.maxPlayers ? (
             <Button label="Add player" onPress={() => setAddingPlayer(true)} />
           ) : null}
@@ -514,9 +508,20 @@ export function MonopolyScreen({ navigation, route }: Props) {
           <MonopolyBoard
             players={game.players}
             tokenSpaces={game.tokenSpaces}
+            tokenRoute={tokenRoute}
             enabled={canBank}
             onDragging={setBoardDragging}
-            onLand={(playerId, space) => placePiece(playerId, space.index)}
+            onLand={(playerId, space) => {
+              const before = { ...(game.tokenSpaces ?? {}) };
+              void applyGame(
+                (g) => {
+                  g.tokenSpaces = { ...(g.tokenSpaces ?? {}), [playerId]: space.index };
+                  if (g.monopoly) g.monopoly = undoForCash(g.monopoly, before, 0);
+                  return g;
+                },
+                { suppressWin: true },
+              );
+            }}
             diceRoll={diceRoll}
           />
           {landNote ? <Text style={styles.bannerText}>{landNote}</Text> : null}
@@ -608,6 +613,9 @@ export function MonopolyScreen({ navigation, route }: Props) {
                 ) : (
                   <Text style={[styles.cash, broke && { color: colors.danger }]}>{formatMoney(cash)}</Text>
                 )}
+                {standing.playerId === turnId && !complete ? (
+                  <Badge label="Turn" tone="accent" style={styles.tileBadge} />
+                ) : null}
                 {broke ? <Badge label="Bankrupt" tone="danger" style={styles.tileBadge} /> : null}
                 {standing.isLeader && !broke ? (
                   <Badge label="Richest" tone="accent" style={styles.tileBadge} />
@@ -677,9 +685,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
 
         <Card>
           <Text style={typography.section}>Adjust cash</Text>
-          <Text style={typography.body}>
-            Any amount — Chance, Community Chest, or a sale between players.
-          </Text>
+          <Text style={typography.body}>A trade, or any other payment the cards do not cover.</Text>
           <Field
             value={amount}
             onChangeText={(text) => {
@@ -703,11 +709,75 @@ export function MonopolyScreen({ navigation, route }: Props) {
           />
         </Card>
 
+        {ownedDeeds.length > 0 ? (
+          <Card>
+            <Text style={typography.section}>Deeds</Text>
+            {ownedDeeds.map((entry) => {
+              const ownerId = play.owned[entry.id];
+              const owner = game.players.find((player) => player.id === ownerId);
+              const level = play.houses[entry.id] ?? 0;
+              const mortgaged = play.mortgaged.includes(entry.id);
+              const yours = ownerId === turnId;
+              const status = mortgaged
+                ? 'Mortgaged'
+                : entry.kind !== 'street'
+                  ? entry.group
+                  : level >= 5
+                    ? 'Hotel'
+                    : level > 0
+                      ? `${level} house${level === 1 ? '' : 's'}`
+                      : 'Undeveloped';
+              return (
+                <View key={entry.id} style={styles.deed}>
+                  <Text style={styles.cardTitle}>
+                    {entry.name} · {owner?.name ?? 'Owner'} · {status}
+                  </Text>
+                  {yours && canDevelop ? (
+                    <View style={styles.row}>
+                      {canBuild(play, entry.id) ? (
+                        <Button
+                          label={level === 4 ? `Hotel ${formatMoney(buildingCost(entry.id))}` : `House ${formatMoney(buildingCost(entry.id))}`}
+                          disabled={turnCash < buildingCost(entry.id)}
+                          onPress={() =>
+                            void commitPlay(buildHouse(play, game.tokenSpaces ?? {}, game.players, entry.id, turnCash))
+                          }
+                        />
+                      ) : null}
+                      {canSellBuilding(play, entry.id) ? (
+                        <Button
+                          label="Sell building"
+                          onPress={() => void commitPlay(sellBuilding(play, game.tokenSpaces ?? {}, game.players, entry.id))}
+                        />
+                      ) : null}
+                      {canMortgage(play, entry.id) ? (
+                        <Button
+                          label={`Mortgage ${formatMoney(mortgageValue(entry.id))}`}
+                          onPress={() =>
+                            void commitPlay(mortgageProperty(play, game.tokenSpaces ?? {}, game.players, entry.id))
+                          }
+                        />
+                      ) : null}
+                      {mortgaged ? (
+                        <Button
+                          label={`Unmortgage ${formatMoney(unmortgageCost(entry.id))}`}
+                          disabled={turnCash < unmortgageCost(entry.id)}
+                          onPress={() =>
+                            void commitPlay(
+                              unmortgageProperty(play, game.tokenSpaces ?? {}, game.players, entry.id, turnCash),
+                            )
+                          }
+                        />
+                      ) : null}
+                    </View>
+                  ) : null}
+                </View>
+              );
+            })}
+          </Card>
+        ) : null}
+
         <Card>
-          <Text style={typography.section}>Rent</Text>
-          <Text style={typography.body}>
-            Pick the property and how it is built, or choose Purchase, then charge that amount from the payer to the receiver.
-          </Text>
+          <Text style={typography.section}>Rent lookup</Text>
           <OptionSelect
             label="Property"
             value={property.id}
@@ -720,52 +790,11 @@ export function MonopolyScreen({ navigation, route }: Props) {
             }))}
             onChange={setPropertyId}
           />
-          <OptionSelect
-            label={developmentLabel}
-            value={developmentValue}
-            disabled={!canBank}
-            options={developmentOptions}
-            onChange={(id) => {
-              if (property.kind === 'street' && id === PURCHASE_OPTION) {
-                setPurchasing(true);
-                return;
-              }
-              setPurchasing(false);
-              const next = Number(id);
-              if (property.kind === 'railroad') setRailroadsOwned(next as RailroadCount);
-              else if (property.kind === 'utility') setUtilitiesOwned(next as UtilityCount);
-              else setStreetLevel(next as StreetLevel);
-            }}
-          />
-          {property.kind === 'utility' ? (
-            <View style={{ gap: 6 }}>
-              <Text style={typography.section}>Dice total</Text>
-              <Field
-                value={dice}
-                onChangeText={(text) => {
-                  setDice(text.replace(/[^\d]/g, ''));
-                  setError(null);
-                }}
-                keyboardType="number-pad"
-                placeholder="2–12"
-                editable={canBank}
-              />
-            </View>
-          ) : null}
           <Text style={styles.rentPreview}>
-            {rent ? `${rent.summary} · ${formatMoney(rent.amount)}` : 'Enter a dice total from 2 to 12'}
+            {quoteOwner
+              ? `${partyName(quoteOwner)} owns it. Rent ${formatMoney(quoteRentAmount ?? 0)}${property.kind === 'utility' ? ` on a dice total of ${quoteDice}` : ''}.`
+              : `Unowned. Price ${formatMoney(property.price)}.`}
           </Text>
-          <Button
-            label={
-              rent
-                ? `${partyName(resolvedPayer)} pays ${partyName(resolvedReceiver)} ${formatMoney(rent.amount)}`
-                : 'Charge rent'
-            }
-            variant="primary"
-            disabled={!canBank || !rent || sameParty}
-            onPress={() => void applyRent()}
-            style={{ alignSelf: 'stretch' }}
-          />
         </Card>
         <PlaySpark sparks={sparks} />
       </View>
@@ -894,6 +923,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: colors.danger,
   },
+  deed: { gap: 8, paddingVertical: 4 },
   rentPreview: {
     ...typography.label,
     fontSize: 16,
