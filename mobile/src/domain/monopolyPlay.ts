@@ -763,6 +763,28 @@ function afterChoice(
   return commit(original, tokens, ctx);
 }
 
+export function moneyFromSquare(prior: MonopolyPlay, result: PlayOutcome): number | null {
+  const paid = result.events.find((event) => event.points < 0);
+  if (!paid) return null;
+  const space = result.tokens[paid.playerId];
+  if (typeof space !== 'number') return null;
+  const spot = getBoardSpace(space);
+  if (!spot) return null;
+  if (
+    spot.propertyId &&
+    result.play.owned[spot.propertyId] === paid.playerId &&
+    prior.owned[spot.propertyId] !== paid.playerId
+  ) {
+    return space;
+  }
+  if (spot.tax) return space;
+  if (spot.propertyId) {
+    const owner = prior.owned[spot.propertyId];
+    if (owner && owner !== paid.playerId && !prior.mortgaged.includes(spot.propertyId)) return space;
+  }
+  return null;
+}
+
 export function buyProperty(
   play: MonopolyPlay,
   tokens: Record<string, number>,

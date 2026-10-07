@@ -5,6 +5,7 @@ import Svg, { Path } from 'react-native-svg';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AddPlayerModal } from '../components/AddPlayerModal';
 import { MonopolyBoard, type TokenRouteView } from '../components/MonopolyBoard';
+import { type MoneyFlight } from '../components/MoneyBills';
 import { FireworksOverlay } from '../components/FireworksOverlay';
 import { PlaySpark } from '../components/PlaySpark';
 import { OptionSelect } from '../components/OptionSelect';
@@ -39,6 +40,7 @@ import {
   cashOf,
   createMonopolyPlay,
   declineProperty,
+  moneyFromSquare,
   mortgageProperty,
   mortgageValue,
   payToLeaveJail,
@@ -97,7 +99,9 @@ export function MonopolyScreen({ navigation, route }: Props) {
   const [dice, setDice] = useState('7');
   const [diceRoll, setDiceRoll] = useState<{ id: number; faces: [number, number] } | null>(null);
   const [tokenRoute, setTokenRoute] = useState<TokenRouteView | null>(null);
+  const [moneyFlight, setMoneyFlight] = useState<MoneyFlight | null>(null);
   const routeSerial = useRef(0);
+  const billSerial = useRef(0);
   const [rollingDice, setRollingDice] = useState(false);
   const rollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [boardDragging, setBoardDragging] = useState(false);
@@ -268,9 +272,17 @@ export function MonopolyScreen({ navigation, route }: Props) {
       return;
     }
     setLandNote(result.note);
+    let routeId: number | null = null;
     if (result.route && result.route.spaces.length > 1) {
       routeSerial.current += 1;
-      setTokenRoute({ id: routeSerial.current, playerId: result.route.playerId, spaces: result.route.spaces });
+      routeId = routeSerial.current;
+      setTokenRoute({ id: routeId, playerId: result.route.playerId, spaces: result.route.spaces });
+    }
+    const paidSpace = moneyFromSquare(play, result);
+    if (paidSpace != null) {
+      billSerial.current += 1;
+      const payer = result.events.find((event) => event.points < 0)?.playerId ?? play.turn;
+      setMoneyFlight({ id: billSerial.current, playerId: payer, space: paidSpace, routeId });
     }
     await applyGame(
       (g) => {
@@ -429,7 +441,8 @@ export function MonopolyScreen({ navigation, route }: Props) {
         <View style={styles.row}>
           <Button
             label="Undo"
-            onPress={() =>
+            onPress={() => {
+              setMoneyFlight(null);
               void applyGame(
                 (g) => {
                   if (g.monopoly?.undo) {
@@ -445,8 +458,8 @@ export function MonopolyScreen({ navigation, route }: Props) {
                   return g;
                 },
                 { suppressWin: true },
-              )
-            }
+              );
+            }}
             disabled={!play.undo && game.events.length === 0}
           />
           <Button
@@ -509,6 +522,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
             players={game.players}
             tokenSpaces={game.tokenSpaces}
             tokenRoute={tokenRoute}
+            moneyFlight={moneyFlight}
             enabled={canBank}
             onDragging={setBoardDragging}
             onLand={(playerId, space) => {

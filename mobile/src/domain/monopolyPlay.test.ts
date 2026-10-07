@@ -7,6 +7,7 @@ import {
   canBuild,
   createMonopolyPlay,
   declineProperty,
+  moneyFromSquare,
   mortgageProperty,
   rentDue,
   resolveRoll,
@@ -46,6 +47,7 @@ describe('monopoly play', () => {
     assert.equal(bought.play.pending, null);
     assert.equal(bought.events[0]?.points, -60);
     assert.match(bought.note, /Roll again/);
+    assert.equal(moneyFromSquare(moved.play, bought), 1);
   });
 
   it('charges rent, doubles it for a monopoly, and scales railroads', () => {
@@ -59,6 +61,7 @@ describe('monopoly play', () => {
     assert.equal(landed.events.find((event) => event.playerId === 'ada')?.points, -8);
     assert.equal(landed.events.find((event) => event.playerId === 'bea')?.points, 8);
     assert.equal(landed.play.turn, 'bea');
+    assert.equal(moneyFromSquare(play, landed), 3);
   });
 
   it('sends the player to jail on the third doubles without moving there', () => {
@@ -105,6 +108,7 @@ describe('monopoly play', () => {
     assert.equal(built.play.houses.mediterranean, 1);
     assert.equal(canBuild(built.play, 'mediterranean'), false);
     assert.equal(rentDue(built.play, 'mediterranean', 4), 10);
+    assert.equal(moneyFromSquare(owned, built), null);
 
     const mortgaged = mortgageProperty(table({ owned: { reading: 'ada' } }), {}, players, 'reading');
     assert.ok(!('error' in mortgaged));
@@ -128,6 +132,13 @@ describe('monopoly play', () => {
     const undoneRoll = undoMonopoly(moved.play, moved.events);
     assert.equal(undoneRoll?.tokens.ada, 39);
     assert.equal(undoneRoll?.events.length, 0);
+  });
+
+  it('sends bills from a tax square', () => {
+    const play = table();
+    const taxed = resolveRoll(play, { ada: 0 }, players, roll(2, 2));
+    assert.equal(taxed.tokens.ada, 4);
+    assert.equal(moneyFromSquare(play, taxed), 4);
   });
 
   it('walks back three spaces after landing on Chance', () => {

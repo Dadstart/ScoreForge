@@ -18,6 +18,7 @@ import { getProperty, playerToken } from '../domain/monopoly';
 import { fitBoardLabel, fitSize } from '../domain/monopolyLabel';
 import { clampPan, clampZoom, panForZoom, stepZoom } from '../domain/monopolyZoom';
 import { diceMotionMs, MonopolyDice } from './MonopolyDice';
+import { MoneyBills, type MoneyFlight } from './MoneyBills';
 import { colors, fonts, radii } from '../theme';
 
 const TOKEN_COLORS = ['#e86a5c', '#6fbf8a', '#7eb6ff', '#d4a84b', '#d93a96', '#f7941d', '#c5d0c9', '#f2e3a0'];
@@ -32,6 +33,7 @@ type Props = {
   players: Player[];
   tokenSpaces?: Record<string, number>;
   tokenRoute?: TokenRouteView | null;
+  moneyFlight?: MoneyFlight | null;
   enabled: boolean;
   onLand: (playerId: string, space: BoardSpace) => void;
   onDragging: (dragging: boolean) => void;
@@ -278,6 +280,7 @@ function BoardCanvas({
   players,
   tokenSpaces,
   tokenRoute = null,
+  moneyFlight = null,
   enabled,
   onLand,
   onDragging,
@@ -295,8 +298,26 @@ function BoardCanvas({
   const boardRef = useRef<View>(null);
   const origin = useRef<Origin>({ x: 0, y: 0, size: 0 });
   const snapIds = useRef(new Set<string>());
+  const flightRef = useRef(moneyFlight);
+  flightRef.current = moneyFlight;
+  const [burst, setBurst] = useState<{ id: number; space: number } | null>(null);
   const [size, setSize] = useState(0);
   const [hover, setHover] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!moneyFlight) {
+      setBurst(null);
+      return;
+    }
+    if (moneyFlight.routeId != null) return;
+    setBurst({ id: moneyFlight.id, space: moneyFlight.space });
+  }, [moneyFlight]);
+
+  const onTokenSettled = (playerId: string) => {
+    const flight = flightRef.current;
+    if (!flight || flight.routeId == null || flight.playerId !== playerId) return;
+    setBurst({ id: flight.id, space: flight.space });
+  };
 
   const rememberOrigin = () => {
     boardRef.current?.measureInWindow((x, y, width) => {
@@ -580,6 +601,7 @@ function BoardCanvas({
                 routeId={route?.id ?? 0}
                 routeSpaces={route?.spaces ?? null}
                 snapIds={snapIds.current}
+                onSettled={onTokenSettled}
                 onDragStart={() => {
                   rememberOrigin();
                   onDragging(true);
@@ -610,6 +632,7 @@ function BoardCanvas({
             );
           })
         : null}
+      <MoneyBills flight={burst} boardSize={size} />
       {pinDice && diceRoll ? (
         <View pointerEvents="none" style={styles.diceLayer}>
           <MonopolyDice roll={diceRoll} />
@@ -1200,6 +1223,7 @@ function Piece({
   routeId,
   routeSpaces,
   snapIds,
+  onSettled,
   onDragStart,
   onDragMove,
   onDragEnd,
@@ -1216,6 +1240,7 @@ function Piece({
   routeId: number;
   routeSpaces: number[] | null;
   snapIds: Set<string>;
+  onSettled: (playerId: string) => void;
   onDragStart: () => void;
   onDragMove: (dx: number, dy: number) => void;
   onDragEnd: (dx: number, dy: number) => void;
@@ -1244,6 +1269,8 @@ function Piece({
   const cancelRef = useRef(onDragCancel);
   const routeRef = useRef(routeSpaces);
   routeRef.current = routeSpaces;
+  const settledNotice = useRef(onSettled);
+  settledNotice.current = onSettled;
   startRef.current = onDragStart;
   moveRef.current = onDragMove;
   endRef.current = onDragEnd;
@@ -1301,6 +1328,7 @@ function Piece({
       const place = placeAt(spaceIndex, slotRef.current);
       left.setValue(place.left);
       top.setValue(place.top);
+      if (diceMotionMs() === 0 && !(snap && !recorded)) settledNotice.current(playerId);
       return;
     }
     const spaces = travelSpaces(from, spaceIndex, routeRef.current, lastPath.current);
@@ -1353,6 +1381,7 @@ function Piece({
       liftX.setValue(0);
       liftY.setValue(0);
       bulge.setValue(1);
+      settledNotice.current(playerId);
     });
     return () => {
       animation.stop();
