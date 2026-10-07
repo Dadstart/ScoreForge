@@ -18,8 +18,10 @@ import { getProperty, playerToken } from '../domain/monopoly';
 import { fitBoardLabel, fitSize } from '../domain/monopolyLabel';
 import { clampPan, clampZoom, panForZoom, stepZoom } from '../domain/monopolyZoom';
 import { diceMotionMs, MonopolyDice } from './MonopolyDice';
+import { CARD_REVEAL_MS, MonopolyCardTable } from './MonopolyCards';
 import { MoneyBills, type MoneyFlight } from './MoneyBills';
 import { colors, fonts, radii } from '../theme';
+import type { DrawnCard } from '../domain/monopolyPlay';
 
 const TOKEN_COLORS = ['#e86a5c', '#6fbf8a', '#7eb6ff', '#d4a84b', '#d93a96', '#f7941d', '#c5d0c9', '#f2e3a0'];
 /** Cells at least this wide show names and prices. Smaller cells are a color map. */
@@ -33,6 +35,9 @@ type Props = {
   players: Player[];
   tokenSpaces?: Record<string, number>;
   tokenRoute?: TokenRouteView | null;
+  drawnCards?: DrawnCard[];
+  chanceCount?: number;
+  chestCount?: number;
   moneyFlight?: MoneyFlight | null;
   onDragging: (dragging: boolean) => void;
   diceRoll?: DiceRollView | null;
@@ -284,6 +289,9 @@ function BoardCanvas({
   players,
   tokenSpaces,
   tokenRoute = null,
+  drawnCards = [],
+  chanceCount = 16,
+  chestCount = 16,
   moneyFlight = null,
   style,
   panHandlers,
@@ -298,6 +306,28 @@ function BoardCanvas({
   flightRef.current = moneyFlight;
   const [burst, setBurst] = useState<{ id: number; space: number } | null>(null);
   const [size, setSize] = useState(0);
+  const [face, setFace] = useState<{ deck: DrawnCard['deck']; id: string; nonce: number } | null>(null);
+  const drawnRef = useRef(drawnCards);
+  drawnRef.current = drawnCards;
+  const drawCursor = useRef(0);
+  const drawnKey = drawnCards.map((card) => `${card.deck}:${card.space}:${card.id}`).join('|');
+  const [trackedDraw, setTrackedDraw] = useState(drawnKey);
+  if (trackedDraw !== drawnKey) {
+    setTrackedDraw(drawnKey);
+    drawCursor.current = 0;
+    setFace(null);
+  }
+
+  const showDrawnCard = (space: number) => {
+    const list = drawnRef.current;
+    let index = list.findIndex((card, item) => item >= drawCursor.current && card.space === space);
+    if (index < 0 && drawCursor.current < list.length) index = drawCursor.current;
+    if (index < 0) return;
+    const card = list[index];
+    if (!card) return;
+    drawCursor.current = index + 1;
+    setFace({ deck: card.deck, id: card.id, nonce: Date.now() });
+  };
 
   useEffect(() => {
     if (!moneyFlight) {
@@ -577,11 +607,16 @@ function BoardCanvas({
                 size={size}
                 routeId={route?.id ?? 0}
                 routeSpaces={route?.spaces ?? null}
+                holdSpaces={route ? drawnCards.map((card) => card.space) : []}
+                onCardStop={showDrawnCard}
                 onSettled={onTokenSettled}
-              />
-            );
-          })
-        : null}
+            />
+          );
+        })
+      : null}
+      {size > 0 ? (
+        <MonopolyCardTable boardSize={size} chanceCount={chanceCount} chestCount={chestCount} face={face} />
+      ) : null}
       <MoneyBills flight={burst} boardSize={size} />
       {pinDice && diceRoll ? (
         <View pointerEvents="none" style={styles.diceLayer}>
@@ -1152,6 +1187,8 @@ function Piece({
   size,
   routeId,
   routeSpaces,
+  holdSpaces,
+  onCardStop,
   onSettled,
 }: {
   playerId: string;
@@ -1163,6 +1200,8 @@ function Piece({
   size: number;
   routeId: number;
   routeSpaces: number[] | null;
+  holdSpaces: number[];
+  onCardStop: (space: number) => void;
   onSettled: (playerId: string) => void;
 }) {
   const [flying, setFlying] = useState(false);
@@ -1183,6 +1222,10 @@ function Piece({
   routeRef.current = routeSpaces;
   const settledNotice = useRef(onSettled);
   settledNotice.current = onSettled;
+  const holdRef = useRef(holdSpaces);
+  holdRef.current = holdSpaces;
+  const cardNotice = useRef(onCardStop);
+  cardNotice.current = onCardStop;
 
   useEffect(() => {
     if (flyingRef.current || settled.current !== spaceIndex) return;
@@ -1203,6 +1246,8 @@ function Piece({
       const place = placeAt(spaceIndex, slotRef.current);
       left.setValue(place.left);
       top.setValue(place.top);
+      const holds = holdRef.current;
+      if (holds.length > 0) cardNotice.current(holds[holds.length - 1]);
       settledNotice.current(playerId);
       return;
     }
@@ -1220,34 +1265,63 @@ function Piece({
     setFlying(true);
     const hop = Math.max(8, Math.round(placeAt(spaces[0], 0).piece * 0.22));
     const pace = stepMs(spaces);
-    const steps = spaces.slice(1).map((index, step) => {
-      const place = placeAt(index, step === spaces.length - 2 ? slotRef.current : 0);
-      const along = adjacentSpaces(spaces[step], index);
-      const dir = along ? inwardHop(spaces[step]) : { x: 0, y: 0 };
-      const duration = along ? pace : Math.round(pace * 2.4);
-      const half = duration / 2;
-      return Animated.parallel([
-        Animated.timing(left, { toValue: place.left, duration, easing: Easing.inOut(Easing.quad), useNativeDriver: false }),
-        Animated.timing(top, { toValue: place.top, duration, easing: Easing.inOut(Easing.quad), useNativeDriver: false }),
-        Animated.sequence([
-          Animated.timing(liftX, { toValue: dir.x * hop, duration: half, useNativeDriver: false }),
-          Animated.timing(liftX, { toValue: 0, duration: half, useNativeDriver: false }),
-        ]),
-        Animated.sequence([
-          Animated.timing(liftY, { toValue: dir.y * hop, duration: half, useNativeDriver: false }),
-          Animated.timing(liftY, { toValue: 0, duration: half, useNativeDriver: false }),
-        ]),
-        Animated.sequence([
-          Animated.timing(bulge, { toValue: along ? 1.1 : 1.06, duration: half, useNativeDriver: false }),
-          Animated.timing(bulge, { toValue: 1, duration: half, useNativeDriver: false }),
-        ]),
-      ]);
-    });
-    const animation = Animated.sequence(steps);
+    let current: Animated.CompositeAnimation | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let finishWait: (() => void) | null = null;
     let finished = false;
-    animation.start(({ finished: done }) => {
-      finished = done;
-      if (!done) return;
+    let cancelled = false;
+    const play = (animation: Animated.CompositeAnimation) =>
+      new Promise<boolean>((resolve) => {
+        current = animation;
+        animation.start(({ finished: done }) => resolve(done));
+      });
+    const pause = (ms: number) =>
+      new Promise<void>((resolve) => {
+        finishWait = () => {
+          finishWait = null;
+          resolve();
+        };
+        timer = setTimeout(() => finishWait?.(), ms);
+      });
+    const run = async () => {
+      const holds = [...holdRef.current];
+      for (let step = 1; step < spaces.length; step += 1) {
+        const index = spaces[step];
+        const place = placeAt(index, step === spaces.length - 1 ? slotRef.current : 0);
+        const along = adjacentSpaces(spaces[step - 1], index);
+        const dir = along ? inwardHop(spaces[step - 1]) : { x: 0, y: 0 };
+        const duration = along ? pace : Math.round(pace * 2.4);
+        const half = duration / 2;
+        const done = await play(
+          Animated.parallel([
+            Animated.timing(left, { toValue: place.left, duration, easing: Easing.inOut(Easing.quad), useNativeDriver: false }),
+            Animated.timing(top, { toValue: place.top, duration, easing: Easing.inOut(Easing.quad), useNativeDriver: false }),
+            Animated.sequence([
+              Animated.timing(liftX, { toValue: dir.x * hop, duration: half, useNativeDriver: false }),
+              Animated.timing(liftX, { toValue: 0, duration: half, useNativeDriver: false }),
+            ]),
+            Animated.sequence([
+              Animated.timing(liftY, { toValue: dir.y * hop, duration: half, useNativeDriver: false }),
+              Animated.timing(liftY, { toValue: 0, duration: half, useNativeDriver: false }),
+            ]),
+            Animated.sequence([
+              Animated.timing(bulge, { toValue: along ? 1.1 : 1.06, duration: half, useNativeDriver: false }),
+              Animated.timing(bulge, { toValue: 1, duration: half, useNativeDriver: false }),
+            ]),
+          ]),
+        );
+        if (cancelled || !done) return;
+        const holdAt = holds.indexOf(index);
+        if (holdAt >= 0) {
+          holds.splice(holdAt, 1);
+          cardNotice.current(index);
+          if (step < spaces.length - 1) {
+            await pause(CARD_REVEAL_MS);
+            if (cancelled) return;
+          }
+        }
+      }
+      finished = true;
       flyingRef.current = false;
       setFlying(false);
       const place = placeAt(settled.current, slotRef.current);
@@ -1257,9 +1331,13 @@ function Piece({
       liftY.setValue(0);
       bulge.setValue(1);
       settledNotice.current(playerId);
-    });
+    };
+    void run();
     return () => {
-      animation.stop();
+      cancelled = true;
+      finishWait?.();
+      if (timer) clearTimeout(timer);
+      current?.stop();
       if (!finished) {
         flyingRef.current = false;
         settled.current = from;

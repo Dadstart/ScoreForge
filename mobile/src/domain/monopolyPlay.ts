@@ -1,4 +1,5 @@
 import { boardStep, GO_PAYOUT, type DiceRoll, rollMonopolyDice } from './monopolyDice';
+import { CHANCE_CARD_IDS, CHEST_CARD_IDS, type CardDeck } from './monopolyCards';
 import { backwardSpaces, forwardSpaces, getBoardSpace } from './monopolyBoard';
 import {
   BANK_PARTY_ID,
@@ -52,6 +53,8 @@ export type PlayPlayer = { id: string; name: string };
 
 export type TokenRoute = { playerId: string; spaces: number[] };
 
+export type DrawnCard = { deck: CardDeck; id: string; space: number };
+
 export type PlayOutcome = {
   play: MonopolyPlay;
   tokens: Record<string, number>;
@@ -59,6 +62,8 @@ export type PlayOutcome = {
   note: string;
   /** Spaces the moving token visits, including where it started. Absent when nobody moves. */
   route?: TokenRoute | null;
+  /** Cards turned face up during this action, in the order they were drawn. */
+  drawn?: DrawnCard[];
 };
 
 const HOUSE_COST: Record<string, number> = {
@@ -76,43 +81,8 @@ const RAILROAD_RENT = [0, 25, 50, 100, 200];
 const RAILROAD_SPACES = [5, 15, 25, 35];
 const UTILITY_SPACES = [12, 28];
 
-const CHANCE_IDS = [
-  'boardwalk',
-  'go',
-  'illinois',
-  'st-charles',
-  'railroad-a',
-  'railroad-b',
-  'utility',
-  'bank-50',
-  'jail-free',
-  'back-3',
-  'go-jail',
-  'repairs',
-  'poor-tax',
-  'reading',
-  'chairman',
-  'loan',
-];
-
-const CHEST_IDS = [
-  'go',
-  'bank-error',
-  'doctor',
-  'stock',
-  'jail-free',
-  'go-jail',
-  'holiday',
-  'refund',
-  'birthday',
-  'life',
-  'hospital',
-  'school',
-  'consultancy',
-  'repairs',
-  'beauty',
-  'inherit',
-];
+const CHANCE_IDS: string[] = [...CHANCE_CARD_IDS];
+const CHEST_IDS: string[] = [...CHEST_CARD_IDS];
 
 function streetsIn(group: string): BoardProperty[] {
   return properties.filter((property) => property.kind === 'street' && property.group === group);
@@ -326,6 +296,7 @@ type Ctx = {
   sample: () => number;
   depth: number;
   route: TokenRoute | null;
+  drawn: DrawnCard[];
 };
 
 function credit(ctx: Ctx, playerId: string, amount: number) {
@@ -508,6 +479,7 @@ function drawCard(ctx: Ctx, playerId: string, deck: 'chance' | 'chest', from: nu
   const next = keep ? rest : [...rest, id];
   if (deck === 'chance') ctx.play.chance = next;
   else ctx.play.chest = next;
+  ctx.drawn.push({ deck, id, space: from });
   applyCard(ctx, playerId, deck, id, from);
 }
 
@@ -660,6 +632,7 @@ function commit(before: MonopolyPlay, tokensBefore: Record<string, number>, ctx:
     events: stamped(ctx.events),
     note: ctx.notes.join(' '),
     route: ctx.route,
+    drawn: ctx.drawn,
   };
 }
 
@@ -693,6 +666,7 @@ export function resolveRoll(
     sample,
     depth: 0,
     route: null,
+    drawn: [],
   };
   const playerId = play.turn;
   const name = playerName(players, playerId);
@@ -758,6 +732,7 @@ function afterChoice(
     sample: Math.random,
     depth: 0,
     route: null,
+    drawn: [],
   };
   finish(ctx, original.turn);
   return commit(original, tokens, ctx);

@@ -16,6 +16,7 @@ import {
   type MonopolyPlay,
   type PlayPlayer,
 } from './monopolyPlay';
+import { CHANCE_CARD_IDS, CHEST_CARD_IDS, cardCopy } from './monopolyCards';
 
 const players: PlayPlayer[] = [
   { id: 'ada', name: 'Ada' },
@@ -97,6 +98,7 @@ describe('monopoly play', () => {
     assert.equal(drawn.route?.spaces.at(-1), 39);
     assert.equal(drawn.route?.spaces.includes(7), true);
     assert.ok((drawn.route?.spaces.length ?? 0) > 12);
+    assert.deepEqual(drawn.drawn, [{ deck: 'chance', id: 'boardwalk', space: 7 }]);
   });
 
   it('builds evenly, then undoes the purchase and the move', () => {
@@ -146,6 +148,25 @@ describe('monopoly play', () => {
     const moved = resolveRoll(play, { ada: 5 }, players, roll(1, 1));
     assert.equal(moved.tokens.ada, 4);
     assert.deepEqual(moved.route?.spaces, [5, 6, 7, 6, 5, 4]);
+    assert.deepEqual(moved.drawn, [{ deck: 'chance', id: 'back-3', space: 7 }]);
+  });
+
+  it('draws a second card when Chance sends the token onto Community Chest', () => {
+    const play = table({ chance: ['back-3', 'go'], chest: ['doctor', 'go'] });
+    const moved = resolveRoll(play, { ada: 34 }, players, roll(1, 1));
+    assert.equal(moved.tokens.ada, 33);
+    assert.deepEqual(moved.drawn, [
+      { deck: 'chance', id: 'back-3', space: 36 },
+      { deck: 'chest', id: 'doctor', space: 33 },
+    ]);
+    assert.equal(moved.events.some((event) => event.points === -50), true);
+  });
+
+  it('has wording for every Chance and Community Chest card', () => {
+    for (const id of CHANCE_CARD_IDS) assert.ok(cardCopy('chance', id).text.length > 8);
+    for (const id of CHEST_CARD_IDS) assert.ok(cardCopy('chest', id).text.length > 8);
+    assert.equal(cardCopy('chance', 'boardwalk').name, 'Chance');
+    assert.equal(cardCopy('chest', 'birthday').name, 'Community Chest');
   });
 
   it('returns a kept jail card to the deck when it is used', () => {

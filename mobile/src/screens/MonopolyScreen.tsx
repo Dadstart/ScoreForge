@@ -53,6 +53,7 @@ import {
   unmortgageCost,
   unmortgageProperty,
   useJailCard,
+  type DrawnCard,
   type PlayOutcome,
 } from '../domain/monopolyPlay';
 import { calculate } from '../domain/scoreCalculator';
@@ -99,6 +100,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
   const [dice, setDice] = useState('7');
   const [diceRoll, setDiceRoll] = useState<{ id: number; faces: [number, number] } | null>(null);
   const [tokenRoute, setTokenRoute] = useState<TokenRouteView | null>(null);
+  const [drawnCards, setDrawnCards] = useState<DrawnCard[]>([]);
   const [moneyFlight, setMoneyFlight] = useState<MoneyFlight | null>(null);
   const routeSerial = useRef(0);
   const billSerial = useRef(0);
@@ -272,6 +274,8 @@ export function MonopolyScreen({ navigation, route }: Props) {
       return;
     }
     setLandNote(result.note);
+    if (result.drawn?.length) setDrawnCards(result.drawn);
+    else if (result.route) setDrawnCards([]);
     let routeId: number | null = null;
     if (result.route && result.route.spaces.length > 1) {
       routeSerial.current += 1;
@@ -441,6 +445,9 @@ export function MonopolyScreen({ navigation, route }: Props) {
             players={game.players}
             tokenSpaces={game.tokenSpaces}
             tokenRoute={tokenRoute}
+            drawnCards={drawnCards}
+            chanceCount={play.chance.length}
+            chestCount={play.chest.length}
             moneyFlight={moneyFlight}
             onDragging={setBoardDragging}
             felt={
@@ -455,6 +462,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
                     style={styles.feltBtn}
                     onPress={() => {
                       setMoneyFlight(null);
+                      setDrawnCards([]);
                       void applyGame(
                         (g) => {
                           if (g.monopoly?.undo) {
