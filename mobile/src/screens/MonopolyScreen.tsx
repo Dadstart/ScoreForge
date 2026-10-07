@@ -36,10 +36,11 @@ import {
   type StreetLevel,
   type UtilityCount,
 } from '../domain/monopoly';
-import { getBoardSpace } from '../domain/monopolyBoard';
+import { diceMotionMs } from '../components/MonopolyDice';
+import { getBoardSpace, tokenSpace } from '../domain/monopolyBoard';
+import { boardStep, GO_PAYOUT, rollMonopolyDice } from '../domain/monopolyDice';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
-import { useSettings } from '../hooks/useSettings';
 import { usePlaySpark } from '../hooks/usePlaySpark';
 import { useWinCelebration } from '../hooks/useWinCelebration';
 import { loadDisplayName } from '../storage/displayNameStore';
@@ -65,6 +66,20 @@ function parseDice(raw: string): number | null {
   return value;
 }
 
+type RollLanding = {
+  faces: [number, number];
+  doubles: boolean;
+  passedGo: boolean;
+};
+
+function rollSentence(playerName: string, spaceName: string, landing?: RollLanding): string {
+  const rolled = landing
+    ? `Rolled ${landing.faces[0]} and ${landing.faces[1]}${landing.doubles ? ', doubles' : ''}. `
+    : '';
+  const salary = landing?.passedGo ? ` Collected ${formatMoney(GO_PAYOUT)} for passing GO.` : '';
+  return `${rolled}${playerName} landed on ${spaceName}.${salary}${landing?.doubles ? ' Roll again.' : ''}`;
+}
+
 export function MonopolyScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { gameId } = route.params;
@@ -80,8 +95,9 @@ export function MonopolyScreen({ navigation, route }: Props) {
   const [railroadsOwned, setRailroadsOwned] = useState<RailroadCount>(1);
   const [utilitiesOwned, setUtilitiesOwned] = useState<UtilityCount>(1);
   const [dice, setDice] = useState('7');
-  const [settings] = useSettings();
-  const showBoard = settings.showMonopolyBoard;
+  const [diceRoll, setDiceRoll] = useState<{ id: number; faces: [number, number] } | null>(null);
+  const [rollingDice, setRollingDice] = useState(false);
+  const rollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [boardDragging, setBoardDragging] = useState(false);
   usePageScroll(!boardDragging);
   const [landNote, setLandNote] = useState<string | null>(null);
@@ -102,6 +118,15 @@ export function MonopolyScreen({ navigation, route }: Props) {
   } = useWinCelebration();
   const { sparks, spark } = usePlaySpark();
   const seenTokens = useRef<Record<string, number> | null>(null);
+  const placeRef = useRef<
+    (playerId: string, spaceIndex: number, landing?: RollLanding) => void
+  >(() => {});
+
+  useEffect(() => {
+    return () => {
+      if (rollTimer.current) clearTimeout(rollTimer.current);
+    };
+  }, []);
 
   useEffect(() => {
     void loadDisplayName().then(setDisplayName);
@@ -257,21 +282,23 @@ export function MonopolyScreen({ navigation, route }: Props) {
     await transfer(rent.amount);
   };
 
-  const placePiece = (playerId: string, spaceIndex: number) => {
+  const placePiece = (playerId: string, spaceIndex: number, landing?: RollLanding) => {
     const space = getBoardSpace(spaceIndex);
     const player = game.players.find((entry) => entry.id === playerId);
     if (!space || !player || !canBank) return;
     void applyGame(
       (g) => {
         g.tokenSpaces = { ...(g.tokenSpaces ?? {}), [playerId]: spaceIndex };
+        if (landing?.passedGo) g.events.push(...transferEvents(BANK_PARTY_ID, playerId, GO_PAYOUT));
         return g;
       },
       { suppressWin: true },
     );
+    const note = rollSentence(player.name, space.name, landing);
     if (space.propertyId) {
       setPropertyId(space.propertyId);
       setPayerId(playerId);
-      setLandNote(`${player.name} landed on ${space.name}. Rent property is set.`);
+      setLandNote(`${note} Rent property is set.`);
       return;
     }
     if (space.tax) {
@@ -279,12 +306,33 @@ export function MonopolyScreen({ navigation, route }: Props) {
       setPayerId(playerId);
       setReceiverId(BANK_PARTY_ID);
       setError(null);
-      setLandNote(
-        `${player.name} landed on ${space.name}. ${formatMoney(space.tax)} is in Adjust cash.`,
-      );
+      setLandNote(`${note} ${formatMoney(space.tax)} is in Adjust cash.`);
       return;
     }
-    setLandNote(`${player.name} moved to ${space.name}.`);
+    setLandNote(note);
+  };
+  placeRef.current = placePiece;
+
+  const rollForPlayer = () => {
+    if (!canBank || rollingDice || resolvedPayer === BANK_PARTY_ID) return;
+    const player = game.players.find((entry) => entry.id === resolvedPayer);
+    if (!player) return;
+    const rolled = rollMonopolyDice();
+    const from = tokenSpace(game.tokenSpaces, player.id);
+    const landed = boardStep(from, rolled.total);
+    setDice(String(rolled.total));
+    setDiceRoll({ id: Date.now(), faces: rolled.faces });
+    setRollingDice(true);
+    setError(null);
+    if (rollTimer.current) clearTimeout(rollTimer.current);
+    rollTimer.current = setTimeout(() => {
+      placeRef.current(player.id, landed.index, {
+        faces: rolled.faces,
+        doubles: rolled.doubles,
+        passedGo: landed.passedGo,
+      });
+      setRollingDice(false);
+    }, diceMotionMs());
   };
 
   const beginPlayerEdit = (playerId: string, name: string, cash: number, token?: string | null) => {
@@ -439,9 +487,10 @@ export function MonopolyScreen({ navigation, route }: Props) {
             disabled={game.events.length === 0}
           />
           <Button
-            label="Settings"
-            variant="ghost"
-            onPress={() => navigation.navigate('Settings', { gameId })}
+            label={rollingDice ? 'Rolling…' : `Roll for ${partyName(resolvedPayer)}`}
+            variant="primary"
+            disabled={!canBank || rollingDice || resolvedPayer === BANK_PARTY_ID}
+            onPress={rollForPlayer}
           />
           {game.players.length < template.maxPlayers ? (
             <Button label="Add player" onPress={() => setAddingPlayer(true)} />
@@ -461,18 +510,17 @@ export function MonopolyScreen({ navigation, route }: Props) {
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        {showBoard ? (
-          <View style={{ gap: 8 }}>
-            <MonopolyBoard
-              players={game.players}
-              tokenSpaces={game.tokenSpaces}
-              enabled={canBank}
-              onDragging={setBoardDragging}
-              onLand={(playerId, space) => placePiece(playerId, space.index)}
-            />
-            {landNote ? <Text style={styles.bannerText}>{landNote}</Text> : null}
-          </View>
-        ) : null}
+        <View style={{ gap: 8 }}>
+          <MonopolyBoard
+            players={game.players}
+            tokenSpaces={game.tokenSpaces}
+            enabled={canBank}
+            onDragging={setBoardDragging}
+            onLand={(playerId, space) => placePiece(playerId, space.index)}
+            diceRoll={diceRoll}
+          />
+          {landNote ? <Text style={styles.bannerText}>{landNote}</Text> : null}
+        </View>
 
         <View style={styles.wrap}>
           {snapshot.standings.map((standing) => {

@@ -76,6 +76,29 @@ export function spaceToCell(index: number): { row: number; col: number } {
   return { row: i - 30, col: 10 };
 }
 
+/** How far each property runs in from the edge. Larger than a square cell, so the spaces are long rectangles. */
+export const TRACK_DEPTH = 0.16;
+
+export function axisSpan(index: number): { start: number; size: number } {
+  if (index <= 0) return { start: 0, size: TRACK_DEPTH };
+  if (index >= 10) return { start: 1 - TRACK_DEPTH, size: TRACK_DEPTH };
+  const size = (1 - 2 * TRACK_DEPTH) / 9;
+  return { start: TRACK_DEPTH + (index - 1) * size, size };
+}
+
+export function cellBox(row: number, col: number) {
+  const x = axisSpan(col);
+  const y = axisSpan(row);
+  return { x: x.start, y: y.start, w: x.size, h: y.size };
+}
+
+export function fractionToIndex(fraction: number): number {
+  if (fraction <= TRACK_DEPTH) return 0;
+  if (fraction >= 1 - TRACK_DEPTH) return 10;
+  const inner = (fraction - TRACK_DEPTH) / (1 - 2 * TRACK_DEPTH);
+  return Math.min(9, Math.max(1, Math.floor(inner * 9) + 1));
+}
+
 /** Space under a grid cell, or null for the middle of the board. */
 export function cellToSpace(row: number, col: number): number | null {
   if (!Number.isInteger(row) || !Number.isInteger(col)) return null;

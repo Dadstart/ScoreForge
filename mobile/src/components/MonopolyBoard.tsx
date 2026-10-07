@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   PanResponder,
   Pressable,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
   type GestureResponderEvent,
   type StyleProp,
@@ -12,20 +11,18 @@ import {
 } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import type { Player } from '../domain/models';
-import {
-  boardSpaces,
-  cellToSpace,
-  spaceToCell,
-  tokenSpace,
-  type BoardSpace,
-} from '../domain/monopolyBoard';
+import { boardSpaces, cellToSpace, fractionToIndex, spaceToCell, tokenSpace, TRACK_DEPTH, cellBox, type BoardSpace } from '../domain/monopolyBoard';
 import { getProperty, playerToken } from '../domain/monopoly';
-import { clampPan, clampZoom, panForWheel, panForZoom } from '../domain/monopolyZoom';
+import { fitBoardLabel, fitSize } from '../domain/monopolyLabel';
+import { clampPan, clampZoom, panForZoom, stepZoom } from '../domain/monopolyZoom';
+import { MonopolyDice } from './MonopolyDice';
 import { colors, fonts, radii } from '../theme';
 
 const TOKEN_COLORS = ['#e86a5c', '#6fbf8a', '#7eb6ff', '#d4a84b', '#d93a96', '#f7941d', '#c5d0c9', '#f2e3a0'];
 /** Cells at least this wide show names and prices. Smaller cells are a color map. */
 const CLOSE_CELL = 96;
+
+type DiceRollView = { id: number; faces: [number, number] };
 
 type Props = {
   players: Player[];
@@ -33,28 +30,50 @@ type Props = {
   enabled: boolean;
   onLand: (playerId: string, space: BoardSpace) => void;
   onDragging: (dragging: boolean) => void;
+  diceRoll?: DiceRollView | null;
 };
 
 type Origin = { x: number; y: number; size: number };
 
-const PHONE_LAYOUT = 760;
-const START_ZOOM = 2;
-const VIEW_FRAME = 2;
+const VIEW_FRAME = 0;
 
 function touchDistance(a: { pageX: number; pageY: number }, b: { pageX: number; pageY: number }) {
   return Math.hypot(a.pageX - b.pageX, a.pageY - b.pageY);
 }
 
 export function MonopolyBoard(props: Props) {
-  const window = useWindowDimensions();
-  if (Math.min(window.width, window.height) < PHONE_LAYOUT) return <PhoneBoard {...props} />;
-  return <BoardCanvas {...props} />;
+  return <PhoneBoard {...props} startZoom={1} />;
 }
 
-function PhoneBoard({ onDragging, ...props }: Props) {
+const ZOOM_BTN = 44;
+const ZOOM_GAP = 8;
+const ZOOM_INSET = 12;
+
+/** Keep + and − on the green center, and inside the view when that corner is off screen. */
+function zoomDockSpot(pan: { x: number; y: number }, zoom: number, viewport: number) {
+  const board = viewport * zoom;
+  const edge = TRACK_DEPTH;
+  const viewLeft = board <= 0 ? 0 : -pan.x / board;
+  const viewTop = board <= 0 ? 0 : -pan.y / board;
+  const viewRight = board <= 0 ? 1 : (-pan.x + viewport) / board;
+  const viewBottom = board <= 0 ? 1 : (-pan.y + viewport) / board;
+  const feltTop = Math.max(edge, viewTop);
+  const feltRight = Math.min(1 - edge, viewRight);
+  const feltLeft = Math.max(edge, viewLeft);
+  const feltBottom = Math.min(1 - edge, viewBottom);
+  const stack = ZOOM_BTN * 2 + ZOOM_GAP;
+  const onFelt = feltRight > feltLeft && feltBottom > feltTop;
+  let top = onFelt ? pan.y + feltTop * board + ZOOM_INSET : ZOOM_INSET;
+  let right = onFelt ? viewport - (pan.x + feltRight * board) + ZOOM_INSET : ZOOM_INSET;
+  top = Math.min(Math.max(ZOOM_INSET, top), Math.max(ZOOM_INSET, viewport - stack - ZOOM_INSET));
+  right = Math.min(Math.max(ZOOM_INSET, right), Math.max(ZOOM_INSET, viewport - ZOOM_BTN - ZOOM_INSET));
+  return { top, right };
+}
+
+function PhoneBoard({ onDragging, diceRoll, startZoom = 1, ...props }: Props & { startZoom?: number }) {
   const viewportRef = useRef<View>(null);
   const [viewport, setViewport] = useState(0);
-  const [zoom, setZoom] = useState(START_ZOOM);
+  const [zoom, setZoom] = useState(startZoom);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const zoomRef = useRef(zoom);
   const panRef = useRef(pan);
@@ -166,9 +185,9 @@ function PhoneBoard({ onDragging, ...props }: Props) {
     setPan(nextPan);
   };
 
-  const changeZoom = (delta: number) => {
+  const changeZoom = (direction: -1 | 1) => {
     const prev = zoomRef.current;
-    const next = clampZoom(prev + delta);
+    const next = stepZoom(prev, direction);
     const nextPan = panForZoom(panRef.current, prev, next, viewportRefSize.current);
     zoomRef.current = next;
     panRef.current = nextPan;
@@ -176,41 +195,13 @@ function PhoneBoard({ onDragging, ...props }: Props) {
     setPan(nextPan);
   };
 
-  useEffect(() => {
-    const node = viewportRef.current as unknown as {
-      addEventListener?: (type: string, listener: (event: WheelEvent) => void, options?: { passive: boolean }) => void;
-      removeEventListener?: (type: string, listener: (event: WheelEvent) => void) => void;
-    } | null;
-    if (!node?.addEventListener || !node.removeEventListener) return;
-    const onWheel = (event: WheelEvent) => {
-      const next = panForWheel(
-        panRef.current,
-        {
-          deltaX: event.deltaX,
-          deltaY: event.deltaY,
-          deltaMode: event.deltaMode,
-          ctrlKey: event.ctrlKey,
-          metaKey: event.metaKey,
-        },
-        zoomRef.current,
-        viewportRefSize.current,
-      );
-      if (!next) return;
-      event.preventDefault();
-      panRef.current = next;
-      setPan(next);
-    };
-    node.addEventListener('wheel', onWheel, { passive: false });
-    return () => node.removeEventListener?.('wheel', onWheel);
-  }, []);
-
   const boardSize = viewport * zoom;
 
   return (
     <View style={{ gap: 8 }}>
       <View
         ref={viewportRef}
-        style={styles.viewport}
+        style={[styles.viewport, zoom < 1 && viewport > 0 ? { height: boardSize } : styles.viewportSquare]}
         onLayout={(event) => {
           const width = Math.max(0, event.nativeEvent.layout.width - VIEW_FRAME * 2);
           if (width <= 0 || width === viewportRefSize.current) return;
@@ -218,7 +209,7 @@ function PhoneBoard({ onDragging, ...props }: Props) {
           viewportRefSize.current = width;
           setViewport(width);
           if (first) {
-            const origin = width - width * START_ZOOM;
+            const origin = width - width * startZoom;
             const next = { x: origin, y: origin };
             panRef.current = next;
             setPan(next);
@@ -240,24 +231,23 @@ function PhoneBoard({ onDragging, ...props }: Props) {
               onDraggingRef.current(dragging);
             }}
             panHandlers={responder.panHandlers}
-            showCenter={false}
+            showCenter={startZoom === 1}
             style={{ position: 'absolute', width: boardSize, height: boardSize, left: pan.x, top: pan.y }}
           />
         ) : null}
+        {diceRoll ? (
+          <View pointerEvents="none" style={styles.diceLayer}>
+            <MonopolyDice roll={diceRoll} />
+          </View>
+        ) : null}
         <View
           pointerEvents="box-none"
-          style={[
-            styles.zoomDock,
-            {
-              top: pan.y + boardSize / 11 + 12,
-              right: viewport - (pan.x + (boardSize * 10) / 11) + 12,
-            },
-          ]}
+          style={[styles.zoomDock, zoomDockSpot(pan, zoom, viewport)]}
         >
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Zoom in"
-            onPress={() => changeZoom(0.5)}
+            onPress={() => changeZoom(1)}
             style={({ pressed }) => [styles.zoomBtn, pressed && styles.zoomBtnPressed]}
           >
             <Text style={styles.zoomLabel}>+</Text>
@@ -265,14 +255,16 @@ function PhoneBoard({ onDragging, ...props }: Props) {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Zoom out"
-            onPress={() => changeZoom(-0.5)}
+            onPress={() => changeZoom(-1)}
             style={({ pressed }) => [styles.zoomBtn, pressed && styles.zoomBtnPressed]}
           >
             <Text style={styles.zoomLabel}>−</Text>
           </Pressable>
         </View>
       </View>
-      <Text style={styles.phoneHint}>Drag the board to look around, or roll the wheel over it. Pinch, or use + and −, to zoom.</Text>
+      {startZoom > 1 ? (
+        <Text style={styles.phoneHint}>Drag the board to look around. Pinch, or use + and −, to zoom.</Text>
+      ) : null}
     </View>
   );
 }
@@ -286,10 +278,13 @@ function BoardCanvas({
   style,
   panHandlers,
   showCenter = true,
+  diceRoll = null,
+  pinDice = false,
 }: Props & {
   style?: StyleProp<ViewStyle>;
   panHandlers?: ReturnType<typeof PanResponder.create>['panHandlers'];
   showCenter?: boolean;
+  pinDice?: boolean;
 }) {
   const boardRef = useRef<View>(null);
   const origin = useRef<Origin>({ x: 0, y: 0, size: 0 });
@@ -306,13 +301,13 @@ function BoardCanvas({
   const spaceAt = (pageX: number, pageY: number): number | null => {
     const { x, y, size: boardSize } = origin.current;
     if (boardSize <= 0) return null;
-    const cell = boardSize / 11;
-    const col = Math.floor((pageX - x) / cell);
-    const row = Math.floor((pageY - y) / cell);
-    return cellToSpace(row, col);
+    const fx = (pageX - x) / boardSize;
+    const fy = (pageY - y) / boardSize;
+    if (fx < 0 || fy < 0 || fx > 1 || fy > 1) return null;
+    return cellToSpace(fractionToIndex(fy), fractionToIndex(fx));
   };
 
-  const cell = size > 0 ? size / 11 : 48;
+  const cell = size > 0 ? size * TRACK_DEPTH : 48;
   const detail = cell >= CLOSE_CELL;
 
   return (
@@ -325,6 +320,12 @@ function BoardCanvas({
     >
       {boardSpaces.map((space) => {
         const { row, col } = spaceToCell(space.index);
+        const frame = cellBox(row, col);
+        const boardPx = size > 0 ? size : 480;
+        const pxW = frame.w * boardPx;
+        const pxH = frame.h * boardPx;
+        const inward = row === 0 || row === 10 ? pxH : pxW;
+        const along = row === 0 || row === 10 ? pxW : pxH;
         const property = space.propertyId ? getProperty(space.propertyId) : undefined;
         const isRailroad = property?.kind === 'railroad';
         const isUtility = property?.kind === 'utility';
@@ -339,23 +340,29 @@ function BoardCanvas({
         const lane = !isCorner && (col === 0 || col === 10) ? sideLane(cell) : tokenLane(cell);
         const mark = space.name === 'Chance' ? 'chance' : space.name === 'Community Chest' ? 'chest' : null;
         const priceLine = detail && (property || space.tax) ? Math.max(12, Math.round(cell * 0.11)) : 0;
-        const utility = isUtility ? utilityExtent(cell, detail) : 0;
+        const nameReserve = priceLine + 40;
+        const utility = isUtility ? Math.min(utilityExtent(cell, detail), Math.max(18, pxH - nameReserve)) : 0;
+        const sidewaysRail = isRailroad && (col === 0 || col === 10);
+        const train = isRailroad
+          ? railroadMark(cell, col, detail, pxW, pxH, lane, sidewaysRail ? 0 : nameReserve)
+          : null;
+        const trainHeight = train?.height ?? 0;
+        const trainWidth = sidewaysRail ? (train?.width ?? 0) : 0;
+        const trainInset = trainWidth > 0 ? trainWidth + 4 : 0;
         const farRail = !detail && isRailroad && (row === 0 || row === 10);
         const railCaption = farRail ? Math.max(12, Math.round(cell * 0.26)) : 0;
         const padLane = farRail ? Math.min(lane, Math.max(8, cell - railCaption - 18)) : lane;
-        const bounds = labelBounds(row, col, cell, bar, isRailroad, detail, priceLine, utility);
-        const nameText = mark || farRail
-          ? null
-          : !detail && space.tax
-            ? `$${space.tax}`
-            : detail
-              ? (property?.name ?? space.name)
-              : space.short;
+        const bounds = labelBounds(row, col, pxW, pxH, bar, lane, trainHeight, priceLine, utility, trainInset);
+        const fullName = property?.name ?? space.name;
+        const nameText = mark || farRail ? null : !detail && space.tax ? `$${space.tax}` : fullName;
         const fitted =
-          nameText && bounds.width >= 22 && bounds.height >= 16
-            ? fitPropertyLabel(nameText, bounds, label)
+          nameText && bounds.width >= 22 && bounds.height >= 12
+            ? fitBoardLabel(nameText, !detail && space.tax ? nameText : space.short, bounds, label)
             : null;
-        const barLabel = !detail && swatch && !fitted ? space.short : null;
+        const barFit = !detail && swatch && !fitted
+          ? fitBoardLabel(fullName, space.short, { width: Math.max(8, along - 8), height: Math.max(8, bar - 2) }, Math.max(8, bar - 4), 1)
+          : null;
+        const barLabel = barFit?.lines[0] ?? null;
         const barTurn = col === 0 ? '-90deg' : col === 10 ? '90deg' : null;
         const amount = detail && fitted ? (property?.price ?? space.tax) : undefined;
         return (
@@ -365,17 +372,19 @@ function BoardCanvas({
             style={[
               styles.cell,
               { backgroundColor: spaceTint(space.name, property?.kind) },
-              isCorner ? null : spacePadding(row, col, padLane, swatch ? bar : 0, cell, railCaption),
+              isCorner ? null : spacePadding(row, col, padLane, swatch ? bar : 0, inward, railCaption, trainInset),
               {
-                left: `${(col * 100) / 11}%`,
-                top: `${(row * 100) / 11}%`,
+                left: `${frame.x * 100}%`,
+                top: `${frame.y * 100}%`,
+                width: `${frame.w * 100}%`,
+                height: `${frame.h * 100}%`,
               },
               hover === space.index && styles.cellHover,
             ]}
           >
             {isCorner ? (
-              <View pointerEvents="none" style={cornerFrame(row, col, cell, lane)}>
-                <CornerArt index={space.index} cell={Math.max(36, cell - lane)} detail={detail} />
+              <View pointerEvents="none" style={styles.cornerFill}>
+                <CornerArt index={space.index} cell={Math.max(48, cell)} detail={detail} />
               </View>
             ) : (
               <>
@@ -396,10 +405,10 @@ function BoardCanvas({
                       <View
                         style={{
                           position: 'absolute',
-                          width: cell - 4,
+                          width: along - 4,
                           height: bar,
-                          left: (bar - (cell - 4)) / 2,
-                          top: (cell - bar) / 2,
+                          left: (bar - (along - 4)) / 2,
+                          top: (along - bar) / 2,
                           alignItems: 'center',
                           justifyContent: 'center',
                           transform: [{ rotate: barTurn }],
@@ -410,9 +419,9 @@ function BoardCanvas({
                             color: inkOn(swatch),
                             fontFamily: fonts.body,
                             fontWeight: '800',
-                            fontSize: fitSize(barLabel, cell - 8, Math.max(8, bar - 4)),
+                            fontSize: fitSize(barLabel, along - 8, Math.max(8, bar - 4)),
                             lineHeight: Math.max(10, bar - 2),
-                            width: cell - 8,
+                            width: along - 8,
                             textAlign: 'center',
                           }}
                           numberOfLines={1}
@@ -426,7 +435,7 @@ function BoardCanvas({
                           color: inkOn(swatch),
                           fontFamily: fonts.body,
                           fontWeight: '800',
-                          fontSize: fitSize(barLabel, cell - 6, Math.max(8, bar - 4)),
+                          fontSize: fitSize(barLabel, along - 6, Math.max(8, bar - 4)),
                           lineHeight: Math.max(10, bar - 2),
                           textAlign: 'center',
                         }}
@@ -437,7 +446,16 @@ function BoardCanvas({
                     ) : null}
                   </View>
                 ) : null}
-                {isRailroad ? <TrainMark row={row} col={col} cell={cell} detail={detail} /> : null}
+                {train ? (
+                  <TrainMark
+                    row={row}
+                    col={col}
+                    cell={cell}
+                    detail={detail}
+                    maxHeight={sidewaysRail ? 0 : trainHeight}
+                    beside={sidewaysRail ? { width: train.width, height: train.height, span: pxH } : undefined}
+                  />
+                ) : null}
                 {railCaption > 0 ? (
                   <Text
                     pointerEvents="none"
@@ -453,19 +471,24 @@ function BoardCanvas({
                 {mark === 'chance' ? <ChanceMark row={row} col={col} cell={cell} detail={detail} /> : null}
                 {mark === 'chest' ? <ChestMark row={row} col={col} cell={cell} detail={detail} /> : null}
                 {fitted ? (
-                  <Text
-                    style={[
-                      styles.cellText,
-                      {
-                        fontSize: fitted.fontSize,
-                        lineHeight: fitted.lineHeight,
-                        width: '100%',
-                      },
-                    ]}
-                    numberOfLines={fitted.lines}
-                  >
-                    {fitted.text}
-                  </Text>
+                  <View style={styles.nameBlock}>
+                    {fitted.lines.map((line, index) => (
+                      <Text
+                        key={`${line}-${index}`}
+                        style={[
+                          styles.cellText,
+                          {
+                            fontSize: fitted.fontSize,
+                            lineHeight: fitted.lineHeight,
+                            width: '100%',
+                          },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {line}
+                      </Text>
+                    ))}
+                  </View>
                 ) : null}
                 {detail && mark ? (
                   <Text
@@ -499,7 +522,18 @@ function BoardCanvas({
           </View>
         );
       })}
-      <View style={styles.center} pointerEvents="none">
+      <View
+        pointerEvents="none"
+        style={[
+          styles.center,
+          {
+            left: `${TRACK_DEPTH * 100}%`,
+            top: `${TRACK_DEPTH * 100}%`,
+            width: `${(1 - 2 * TRACK_DEPTH) * 100}%`,
+            height: `${(1 - 2 * TRACK_DEPTH) * 100}%`,
+          },
+        ]}
+      >
         <Text
           style={[
             styles.centerTitle,
@@ -557,6 +591,11 @@ function BoardCanvas({
             );
           })
         : null}
+      {pinDice && diceRoll ? (
+        <View pointerEvents="none" style={styles.diceLayer}>
+          <MonopolyDice roll={diceRoll} />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -571,6 +610,10 @@ function spaceTint(name: string, kind?: string) {
   return '#f7f1e6';
 }
 
+function displaySize(text: string, width: number, start: number) {
+  return fitSize(text, Math.max(8, Math.round(width * 0.78)), start);
+}
+
 function CornerArt({ index, cell, detail }: { index: number; cell: number; detail: boolean }) {
   if (index === 0) return <GoCorner cell={cell} detail={detail} />;
   if (index === 10) return <JailCorner cell={cell} detail={detail} />;
@@ -579,20 +622,21 @@ function CornerArt({ index, cell, detail }: { index: number; cell: number; detai
 }
 
 function GoCorner({ cell, detail }: { cell: number; detail: boolean }) {
-  const go = Math.round(cell * (detail ? 0.34 : 0.48));
-  const fine = Math.max(7, Math.round(cell * 0.09));
-  const arrowW = Math.round(cell * (detail ? 0.58 : 0.7));
-  const arrowH = Math.round(cell * 0.14);
+  const pad = Math.round(cell * 0.04);
+  const width = cell - pad * 2;
+  const go = fitSize('GO', width, Math.round(cell * (detail ? 0.42 : 0.56)));
+  const fine = fitSize('COLLECT $200', width, Math.round(cell * 0.12));
+  const arrowH = Math.round(cell * (detail ? 0.14 : 0.2));
   return (
-    <View style={styles.corner}>
+    <View style={[styles.corner, { padding: pad }]}>
       <Text style={[styles.cornerGo, { fontSize: go, lineHeight: go }]}>GO</Text>
-      <Svg width={arrowW} height={arrowH} viewBox="0 0 72 16">
+      <Svg width={width} height={arrowH} viewBox="0 0 72 16">
         <Path d="M72 5H24V1L4 8l20 7V11h48V5z" fill="#ed1b24" />
       </Svg>
       {detail ? (
         <>
-          <Text style={[styles.cornerFine, { fontSize: fine, lineHeight: fine + 2 }]}>COLLECT $200</Text>
-          <Text style={[styles.cornerFine, { fontSize: fine, lineHeight: fine + 2 }]}>AS YOU PASS</Text>
+          <Text style={[styles.cornerFine, { fontSize: fine, lineHeight: fine + 1 }]}>COLLECT $200</Text>
+          <Text style={[styles.cornerFine, { fontSize: fine, lineHeight: fine + 1 }]}>AS YOU PASS</Text>
         </>
       ) : null}
     </View>
@@ -600,13 +644,21 @@ function GoCorner({ cell, detail }: { cell: number; detail: boolean }) {
 }
 
 function JailCorner({ cell, detail }: { cell: number; detail: boolean }) {
-  const title = Math.max(8, Math.round(cell * (detail ? 0.12 : 0.16)));
-  const sub = Math.max(7, Math.round(cell * 0.1));
-  const box = Math.round(cell * (detail ? 0.58 : 0.72));
+  const inset = Math.max(4, Math.round(cell * 0.04));
+  const box = Math.round(cell * 0.54);
+  const boxH = Math.round(cell * 0.52);
+  const title = displaySize('JAIL', box - 10, Math.round(boxH * 0.22));
+  const visitW = Math.max(24, cell - box - inset * 3);
+  const sub = fitSize('VISITING', visitW, Math.round(cell * (detail ? 0.13 : 0.16)));
   return (
-    <View style={styles.corner}>
-      <View style={[styles.jail, { width: box, height: Math.round(box * 0.78) }]}>
-        <Text style={[styles.cornerTitle, { fontSize: title, lineHeight: title + 1 }]}>IN JAIL</Text>
+    <View style={styles.cornerFill}>
+      <View style={[styles.jail, { position: 'absolute', top: inset, right: inset, width: box, height: boxH }]}>
+        <Text style={[styles.cornerTitle, { fontSize: title, lineHeight: title + 1 }]} numberOfLines={1}>
+          IN
+        </Text>
+        <Text style={[styles.cornerTitle, { fontSize: title, lineHeight: title + 1 }]} numberOfLines={1}>
+          JAIL
+        </Text>
         <View style={styles.jailBars}>
           <View style={styles.jailBar} />
           <View style={styles.jailBar} />
@@ -614,44 +666,77 @@ function JailCorner({ cell, detail }: { cell: number; detail: boolean }) {
           <View style={styles.jailBar} />
         </View>
       </View>
-      {detail ? (
-        <Text style={[styles.cornerFine, { fontSize: sub, lineHeight: sub + 2 }]}>JUST VISITING</Text>
-      ) : null}
+      <View
+        style={{
+          position: 'absolute',
+          left: inset,
+          top: inset,
+          width: visitW,
+          height: boxH,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Text style={[styles.cornerFine, { fontSize: sub, lineHeight: sub + 1 }]} numberOfLines={1}>
+          JUST
+        </Text>
+        <Text style={[styles.cornerFine, { fontSize: sub, lineHeight: sub + 1 }]} numberOfLines={1}>
+          VISITING
+        </Text>
+      </View>
     </View>
   );
 }
 
-function FreeParkingCorner({ cell, detail }: { cell: number; detail: boolean }) {
-  const title = fitSize('PARKING', cell - 8, Math.max(10, Math.round(cell * (detail ? 0.15 : 0.2))));
+function ParkingCar({ width, height }: { width: number; height: number }) {
   return (
-    <View style={styles.corner}>
-      {detail ? (
-        <Svg width={Math.round(cell * 0.52)} height={Math.round(cell * 0.24)} viewBox="0 0 64 30">
-          <Path d="M6 18c0-4 3-6 8-7l6-7h18l8 7h8c4 0 8 2 8 6v3H6v-2z" fill="#ed1b24" />
-          <Path d="M22 8h16l6 6H18z" fill="#b9d7ea" />
-          <Circle cx="18" cy="23" r="5" fill="#1a1408" />
-          <Circle cx="46" cy="23" r="5" fill="#1a1408" />
-          <Circle cx="18" cy="23" r="2" fill="#f4efe4" />
-          <Circle cx="46" cy="23" r="2" fill="#f4efe4" />
-        </Svg>
-      ) : null}
-      <Text style={[styles.cornerTitle, { fontSize: title, lineHeight: title + 1 }]}>FREE</Text>
-      <Text style={[styles.cornerTitle, { fontSize: title, lineHeight: title + 1 }]}>PARKING</Text>
+    <Svg width={width} height={height} viewBox="4 6 58 24">
+      <Path d="M6 18c0-4 3-6 8-7l6-7h18l8 7h8c4 0 8 2 8 6v3H6v-2z" fill="#ed1b24" />
+      <Path d="M22 8h16l6 6H18z" fill="#b9d7ea" />
+      <Circle cx="18" cy="23" r="5" fill="#1a1408" />
+      <Circle cx="46" cy="23" r="5" fill="#1a1408" />
+      <Circle cx="18" cy="23" r="2" fill="#f4efe4" />
+      <Circle cx="46" cy="23" r="2" fill="#f4efe4" />
+    </Svg>
+  );
+}
+
+function FreeParkingCorner({ cell, detail }: { cell: number; detail: boolean }) {
+  const pad = Math.round(cell * 0.04);
+  const width = cell - pad * 2;
+  const title = displaySize('PARKING', width, Math.round(cell * (detail ? 0.22 : 0.28)));
+  const carH = Math.round(cell * (detail ? 0.42 : 0.48));
+  return (
+    <View style={[styles.corner, { padding: pad }]}>
+      <ParkingCar width={width} height={carH} />
+      <Text style={[styles.cornerTitle, { fontSize: title, lineHeight: title }]} numberOfLines={1}>
+        FREE
+      </Text>
+      <Text style={[styles.cornerTitle, { fontSize: title, lineHeight: title }]} numberOfLines={1}>
+        PARKING
+      </Text>
     </View>
   );
 }
 
 function GoToJailCorner({ cell, detail }: { cell: number; detail: boolean }) {
-  const kicker = Math.max(8, Math.round(cell * 0.12));
-  const title = Math.max(12, Math.round(cell * (detail ? 0.18 : 0.26)));
-  const fine = Math.max(6, Math.round(cell * 0.08));
+  const pad = Math.round(cell * 0.04);
+  const width = cell - pad * 2;
+  const kicker = fitSize('GO TO', width, Math.round(cell * 0.13));
+  const title = displaySize('JAIL', width, Math.round(cell * (detail ? 0.28 : 0.4)));
+  const fine = fitSize('Do not collect $200', width, Math.round(cell * 0.09));
+  const icon = Math.round(cell * (detail ? 0.32 : 0.4));
   return (
-    <View style={styles.corner}>
+    <View style={[styles.corner, { padding: pad }]}>
       {detail ? (
-        <Text style={[styles.cornerFine, { fontSize: kicker, lineHeight: kicker + 1 }]}>GO TO</Text>
+        <Text style={[styles.cornerFine, { fontSize: kicker, lineHeight: kicker }]} numberOfLines={1}>
+          GO TO
+        </Text>
       ) : null}
-      <Text style={[styles.cornerGo, { fontSize: title, lineHeight: title }]}>JAIL</Text>
-      <Svg width={Math.round(cell * 0.32)} height={Math.round(cell * 0.26)} viewBox="0 0 40 36">
+      <Text style={[styles.cornerGo, { fontSize: title, lineHeight: title }]} numberOfLines={1}>
+        JAIL
+      </Text>
+      <Svg width={icon} height={Math.round(icon * 0.9)} viewBox="0 0 40 36">
         <Path d="M10 12h20l-2 4H12z" fill="#1d4e89" />
         <Rect x="6" y="15" width="28" height="3" rx="1" fill="#1d4e89" />
         <Circle cx="20" cy="22" r="4.5" fill="#f0c9a0" />
@@ -661,29 +746,16 @@ function GoToJailCorner({ cell, detail }: { cell: number; detail: boolean }) {
       </Svg>
       {detail ? (
         <>
-          <Text style={[styles.cornerFine, { fontSize: fine, lineHeight: fine + 1 }]}>Do not pass GO</Text>
-          <Text style={[styles.cornerFine, { fontSize: fine, lineHeight: fine + 1 }]}>Do not collect $200</Text>
+          <Text style={[styles.cornerFine, { fontSize: fine, lineHeight: fine + 1 }]} numberOfLines={1}>
+            Do not pass GO
+          </Text>
+          <Text style={[styles.cornerFine, { fontSize: fine, lineHeight: fine + 1 }]} numberOfLines={1}>
+            Do not collect $200
+          </Text>
         </>
       ) : null}
     </View>
   );
-}
-
-/** Advances for DM Sans at weight 800 and 17px. */
-const GLYPH_WIDTH: Record<string, number> = {
-  A: 12.04, B: 10.83, C: 12.56, D: 12.05, E: 9.89, F: 9.43, G: 13.21, H: 12.12, I: 4.61,
-  J: 9.18, K: 11.08, L: 9.49, M: 15.08, N: 12.38, O: 13.36, P: 10.42, Q: 13.36, R: 10.71,
-  S: 10.25, T: 10.15, U: 11.64, V: 11.98, W: 17.29, X: 11.37, Y: 10.78, Z: 9.77,
-  a: 9.94, b: 11.13, c: 10.3, d: 11.13, e: 10.23, f: 6.27, g: 10.13, h: 10.47, i: 4.64,
-  j: 4.66, k: 9.83, l: 4.52, m: 16, n: 10.47, o: 10.37, p: 11.13, q: 11.13, r: 6.92,
-  s: 9.03, t: 7.33, u: 10.47, v: 9.57, w: 13.89, x: 9.71, y: 10.27, z: 8.3,
-  '.': 4.27, '&': 13.26, ' ': 3.99,
-};
-
-function fitSize(text: string, maxWidth: number, start: number) {
-  let size = start;
-  while (size > 7 && textWidth(text, size) > maxWidth) size -= 1;
-  return size;
 }
 
 function inkOn(swatch: string) {
@@ -695,43 +767,37 @@ function inkOn(swatch: string) {
   return lum > 0.62 ? '#1a1408' : '#f7f1e6';
 }
 
-function textWidth(text: string, fontSize: number) {
-  const scale = fontSize / 17;
-  let width = 0;
-  for (const ch of text) width += (GLYPH_WIDTH[ch] ?? 10.2) * scale;
-  return width;
-}
-
-function wrapWords(name: string, maxWidth: number, fontSize: number) {
-  const words = name.split(/\s+/).filter(Boolean);
-  if (words.length <= 1) return [name];
-  if (textWidth(name, fontSize) <= maxWidth - 16) return [name];
-  const lines = packWords(words, maxWidth, fontSize);
-  if (lines.length === 1) return [words.slice(0, -1).join(' '), words[words.length - 1]];
-  return lines;
-}
-
-function packWords(words: string[], maxWidth: number, fontSize: number) {
-  const lines: string[] = [];
-  let current = '';
-  for (const word of words) {
-    const next = current ? `${current} ${word}` : word;
-    if (current && textWidth(next, fontSize) > maxWidth) {
-      lines.push(current);
-      current = word;
-    } else {
-      current = next;
-    }
-  }
-  if (current) lines.push(current);
-  return lines;
-}
-
 function trainExtent(cell: number, col: number, detail: boolean) {
   const long = detail ? Math.max(26, Math.round(cell * 0.46)) : Math.max(16, Math.round(cell * 0.36));
   const short = Math.round(long * 0.56);
   const sideways = col === 0 || col === 10;
-  return { long, short, sideways, height: sideways ? long : short };
+  return { long, short, sideways, height: short };
+}
+
+/** Side railroads are short along the edge, so the train lies across the space beside the name. */
+function railroadMark(
+  cell: number,
+  col: number,
+  detail: boolean,
+  pxW: number,
+  pxH: number,
+  lane: number,
+  nameReserve: number,
+) {
+  const extent = trainExtent(cell, col, detail);
+  if (extent.sideways) {
+    const nameCol = Math.max(44, Math.round(pxW * 0.28));
+    const maxW = Math.max(28, pxW - lane - nameCol - 8);
+    const maxH = Math.max(22, pxH - 8);
+    const scale = Math.min(1, maxW / extent.long, maxH / extent.short);
+    return {
+      width: Math.max(18, Math.round(extent.long * scale)),
+      height: Math.max(12, Math.round(extent.short * scale)),
+    };
+  }
+  const cap = Math.max(18, pxH - nameReserve);
+  const scale = Math.min(1, cap / extent.short);
+  return { width: Math.round(extent.long * scale), height: Math.round(extent.short * scale) };
 }
 
 function utilityExtent(cell: number, detail: boolean) {
@@ -741,21 +807,22 @@ function utilityExtent(cell: number, detail: boolean) {
 function labelBounds(
   row: number,
   col: number,
-  cell: number,
+  boxW: number,
+  boxH: number,
   bar: number,
-  railroad: boolean,
-  detail: boolean,
+  lane: number,
+  trainHeight: number,
   priceLine: number,
   utility = 0,
+  trainWidth = 0,
 ) {
-  const border = 2;
-  const lane = row === 0 || row === 10 ? tokenLane(cell) : sideLane(cell);
-  let width = cell - border;
-  let height = cell - border;
+  let width = boxW - 8;
+  let height = boxH - 4;
   const horizontal = row === 0 || row === 10;
   if (horizontal) height -= lane;
   else width -= lane;
-  if (railroad) height -= trainExtent(cell, col, detail).height;
+  if (trainWidth) width -= trainWidth;
+  else if (trainHeight) height -= trainHeight;
   else if (utility) height -= utility;
   else if (horizontal) height -= bar;
   else width -= bar;
@@ -763,50 +830,51 @@ function labelBounds(
   return { width: Math.max(8, width), height: Math.max(8, height) };
 }
 
-function fitPropertyLabel(
-  name: string,
-  bounds: { width: number; height: number },
-  startSize: number,
-) {
-  const minSize = 8;
-  let fontSize = startSize;
-  while (fontSize >= minSize) {
-    const lines = wrapWords(name, bounds.width, fontSize);
-    const lineHeight = Math.max(fontSize + 1, Math.round(fontSize * 1.1));
-    const fitsWidth = lines.every((line) => textWidth(line, fontSize) <= bounds.width);
-    const fitsHeight = lines.length * lineHeight <= bounds.height;
-    if (fitsWidth && fitsHeight) {
-      return { text: lines.join('\n'), fontSize, lineHeight, lines: lines.length };
-    }
-    fontSize -= 1;
-  }
-  const lines = wrapWords(name, bounds.width, minSize);
-  const lineHeight = Math.round(minSize * 1.1);
-  return { text: lines.join('\n'), fontSize: minSize, lineHeight, lines: lines.length };
-}
-
 function TrainMark({
   row,
   col,
   cell,
   detail,
+  maxHeight,
+  beside,
 }: {
   row: number;
   col: number;
   cell: number;
   detail: boolean;
+  maxHeight: number;
+  beside?: { width: number; height: number; span: number };
 }) {
-  const { long, short, sideways } = trainExtent(cell, col, detail);
-  const transform =
-    row === 10
-      ? [{ scaleX: -1 as const }]
-      : [{ rotate: col === 0 ? '-90deg' : row === 0 ? '0deg' : '90deg' }];
+  if (beside) {
+    return (
+      <View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          top: Math.max(1, (beside.span - beside.height) / 2),
+          ...(col === 0 ? { left: 2 } : { right: 2 }),
+          width: beside.width,
+          height: beside.height,
+          transform: col === 0 ? [{ scaleX: -1 as const }] : undefined,
+        }}
+      >
+        <TrainSvg width={beside.width} height={beside.height} />
+      </View>
+    );
+  }
+  let { long, short } = trainExtent(cell, col, detail);
+  if (maxHeight > 0 && short > maxHeight) {
+    const scale = maxHeight / short;
+    long = Math.round(long * scale);
+    short = Math.round(short * scale);
+  }
+  const transform = row === 10 ? [{ scaleX: -1 as const }] : undefined;
   return (
     <View
       pointerEvents="none"
       style={{
-        width: sideways ? short : long,
-        height: sideways ? long : short,
+        width: long,
+        height: short,
         alignItems: 'center',
         justifyContent: 'center',
       }}
@@ -970,9 +1038,9 @@ function railName(row: number, cell: number, caption: number, text: string) {
   };
 }
 
-function spacePadding(row: number, col: number, lane: number, bar: number, cell: number, caption = 0) {
+function spacePadding(row: number, col: number, lane: number, bar: number, cell: number, caption = 0, art = 0) {
   const inner = Math.max(0, cell - 4);
-  const edge = Math.min(bar + caption, inner);
+  const edge = Math.min(bar + caption + art, inner);
   const room = Math.min(lane, Math.max(0, inner - edge));
   if (row === 10) {
     return { paddingTop: room, paddingBottom: edge, paddingLeft: 2, paddingRight: 2, justifyContent: 'flex-end' as const };
@@ -1000,50 +1068,50 @@ function spacePadding(row: number, col: number, lane: number, bar: number, cell:
   };
 }
 
-function cornerFrame(row: number, col: number, cell: number, lane: number) {
-  const box = Math.max(36, cell - lane);
-  const base = { position: 'absolute' as const, width: box, height: box };
-  if (row === 10 && col === 10) return { ...base, right: 1, bottom: 1 };
-  if (row === 10 && col === 0) return { ...base, left: 1, bottom: 1 };
-  if (row === 0 && col === 0) return { ...base, left: 1, top: 1 };
-  return { ...base, right: 1, top: 1 };
-}
-
 function pieceSize(cell: number) {
   return Math.max(28, Math.round(cell * 0.34));
 }
 
-function pieceOffset(row: number, col: number, cell: number, piece: number, slot: number) {
-  const gap = Math.max(3, Math.round(cell * 0.03));
-  const hang = Math.round(piece * 0.28);
-  const shift = slot === 0 ? 0 : (slot % 2 === 0 ? -1 : 1) * Math.round(piece * 0.62 * Math.ceil(slot / 2));
+function fittedPiece(width: number, height: number) {
+  const room = Math.max(16, Math.min(width, height) - 4);
+  return Math.min(pieceSize(Math.max(width, height)), room);
+}
+
+function pieceOffset(row: number, col: number, width: number, height: number, piece: number, slot: number) {
+  const gap = Math.max(2, Math.round(Math.min(width, height) * 0.04));
+  const shift = slot === 0 ? 0 : (slot % 2 === 0 ? -1 : 1) * Math.round(piece * 0.55 * Math.ceil(slot / 2));
   const corner = (row === 0 || row === 10) && (col === 0 || col === 10);
-  let x = (cell - piece) / 2;
-  let y = (cell - piece) / 2;
+  let x = (width - piece) / 2;
+  let y = (height - piece) / 2;
   if (corner) {
-    x = col === 0 ? cell - piece - gap : gap;
-    y = row === 0 ? cell - piece - gap : gap;
+    if (row === 10 && col === 0) {
+      x = (width - piece) / 2 + shift;
+      y = height - piece - gap;
+    } else {
+      x = col === 0 ? width - piece - gap : gap;
+      y = row === 0 ? height - piece - gap : gap;
+    }
   } else if (row === 10) {
-    y = gap - hang;
+    y = gap;
     x += shift;
   } else if (row === 0) {
-    y = cell - piece - gap + hang;
+    y = height - piece - gap;
     x += shift;
   } else if (col === 0) {
-    x = cell - sideLane(cell);
-    y = (cell - piece) / 2 + shift;
+    x = width - piece - gap;
+    y += shift;
   } else {
-    x = sideLane(cell) - piece;
-    y = (cell - piece) / 2 + shift;
+    x = gap;
+    y += shift;
   }
-  const minX = !corner && col === 10 ? sideLane(cell) - piece : 1;
-  const maxX = !corner && col === 0 ? cell - sideLane(cell) : cell - piece - 1;
-  const minY = !corner && row === 10 ? gap - hang : 1;
-  const maxY = !corner && row === 0 ? cell - piece - gap + hang : cell - piece - 1;
   return {
-    x: Math.max(minX, Math.min(maxX, x)),
-    y: Math.max(minY, Math.min(maxY, y)),
+    x: clampInside(x, width, piece),
+    y: clampInside(y, height, piece),
   };
+}
+
+function clampInside(value: number, span: number, piece: number) {
+  return Math.min(Math.max(0, span - piece), Math.max(0, value));
 }
 
 function tokenCenter(
@@ -1054,12 +1122,14 @@ function tokenCenter(
   dx = 0,
   dy = 0,
 ) {
-  const cell = board.size / 11;
-  const piece = pieceSize(cell);
-  const offset = pieceOffset(row, col, cell, piece, slot);
+  const frame = cellBox(row, col);
+  const width = frame.w * board.size;
+  const height = frame.h * board.size;
+  const piece = fittedPiece(width, height);
+  const offset = pieceOffset(row, col, width, height, piece, slot);
   return {
-    x: board.x + col * cell + offset.x + piece / 2 + dx,
-    y: board.y + row * cell + offset.y + piece / 2 + dy,
+    x: board.x + frame.x * board.size + offset.x + piece / 2 + dx,
+    y: board.y + frame.y * board.size + offset.y + piece / 2 + dy,
   };
 }
 
@@ -1128,11 +1198,13 @@ function Piece({
     }),
   ).current;
 
-  const cell = size / 11;
-  const piece = pieceSize(cell);
-  const offset = pieceOffset(row, col, cell, piece, slot);
-  const left = col * cell + offset.x;
-  const top = row * cell + offset.y;
+  const frame = cellBox(row, col);
+  const width = frame.w * size;
+  const height = frame.h * size;
+  const piece = fittedPiece(width, height);
+  const offset = pieceOffset(row, col, width, height, piece, slot);
+  const left = frame.x * size + offset.x;
+  const top = frame.y * size + offset.y;
   const emoji = playerToken(token);
 
   return (
@@ -1168,18 +1240,24 @@ function Piece({
 const styles = StyleSheet.create({
   viewport: {
     width: '100%',
-    aspectRatio: 1,
     overflow: 'hidden',
-    borderRadius: radii.md,
-    backgroundColor: colors.woodDark,
-    borderWidth: VIEW_FRAME,
-    borderColor: colors.wood,
     position: 'relative',
+  },
+  viewportSquare: {
+    aspectRatio: 1,
   },
   zoomDock: {
     position: 'absolute',
     gap: 8,
     zIndex: 40,
+  },
+  diceLayer: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 25,
   },
   zoomBtn: {
     width: 44,
@@ -1214,17 +1292,12 @@ const styles = StyleSheet.create({
   board: {
     width: '100%',
     aspectRatio: 1,
-    backgroundColor: colors.woodDark,
-    borderRadius: radii.md,
-    borderWidth: 3,
-    borderColor: colors.wood,
+    backgroundColor: 'transparent',
     position: 'relative',
     overflow: 'hidden',
   },
   cell: {
     position: 'absolute',
-    width: `${100 / 11}%`,
-    height: `${100 / 11}%`,
     backgroundColor: '#f7f1e6',
     borderWidth: 1,
     borderColor: '#c4b49a',
@@ -1237,6 +1310,10 @@ const styles = StyleSheet.create({
     borderColor: colors.accent,
     borderWidth: 2,
     zIndex: 2,
+  },
+  nameBlock: {
+    width: '100%',
+    alignItems: 'center',
   },
   cellText: {
     fontFamily: fonts.body,
@@ -1251,13 +1328,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     width: '100%',
   },
+  cornerFill: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+  },
   corner: {
     width: '100%',
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 3,
-    paddingVertical: 2,
   },
   cornerGo: {
     fontFamily: fonts.display,
@@ -1305,10 +1387,6 @@ const styles = StyleSheet.create({
   },
   center: {
     position: 'absolute',
-    left: `${100 / 11}%`,
-    top: `${100 / 11}%`,
-    width: `${(100 * 9) / 11}%`,
-    height: `${(100 * 9) / 11}%`,
     backgroundColor: '#14352c',
     borderWidth: 2,
     borderColor: 'rgba(212, 168, 75, 0.55)',

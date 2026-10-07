@@ -1,13 +1,29 @@
-export const MIN_ZOOM = 1;
-export const MAX_ZOOM = 3.5;
+import { TRACK_DEPTH } from './monopolyBoard';
 
-const TRACK = 1 / 11;
+export const MIN_ZOOM = 0.5;
+export const MAX_ZOOM = 1;
+
+/** Page width, then two smaller boards. */
+const ZOOM_STOPS = [0.5, 0.75, 1];
+
+const TRACK = TRACK_DEPTH;
 
 export function clampZoom(zoom: number) {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
 }
 
+export function stepZoom(zoom: number, direction: -1 | 1) {
+  if (direction > 0) {
+    return ZOOM_STOPS.find((stop) => stop > zoom + 1e-6) ?? MAX_ZOOM;
+  }
+  return [...ZOOM_STOPS].reverse().find((stop) => stop < zoom - 1e-6) ?? MIN_ZOOM;
+}
+
 export function clampPan(pan: { x: number; y: number }, zoom: number, viewport: number) {
+  if (zoom < 1) {
+    const inset = (viewport * (1 - zoom)) / 2;
+    return { x: inset, y: 0 };
+  }
   const min = Math.min(0, viewport * (1 - zoom));
   return {
     x: Math.min(0, Math.max(min, pan.x)),

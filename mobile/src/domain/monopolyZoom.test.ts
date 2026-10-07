@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { panForWheel, panForZoom } from './monopolyZoom';
+import { panForWheel, panForZoom, stepZoom } from './monopolyZoom';
 
 const viewport = 100;
 const track = 10 / 11;
@@ -28,7 +28,7 @@ describe('monopoly zoom', () => {
   it('keeps the corner spaces on screen while zooming in from the phone view', () => {
     let zoom = 2;
     let pan = { x: -viewport, y: -viewport };
-    for (const next of [2.5, 3, 3.5]) {
+    for (const next of [3]) {
       pan = panForZoom(pan, zoom, next, viewport);
       zoom = next;
       const view = visible(pan, zoom);
@@ -38,9 +38,9 @@ describe('monopoly zoom', () => {
   });
 
   it('zooms back out to the same corner', () => {
-    let zoom = 3.5;
+    let zoom = 3;
     let pan = { x: viewport * (1 - zoom), y: viewport * (1 - zoom) };
-    for (const next of [3, 2.5, 2, 1.5, 1]) {
+    for (const next of [2, 1]) {
       pan = panForZoom(pan, zoom, next, viewport);
       zoom = next;
     }
@@ -75,5 +75,14 @@ describe('monopoly zoom', () => {
     assert.deepEqual(panForWheel(start, { deltaX: 0, deltaY: 1, deltaMode: 1 }, 2, viewport), { x: -40, y: -80 });
     assert.equal(panForWheel(start, { deltaX: 0, deltaY: 30, deltaMode: 0, ctrlKey: true }, 2, viewport), null);
     assert.equal(panForWheel(start, { deltaX: 0, deltaY: 0, deltaMode: 0 }, 2, viewport), null);
+  });
+
+  it('starts at page width and zooms out twice', () => {
+    assert.equal(stepZoom(1, 1), 1);
+    assert.equal(stepZoom(1, -1), 0.75);
+    assert.equal(stepZoom(0.75, -1), 0.5);
+    assert.equal(stepZoom(0.5, -1), 0.5);
+    assert.equal(stepZoom(0.5, 1), 0.75);
+    assert.equal(stepZoom(0.75, 1), 1);
   });
 });

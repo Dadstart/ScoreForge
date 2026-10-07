@@ -89,11 +89,6 @@ export function HomeScreen({ navigation }: Props) {
         </View>
         <View style={styles.actions}>
           <Button label="Refresh" variant="ghost" onPress={() => void refresh()} />
-          <Button
-            label="Settings"
-            variant="ghost"
-            onPress={() => navigation.navigate('Settings')}
-          />
         </View>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}

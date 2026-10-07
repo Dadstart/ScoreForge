@@ -54,6 +54,7 @@ const INSTRUCTIONS: Record<string, GameInstructions> = {
     title: 'Monopoly',
     lines: [
       'Everyone starts with $1,500. Add a player from the game; they start with $1,500 and a free token. Edit a player to pick a Monopoly piece, or any emoji from your keyboard.',
+      'Select who is moving, then roll. The dice tumble across the board and that player advances. Doubles means roll again. Passing GO collects $200.',
       'Choose who is paying and who is receiving, then enter the amount.',
       'Open a property to look up the rent for its houses, hotel, railroads, or utilities.',
       'You change your own cash. The richest player wins.',

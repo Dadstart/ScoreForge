@@ -1,8 +1,9 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useHeaderHeight } from '@react-navigation/elements';
 import {
   ActivityIndicator,
   Image,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -30,6 +31,43 @@ export function usePageScroll(enabled: boolean) {
   }, [enabled, setEnabled]);
 }
 
+/** The window scrolls the page. The fixed app frame would swallow the wheel. */
+function releaseDocumentScroll(host: HTMLElement | null) {
+  if (typeof document === 'undefined') return;
+  const styleId = 'scoreforge-page-scroll';
+  if (!document.getElementById(styleId)) {
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `
+      html, body, #root { height: auto !important; min-height: 100%; }
+      body { overflow-y: auto !important; }
+    `;
+    document.head.appendChild(style);
+  }
+  let node = host?.parentElement ?? null;
+  while (node && node !== document.body) {
+    const computed = getComputedStyle(node);
+    const fills =
+      computed.position === 'absolute' &&
+      computed.top === '0px' &&
+      computed.bottom === '0px' &&
+      computed.left === '0px' &&
+      computed.right === '0px';
+    const traps = computed.overflowY === 'hidden' || computed.overflowY === 'auto' || computed.overflowY === 'scroll';
+    if (fills || traps) {
+      node.style.position = 'relative';
+      node.style.height = 'auto';
+      node.style.minHeight = '100%';
+      node.style.overflow = 'visible';
+      node.style.top = 'auto';
+      node.style.right = 'auto';
+      node.style.bottom = 'auto';
+      node.style.left = 'auto';
+    }
+    node = node.parentElement;
+  }
+}
+
 export function Screen({
   children,
   style,
@@ -40,33 +78,56 @@ export function Screen({
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const window = useWindowDimensions();
+  const shellRef = useRef<View>(null);
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const topInset = headerHeight > 0 ? 0 : insets.top;
   const compact = window.height < 520;
+  const web = Platform.OS === 'web';
+  const setEnabled = useCallback((enabled: boolean) => {
+    setScrollEnabled(enabled);
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      document.body.style.setProperty('overflow-y', enabled ? 'auto' : 'hidden', 'important');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!web) return;
+    releaseDocumentScroll(shellRef.current as unknown as HTMLElement | null);
+  }, [web]);
+
+  const page = (
+    <>
+      <View style={[styles.logoBar, compact && styles.logoBarCompact]}>
+        <View style={[styles.logoFrame, compact && styles.logoFrameCompact]}>
+          <Image
+            source={logo}
+            accessibilityLabel="ScoreForge"
+            resizeMode="contain"
+            style={styles.logo}
+          />
+        </View>
+      </View>
+      {children}
+    </>
+  );
 
   return (
-    <PageScrollContext.Provider value={setScrollEnabled}>
-      <View style={[styles.screen, style]}>
+    <PageScrollContext.Provider value={setEnabled}>
+      <View ref={shellRef} style={[styles.screen, web && styles.screenWeb, style]}>
         <View pointerEvents="none" style={styles.glowTop} />
         <View pointerEvents="none" style={styles.glowCorner} />
-        <ScrollView
-          style={styles.screenScroll}
-          contentContainerStyle={[styles.page, { paddingTop: topInset }]}
-          keyboardShouldPersistTaps="handled"
-          scrollEnabled={scrollEnabled}
-        >
-          <View style={[styles.logoBar, compact && styles.logoBarCompact]}>
-            <View style={[styles.logoFrame, compact && styles.logoFrameCompact]}>
-              <Image
-                source={logo}
-                accessibilityLabel="ScoreForge"
-                resizeMode="contain"
-                style={styles.logo}
-              />
-            </View>
-          </View>
-          {children}
-        </ScrollView>
+        {web ? (
+          <View style={[styles.page, { paddingTop: topInset }]}>{page}</View>
+        ) : (
+          <ScrollView
+            style={styles.screenScroll}
+            contentContainerStyle={[styles.page, { paddingTop: topInset }]}
+            keyboardShouldPersistTaps="handled"
+            scrollEnabled={scrollEnabled}
+          >
+            {page}
+          </ScrollView>
+        )}
       </View>
     </PageScrollContext.Provider>
   );
@@ -193,6 +254,13 @@ const styles = StyleSheet.create({
     minHeight: 0,
     backgroundColor: colors.bg,
     overflow: 'hidden',
+  },
+  screenWeb: {
+    overflow: 'visible',
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: 'auto',
+    minHeight: '100%',
   },
   screenScroll: {
     flex: 1,
