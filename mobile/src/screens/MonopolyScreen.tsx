@@ -434,87 +434,6 @@ export function MonopolyScreen({ navigation, route }: Props) {
           <HomeButton onPress={() => navigation.navigate('Home')} />
         </View>
 
-        <View style={styles.banner}>
-          <Text style={styles.bannerText}>{banner}</Text>
-        </View>
-
-        <View style={styles.row}>
-          <Button
-            label="Undo"
-            onPress={() => {
-              setMoneyFlight(null);
-              void applyGame(
-                (g) => {
-                  if (g.monopoly?.undo) {
-                    const restored = undoMonopoly(g.monopoly, g.events);
-                    if (restored) {
-                      g.monopoly = restored.play;
-                      g.tokenSpaces = restored.tokens;
-                      g.events = restored.events;
-                      return g;
-                    }
-                  }
-                  g.events = withoutLastCashAction(g.events);
-                  return g;
-                },
-                { suppressWin: true },
-              );
-            }}
-            disabled={!play.undo && game.events.length === 0}
-          />
-          <Button
-            label={rollingDice ? 'Rolling…' : inJail ? 'Roll for doubles' : `Roll for ${turnPlayer?.name ?? 'player'}`}
-            variant="primary"
-            disabled={!canBank || rollingDice || play.pending != null || !turnPlayer}
-            onPress={rollForPlayer}
-          />
-          {play.pending && pendingProperty ? (
-            <>
-              <Button
-                label={`Buy ${formatMoney(pendingProperty.price)}`}
-                variant="primary"
-                disabled={!canBank || turnCash < pendingProperty.price}
-                onPress={() => void commitPlay(buyProperty(play, game.tokenSpaces ?? {}, game.players, turnCash))}
-              />
-              <Button
-                label="No thanks"
-                disabled={!canBank}
-                onPress={() => void commitPlay(declineProperty(play, game.tokenSpaces ?? {}, game.players))}
-              />
-            </>
-          ) : null}
-          {inJail && !play.pending ? (
-            <>
-              <Button
-                label="Pay $50"
-                disabled={!canBank || turnCash < 50}
-                onPress={() => void commitPlay(payToLeaveJail(play, game.tokenSpaces ?? {}, game.players, turnCash))}
-              />
-              {jailCards > 0 ? (
-                <Button
-                  label="Use Get Out of Jail Free"
-                  disabled={!canBank}
-                  onPress={() => void commitPlay(useJailCard(play, game.tokenSpaces ?? {}, game.players))}
-                />
-              ) : null}
-            </>
-          ) : null}
-          {game.players.length < template.maxPlayers ? (
-            <Button label="Add player" onPress={() => setAddingPlayer(true)} />
-          ) : null}
-          {!complete ? (
-            <Button
-              label="Mark complete"
-              onPress={() =>
-                void applyGame((g) => {
-                  g.status = 'Completed';
-                  return g;
-                })
-              }
-            />
-          ) : null}
-        </View>
-
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <View style={{ gap: 8 }}>
@@ -523,22 +442,100 @@ export function MonopolyScreen({ navigation, route }: Props) {
             tokenSpaces={game.tokenSpaces}
             tokenRoute={tokenRoute}
             moneyFlight={moneyFlight}
-            enabled={canBank}
             onDragging={setBoardDragging}
-            onLand={(playerId, space) => {
-              const before = { ...(game.tokenSpaces ?? {}) };
-              void applyGame(
-                (g) => {
-                  g.tokenSpaces = { ...(g.tokenSpaces ?? {}), [playerId]: space.index };
-                  if (g.monopoly) g.monopoly = undoForCash(g.monopoly, before, 0);
-                  return g;
-                },
-                { suppressWin: true },
-              );
-            }}
+            felt={
+              <View style={styles.felt} pointerEvents="box-none">
+                <View style={styles.feltStatus}>
+                  <Text style={styles.bannerText}>{banner}</Text>
+                  {landNote ? <Text style={styles.feltNote}>{landNote}</Text> : null}
+                </View>
+                <View style={styles.feltActions}>
+                  <Button
+                    label="Undo"
+                    style={styles.feltBtn}
+                    onPress={() => {
+                      setMoneyFlight(null);
+                      void applyGame(
+                        (g) => {
+                          if (g.monopoly?.undo) {
+                            const restored = undoMonopoly(g.monopoly, g.events);
+                            if (restored) {
+                              g.monopoly = restored.play;
+                              g.tokenSpaces = restored.tokens;
+                              g.events = restored.events;
+                              return g;
+                            }
+                          }
+                          g.events = withoutLastCashAction(g.events);
+                          return g;
+                        },
+                        { suppressWin: true },
+                      );
+                    }}
+                    disabled={!play.undo && game.events.length === 0}
+                  />
+                  <Button
+                    label={rollingDice ? 'Rolling…' : inJail ? 'Roll for doubles' : `Roll for ${turnPlayer?.name ?? 'player'}`}
+                    variant="primary"
+                    style={styles.feltBtn}
+                    disabled={!canBank || rollingDice || play.pending != null || !turnPlayer}
+                    onPress={rollForPlayer}
+                  />
+                  {play.pending && pendingProperty ? (
+                    <>
+                      <Button
+                        label={`Buy ${formatMoney(pendingProperty.price)}`}
+                        variant="primary"
+                        style={styles.feltBtn}
+                        disabled={!canBank || turnCash < pendingProperty.price}
+                        onPress={() => void commitPlay(buyProperty(play, game.tokenSpaces ?? {}, game.players, turnCash))}
+                      />
+                      <Button
+                        label="No thanks"
+                        style={styles.feltBtn}
+                        disabled={!canBank}
+                        onPress={() => void commitPlay(declineProperty(play, game.tokenSpaces ?? {}, game.players))}
+                      />
+                    </>
+                  ) : null}
+                  {inJail && !play.pending ? (
+                    <>
+                      <Button
+                        label="Pay $50"
+                        style={styles.feltBtn}
+                        disabled={!canBank || turnCash < 50}
+                        onPress={() => void commitPlay(payToLeaveJail(play, game.tokenSpaces ?? {}, game.players, turnCash))}
+                      />
+                      {jailCards > 0 ? (
+                        <Button
+                          label="Use Get Out of Jail Free"
+                          style={styles.feltBtn}
+                          disabled={!canBank}
+                          onPress={() => void commitPlay(useJailCard(play, game.tokenSpaces ?? {}, game.players))}
+                        />
+                      ) : null}
+                    </>
+                  ) : null}
+                  {game.players.length < template.maxPlayers ? (
+                    <Button label="Add player" style={styles.feltBtn} onPress={() => setAddingPlayer(true)} />
+                  ) : null}
+                  {!complete ? (
+                    <Button
+                      label="Mark complete"
+                      style={styles.feltBtn}
+                      onPress={() =>
+                        void applyGame((g) => {
+                          g.status = 'Completed';
+                          return g;
+                        })
+                      }
+                    />
+                  ) : null}
+                </View>
+              </View>
+            }
             diceRoll={diceRoll}
           />
-          {landNote ? <Text style={styles.bannerText}>{landNote}</Text> : null}
         </View>
 
         <View style={styles.wrap}>
@@ -865,12 +862,37 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: space.lg, gap: 12 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  banner: {
-    backgroundColor: colors.accentSoft,
-    borderWidth: 1,
-    borderColor: 'rgba(212, 168, 75, 0.35)',
+  felt: {
+    flex: 1,
+    height: '100%',
+    justifyContent: 'space-between',
     padding: 14,
+  },
+  feltStatus: {
+    marginRight: 56,
+    gap: 4,
+    backgroundColor: 'rgba(10, 22, 18, 0.55)',
+    borderWidth: 1,
+    borderColor: 'rgba(212, 168, 75, 0.4)',
     borderRadius: radii.md,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  feltNote: {
+    ...typography.label,
+    fontSize: 13,
+    color: colors.textDim,
+  },
+  feltActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'center',
+  },
+  feltBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    minHeight: 40,
   },
   bannerText: {
     ...typography.label,

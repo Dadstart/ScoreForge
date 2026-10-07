@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Animated,
   Easing,
@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import type { Player } from '../domain/models';
-import { boardSpaces, cellToSpace, fractionToIndex, spaceToCell, tokenSpace, tokenSpacesBetween, TRACK_DEPTH, cellBox, type BoardSpace } from '../domain/monopolyBoard';
+import { boardSpaces, spaceToCell, tokenSpace, tokenSpacesBetween, TRACK_DEPTH, cellBox } from '../domain/monopolyBoard';
 import { getProperty, playerToken } from '../domain/monopoly';
 import { fitBoardLabel, fitSize } from '../domain/monopolyLabel';
 import { clampPan, clampZoom, panForZoom, stepZoom } from '../domain/monopolyZoom';
@@ -34,13 +34,11 @@ type Props = {
   tokenSpaces?: Record<string, number>;
   tokenRoute?: TokenRouteView | null;
   moneyFlight?: MoneyFlight | null;
-  enabled: boolean;
-  onLand: (playerId: string, space: BoardSpace) => void;
   onDragging: (dragging: boolean) => void;
   diceRoll?: DiceRollView | null;
+  /** Turn status and actions, drawn on the green center. */
+  felt?: ReactNode;
 };
-
-type Origin = { x: number; y: number; size: number };
 
 const VIEW_FRAME = 0;
 
@@ -77,7 +75,19 @@ function zoomDockSpot(pan: { x: number; y: number }, zoom: number, viewport: num
   return { top, right };
 }
 
-function PhoneBoard({ onDragging, diceRoll, startZoom = 1, ...props }: Props & { startZoom?: number }) {
+function feltBox(pan: { x: number; y: number }, zoom: number, viewport: number) {
+  const board = viewport * zoom;
+  const inset = TRACK_DEPTH * board;
+  const size = Math.max(0, board - inset * 2);
+  return {
+    left: pan.x + inset,
+    top: pan.y + inset,
+    width: size,
+    height: size,
+  };
+}
+
+function PhoneBoard({ onDragging, diceRoll, felt, startZoom = 1, ...props }: Props & { startZoom?: number }) {
   const viewportRef = useRef<View>(null);
   const [viewport, setViewport] = useState(0);
   const [zoom, setZoom] = useState(startZoom);
@@ -85,7 +95,6 @@ function PhoneBoard({ onDragging, diceRoll, startZoom = 1, ...props }: Props & {
   const zoomRef = useRef(zoom);
   const panRef = useRef(pan);
   const viewportRefSize = useRef(0);
-  const movingPiece = useRef(false);
   const onDraggingRef = useRef(onDragging);
   zoomRef.current = zoom;
   panRef.current = pan;
@@ -102,9 +111,8 @@ function PhoneBoard({ onDragging, diceRoll, startZoom = 1, ...props }: Props & {
 
   const responder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => !movingPiece.current,
+      onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: (evt, g) => {
-        if (movingPiece.current) return false;
         return (evt.nativeEvent.touches?.length ?? 0) >= 2 || Math.abs(g.dx) > 6 || Math.abs(g.dy) > 6;
       },
       onPanResponderTerminationRequest: () => false,
@@ -146,11 +154,11 @@ function PhoneBoard({ onDragging, diceRoll, startZoom = 1, ...props }: Props & {
       },
       onPanResponderRelease: () => {
         gesture.current.pinch = null;
-        if (!movingPiece.current) onDraggingRef.current(false);
+        onDraggingRef.current(false);
       },
       onPanResponderTerminate: () => {
         gesture.current.pinch = null;
-        if (!movingPiece.current) onDraggingRef.current(false);
+        onDraggingRef.current(false);
       },
     }),
   ).current;
@@ -223,28 +231,24 @@ function PhoneBoard({ onDragging, diceRoll, startZoom = 1, ...props }: Props & {
           }
         }}
         onTouchStart={() => onDraggingRef.current(true)}
-        onTouchEnd={() => {
-          if (!movingPiece.current) onDraggingRef.current(false);
-        }}
-        onTouchCancel={() => {
-          if (!movingPiece.current) onDraggingRef.current(false);
-        }}
+        onTouchEnd={() => onDraggingRef.current(false)}
+        onTouchCancel={() => onDraggingRef.current(false)}
       >
         {viewport > 0 ? (
           <BoardCanvas
             {...props}
-            onDragging={(dragging) => {
-              movingPiece.current = dragging;
-              onDraggingRef.current(dragging);
-            }}
             panHandlers={responder.panHandlers}
-            showCenter={startZoom === 1}
             style={{ position: 'absolute', width: boardSize, height: boardSize, left: pan.x, top: pan.y }}
           />
         ) : null}
         {diceRoll ? (
           <View pointerEvents="none" style={styles.diceLayer}>
             <MonopolyDice roll={diceRoll} />
+          </View>
+        ) : null}
+        {viewport > 0 && felt ? (
+          <View pointerEvents="box-none" style={[styles.feltDock, feltBox(pan, zoom, viewport)]}>
+            {felt}
           </View>
         ) : null}
         <View
@@ -281,28 +285,19 @@ function BoardCanvas({
   tokenSpaces,
   tokenRoute = null,
   moneyFlight = null,
-  enabled,
-  onLand,
-  onDragging,
   style,
   panHandlers,
-  showCenter = true,
   diceRoll = null,
   pinDice = false,
-}: Props & {
+}: Omit<Props, 'onDragging'> & {
   style?: StyleProp<ViewStyle>;
   panHandlers?: ReturnType<typeof PanResponder.create>['panHandlers'];
-  showCenter?: boolean;
   pinDice?: boolean;
 }) {
-  const boardRef = useRef<View>(null);
-  const origin = useRef<Origin>({ x: 0, y: 0, size: 0 });
-  const snapIds = useRef(new Set<string>());
   const flightRef = useRef(moneyFlight);
   flightRef.current = moneyFlight;
   const [burst, setBurst] = useState<{ id: number; space: number } | null>(null);
   const [size, setSize] = useState(0);
-  const [hover, setHover] = useState<number | null>(null);
 
   useEffect(() => {
     if (!moneyFlight) {
@@ -319,29 +314,15 @@ function BoardCanvas({
     setBurst({ id: flight.id, space: flight.space });
   };
 
-  const rememberOrigin = () => {
-    boardRef.current?.measureInWindow((x, y, width) => {
-      origin.current = { x, y, size: width };
-      setSize(width);
-    });
-  };
-
-  const spaceAt = (pageX: number, pageY: number): number | null => {
-    const { x, y, size: boardSize } = origin.current;
-    if (boardSize <= 0) return null;
-    const fx = (pageX - x) / boardSize;
-    const fy = (pageY - y) / boardSize;
-    if (fx < 0 || fy < 0 || fx > 1 || fy > 1) return null;
-    return cellToSpace(fractionToIndex(fy), fractionToIndex(fx));
-  };
-
   const cell = size > 0 ? size * TRACK_DEPTH : 48;
   const detail = cell >= CLOSE_CELL;
 
   return (
     <View
-      ref={boardRef}
-      onLayout={rememberOrigin}
+      onLayout={(event) => {
+        const width = event.nativeEvent.layout.width;
+        setSize((current) => (current === width ? current : width));
+      }}
       style={[styles.board, style]}
       accessibilityLabel="Monopoly board"
       {...panHandlers}
@@ -407,7 +388,6 @@ function BoardCanvas({
                 width: `${frame.w * 100}%`,
                 height: `${frame.h * 100}%`,
               },
-              hover === space.index && styles.cellHover,
             ]}
           >
             {isCorner ? (
@@ -571,12 +551,10 @@ function BoardCanvas({
           MONOPOLY
         </Text>
         <View style={styles.centerRule} />
-        {showCenter && detail ? <Text style={styles.centerHint}>Drag a piece onto a space</Text> : null}
       </View>
       {size > 0
         ? players.map((player, index) => {
             const spaceIndex = tokenSpace(tokenSpaces, player.id);
-            const { row, col } = spaceToCell(spaceIndex);
             const sharing = players.filter(
               (other) => tokenSpace(tokenSpaces, other.id) === spaceIndex,
             );
@@ -597,37 +575,9 @@ function BoardCanvas({
                 spaceIndex={spaceIndex}
                 slot={slot}
                 size={size}
-                enabled={enabled}
                 routeId={route?.id ?? 0}
                 routeSpaces={route?.spaces ?? null}
-                snapIds={snapIds.current}
                 onSettled={onTokenSettled}
-                onDragStart={() => {
-                  rememberOrigin();
-                  onDragging(true);
-                }}
-                onDragMove={(dx, dy) => {
-                  const center = tokenCenter(origin.current, row, col, slot, dx, dy);
-                  setHover(spaceAt(center.x, center.y));
-                }}
-                onDragEnd={(dx, dy) => {
-                  onDragging(false);
-                  setHover(null);
-                  boardRef.current?.measureInWindow((x, y, width) => {
-                    origin.current = { x, y, size: width };
-                    const center = tokenCenter(origin.current, row, col, slot, dx, dy);
-                    const landed = spaceAt(center.x, center.y);
-                    const space = landed == null ? undefined : boardSpaces[landed];
-                    if (space) {
-                      if (space.index !== spaceIndex) snapIds.current.add(player.id);
-                      onLand(player.id, space);
-                    }
-                  });
-                }}
-                onDragCancel={() => {
-                  onDragging(false);
-                  setHover(null);
-                }}
               />
             );
           })
@@ -1156,25 +1106,6 @@ function clampInside(value: number, span: number, piece: number) {
   return Math.min(Math.max(0, span - piece), Math.max(0, value));
 }
 
-function tokenCenter(
-  board: Origin,
-  row: number,
-  col: number,
-  slot: number,
-  dx = 0,
-  dy = 0,
-) {
-  const frame = cellBox(row, col);
-  const width = frame.w * board.size;
-  const height = frame.h * board.size;
-  const piece = fittedPiece(width, height);
-  const offset = pieceOffset(row, col, width, height, piece, slot);
-  return {
-    x: board.x + frame.x * board.size + offset.x + piece / 2 + dx,
-    y: board.y + frame.y * board.size + offset.y + piece / 2 + dy,
-  };
-}
-
 function piecePlace(index: number, size: number, slot: number) {
   const { row, col } = spaceToCell(index);
   const frame = cellBox(row, col);
@@ -1219,15 +1150,9 @@ function Piece({
   spaceIndex,
   slot,
   size,
-  enabled,
   routeId,
   routeSpaces,
-  snapIds,
   onSettled,
-  onDragStart,
-  onDragMove,
-  onDragEnd,
-  onDragCancel,
 }: {
   playerId: string;
   name: string;
@@ -1236,17 +1161,10 @@ function Piece({
   spaceIndex: number;
   slot: number;
   size: number;
-  enabled: boolean;
   routeId: number;
   routeSpaces: number[] | null;
-  snapIds: Set<string>;
   onSettled: (playerId: string) => void;
-  onDragStart: () => void;
-  onDragMove: (dx: number, dy: number) => void;
-  onDragEnd: (dx: number, dy: number) => void;
-  onDragCancel: () => void;
 }) {
-  const [drag, setDrag] = useState<{ dx: number; dy: number } | null>(null);
   const [flying, setFlying] = useState(false);
   const resting = piecePlace(spaceIndex, size, slot);
   const left = useRef(new Animated.Value(resting.left)).current;
@@ -1261,46 +1179,10 @@ function Piece({
   const slotRef = useRef(slot);
   sizeRef.current = size;
   slotRef.current = slot;
-  const enabledRef = useRef(enabled);
-  enabledRef.current = enabled;
-  const startRef = useRef(onDragStart);
-  const moveRef = useRef(onDragMove);
-  const endRef = useRef(onDragEnd);
-  const cancelRef = useRef(onDragCancel);
   const routeRef = useRef(routeSpaces);
   routeRef.current = routeSpaces;
   const settledNotice = useRef(onSettled);
   settledNotice.current = onSettled;
-  startRef.current = onDragStart;
-  moveRef.current = onDragMove;
-  endRef.current = onDragEnd;
-  cancelRef.current = onDragCancel;
-
-  const responder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => enabledRef.current && !flyingRef.current,
-      onStartShouldSetPanResponderCapture: () => enabledRef.current && !flyingRef.current,
-      onMoveShouldSetPanResponder: () => enabledRef.current && !flyingRef.current,
-      onMoveShouldSetPanResponderCapture: () => enabledRef.current && !flyingRef.current,
-      onPanResponderTerminationRequest: () => false,
-      onPanResponderGrant: () => {
-        startRef.current();
-        setDrag({ dx: 0, dy: 0 });
-      },
-      onPanResponderMove: (_, gesture) => {
-        setDrag({ dx: gesture.dx, dy: gesture.dy });
-        moveRef.current(gesture.dx, gesture.dy);
-      },
-      onPanResponderRelease: (_, gesture) => {
-        setDrag(null);
-        endRef.current(gesture.dx, gesture.dy);
-      },
-      onPanResponderTerminate: () => {
-        setDrag(null);
-        cancelRef.current();
-      },
-    }),
-  ).current;
 
   useEffect(() => {
     if (flyingRef.current || settled.current !== spaceIndex) return;
@@ -1312,15 +1194,8 @@ function Piece({
   useEffect(() => {
     if (spaceIndex === settled.current) return;
     const from = settled.current;
-    const snap = snapIds.has(playerId);
-    if (snap) snapIds.delete(playerId);
-    const recorded =
-      routeRef.current != null &&
-      routeRef.current.length > 1 &&
-      routeRef.current[0] === from &&
-      routeRef.current[routeRef.current.length - 1] === spaceIndex;
     const placeAt = (index: number, atSlot: number) => piecePlace(index, sizeRef.current, atSlot);
-    if ((snap && !recorded) || diceMotionMs() === 0) {
+    if (diceMotionMs() === 0) {
       settled.current = spaceIndex;
       lastPath.current = null;
       flyingRef.current = false;
@@ -1328,7 +1203,7 @@ function Piece({
       const place = placeAt(spaceIndex, slotRef.current);
       left.setValue(place.left);
       top.setValue(place.top);
-      if (diceMotionMs() === 0 && !(snap && !recorded)) settledNotice.current(playerId);
+      settledNotice.current(playerId);
       return;
     }
     const spaces = travelSpaces(from, spaceIndex, routeRef.current, lastPath.current);
@@ -1397,15 +1272,14 @@ function Piece({
         bulge.setValue(1);
       }
     };
-  }, [bulge, left, liftX, liftY, playerId, routeId, snapIds, spaceIndex, top]);
+  }, [bulge, left, liftX, liftY, playerId, routeId, spaceIndex, top]);
 
   const emoji = playerToken(token);
   const piece = resting.piece;
 
   return (
     <Animated.View
-      {...responder.panHandlers}
-      accessibilityRole="button"
+      pointerEvents="none"
       accessibilityLabel={emoji ? `${name} ${emoji.emoji} piece` : `${name} piece`}
       style={[
         styles.token,
@@ -1414,10 +1288,8 @@ function Piece({
           top,
           width: piece,
           height: piece,
-          zIndex: drag || flying ? 30 : 10 + slot,
-          transform: drag
-            ? [{ translateX: drag.dx }, { translateY: drag.dy }]
-            : [{ translateX: liftX }, { translateY: liftY }, { scale: bulge }],
+          zIndex: flying ? 30 : 10 + slot,
+          transform: [{ translateX: liftX }, { translateY: liftY }, { scale: bulge }],
         },
       ]}
     >
@@ -1455,6 +1327,10 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     zIndex: 25,
+  },
+  feltDock: {
+    position: 'absolute',
+    zIndex: 32,
   },
   zoomBtn: {
     width: 44,
@@ -1502,11 +1378,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 1,
     overflow: 'hidden',
-  },
-  cellHover: {
-    borderColor: colors.accent,
-    borderWidth: 2,
-    zIndex: 2,
   },
   nameBlock: {
     width: '100%',
@@ -1603,12 +1474,6 @@ const styles = StyleSheet.create({
     color: colors.accent,
     fontSize: 22,
     fontWeight: '700',
-  },
-  centerHint: {
-    fontFamily: fonts.body,
-    color: '#d5e4dc',
-    fontSize: 12,
-    textAlign: 'center',
   },
   token: {
     position: 'absolute',
