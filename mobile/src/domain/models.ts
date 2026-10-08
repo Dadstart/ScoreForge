@@ -60,7 +60,10 @@ export interface Game {
   tripeaks?: TriPeaksState | null;
   /** Yahtzee dice, holds, and whose turn it is. */
   yahtzee?: YahtzeeState | null;
-  /** Monopoly turn, ownership, deeds, and decks. */
+  /**
+   * Monopoly turn, ownership, deeds, and decks. Saved on every game because
+   * deployed rules require the key.
+   */
   monopoly?: MonopolyPlay | null;
   /**
    * Increments on every successful save. A write is stored only when it was
