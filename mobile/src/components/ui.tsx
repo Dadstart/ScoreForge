@@ -32,6 +32,23 @@ export function usePageScroll(enabled: boolean) {
   }, [enabled, setEnabled]);
 }
 
+/** Mouse-wheel and trackpad ticks move this many times farther than the browser default. */
+const PAGE_SCROLL_SPEED = 3;
+
+function nestedScroller(target: EventTarget | null): boolean {
+  let node = target instanceof Element ? target : null;
+  while (node && node !== document.body && node !== document.documentElement) {
+    if (node instanceof HTMLElement) {
+      const style = getComputedStyle(node);
+      const vertical = (style.overflowY === 'auto' || style.overflowY === 'scroll') && node.scrollHeight > node.clientHeight + 1;
+      const horizontal = (style.overflowX === 'auto' || style.overflowX === 'scroll') && node.scrollWidth > node.clientWidth + 1;
+      if (vertical || horizontal) return true;
+    }
+    node = node.parentElement;
+  }
+  return false;
+}
+
 /** The window scrolls the page. The fixed app frame would swallow the wheel. */
 function releaseDocumentScroll(host: HTMLElement | null) {
   if (typeof document === 'undefined') return;
@@ -96,6 +113,20 @@ export function Screen({
     if (!web) return;
     releaseDocumentScroll(shellRef.current as unknown as HTMLElement | null);
   }, [web]);
+
+  useEffect(() => {
+    const view = globalThis.window;
+    if (!web || !view) return;
+    const onWheel = (event: WheelEvent) => {
+      if (!scrollEnabled || event.ctrlKey || event.metaKey || event.defaultPrevented) return;
+      if (nestedScroller(event.target)) return;
+      event.preventDefault();
+      const unit = event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? view.innerHeight : 1;
+      view.scrollBy(event.deltaX * unit * PAGE_SCROLL_SPEED, event.deltaY * unit * PAGE_SCROLL_SPEED);
+    };
+    view.addEventListener('wheel', onWheel, { passive: false });
+    return () => view.removeEventListener('wheel', onWheel);
+  }, [scrollEnabled, web]);
 
   const page = (
     <>
