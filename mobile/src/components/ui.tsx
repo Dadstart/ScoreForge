@@ -35,15 +35,16 @@ export function usePageScroll(enabled: boolean) {
 function releaseDocumentScroll(host: HTMLElement | null) {
   if (typeof document === 'undefined') return;
   const styleId = 'scoreforge-page-scroll';
-  if (!document.getElementById(styleId)) {
-    const style = document.createElement('style');
+  let style = document.getElementById(styleId);
+  if (!style) {
+    style = document.createElement('style');
     style.id = styleId;
-    style.textContent = `
-      html, body, #root { height: auto !important; min-height: 100%; }
-      body { overflow-y: auto !important; }
-    `;
     document.head.appendChild(style);
   }
+  style.textContent = `
+    html, body, #root { background-color: ${colors.bg}; }
+    body { overflow-y: auto !important; min-height: 100vh; min-height: 100dvh; }
+  `;
   let node = host?.parentElement ?? null;
   while (node && node !== document.body) {
     const computed = getComputedStyle(node);
@@ -256,11 +257,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   screenWeb: {
-    overflow: 'visible',
     flexGrow: 0,
     flexShrink: 0,
     flexBasis: 'auto',
-    minHeight: '100%',
+    minHeight: '100vh',
   },
   screenScroll: {
     flex: 1,
