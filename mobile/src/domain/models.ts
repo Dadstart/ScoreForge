@@ -60,6 +60,11 @@ export interface Game {
   /** Yahtzee dice, holds, and whose turn it is. */
   yahtzee?: YahtzeeState | null;
   /**
+   * Legacy Monopoly board blob. Current play uses tokenSpaces; the field stays
+   * on every save because deployed rules require the key.
+   */
+  monopoly?: unknown | null;
+  /**
    * Increments on every successful save. A write is stored only when it was
    * based on this revision, so two devices cannot overwrite each other.
    */
