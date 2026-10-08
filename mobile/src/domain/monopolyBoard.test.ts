@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { cellBox, layoutSharedTokens, spaceToCell } from './monopolyBoard';
+import { cellBox, layoutSharedTokens, ownerMarkPlacement, spaceToCell } from './monopolyBoard';
 
 function boxesClear(a: { x: number; y: number; piece: number }, b: { x: number; y: number; piece: number }) {
   return (
@@ -54,4 +54,33 @@ describe('layoutSharedTokens', () => {
       });
     }
   }
+});
+
+describe('ownerMarkPlacement', () => {
+  const board = 720;
+
+  function place(index: number) {
+    const { row, col } = spaceToCell(index);
+    const cell = cellBox(row, col);
+    return { row, col, ...ownerMarkPlacement(row, col, cell.w * board, cell.h * board), width: cell.w * board, height: cell.h * board };
+  }
+
+  it('sits above the card with feet pointing out along that side', () => {
+    const bottom = place(1);
+    const top = place(21);
+    const left = place(11);
+    const right = place(39);
+    assert.equal(bottom.rotate, '0deg');
+    assert.equal(top.rotate, '180deg');
+    assert.equal(left.rotate, '-90deg');
+    assert.equal(right.rotate, '90deg');
+    assert.ok(bottom.y + bottom.size < 0);
+    assert.ok(top.y > top.height);
+    assert.ok(left.x > left.width);
+    assert.ok(right.x + right.size < 0);
+    for (const spot of [bottom, top, left, right]) {
+      const along = spot.row === 0 || spot.row === 10 ? spot.width : spot.height;
+      assert.ok(Math.abs(spot.size / along - 0.62) < 0.05);
+    }
+  });
 });

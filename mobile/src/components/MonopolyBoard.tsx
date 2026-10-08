@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import type { Player } from '../domain/models';
-import { boardSpaces, spaceToCell, tokenSpace, tokenSpacesBetween, TRACK_DEPTH, cellBox, layoutSharedTokens } from '../domain/monopolyBoard';
+import { boardSpaces, spaceToCell, tokenSpace, tokenSpacesBetween, TRACK_DEPTH, cellBox, layoutSharedTokens, ownerMarkPlacement } from '../domain/monopolyBoard';
 import { getProperty, playerToken } from '../domain/monopoly';
 import { fitBoardLabel, fitSize } from '../domain/monopolyLabel';
 import { clampPan, clampZoom, panForZoom, stepZoom } from '../domain/monopolyZoom';
@@ -33,6 +33,8 @@ export type TokenRouteView = { id: number; playerId: string; spaces: number[] };
 
 type Props = {
   players: Player[];
+  /** Property id to the player who owns it. */
+  owned?: Record<string, string>;
   tokenSpaces?: Record<string, number>;
   tokenRoute?: TokenRouteView | null;
   drawnCards?: DrawnCard[];
@@ -71,8 +73,10 @@ function zoomDockSpot(pan: { x: number; y: number }, zoom: number, viewport: num
   const feltBottom = Math.min(1 - edge, viewBottom);
   const stack = ZOOM_BTN * 2 + ZOOM_GAP;
   const onFelt = feltRight > feltLeft && feltBottom > feltTop;
-  let top = onFelt ? pan.y + feltTop * board + ZOOM_INSET : ZOOM_INSET;
-  let right = onFelt ? viewport - (pan.x + feltRight * board) + ZOOM_INSET : ZOOM_INSET;
+  const along = (board * (1 - 2 * TRACK_DEPTH)) / 9;
+  const ownerClear = Math.round(along * 0.62 + board * TRACK_DEPTH * 0.04) + 10;
+  let top = onFelt ? pan.y + feltTop * board + ownerClear : ZOOM_INSET;
+  let right = onFelt ? viewport - (pan.x + feltRight * board) + ownerClear : ZOOM_INSET;
   top = Math.min(Math.max(ZOOM_INSET, top), Math.max(ZOOM_INSET, viewport - stack - ZOOM_INSET));
   right = Math.min(Math.max(ZOOM_INSET, right), Math.max(ZOOM_INSET, viewport - ZOOM_BTN - ZOOM_INSET));
   return { top, right };
@@ -268,6 +272,7 @@ function PhoneBoard({ onDragging, diceRoll, startZoom = 1, ...props }: Props & {
 
 function BoardCanvas({
   players,
+  owned,
   tokenSpaces,
   tokenRoute = null,
   drawnCards = [],
@@ -563,6 +568,40 @@ function BoardCanvas({
         </Text>
         <View style={styles.centerRule} />
       </View>
+      {size > 0
+        ? boardSpaces.map((space) => {
+            const propertyId = space.propertyId;
+            const ownerId = propertyId ? owned?.[propertyId] : undefined;
+            const owner = ownerId ? players.find((player) => player.id === ownerId) : undefined;
+            if (!propertyId || !owner) return null;
+            const { row, col } = spaceToCell(space.index);
+            const frame = cellBox(row, col);
+            const spot = ownerMarkPlacement(row, col, frame.w * size, frame.h * size);
+            const piece = playerToken(owner.token);
+            const glyph = piece?.emoji ?? (owner.name.trim().charAt(0).toUpperCase() || '?');
+            return (
+              <View
+                key={`owner-${space.index}`}
+                pointerEvents="none"
+                accessibilityLabel={`${owner.name} owns ${space.name}`}
+                style={[
+                  styles.ownerMark,
+                  {
+                    left: frame.x * size + spot.x,
+                    top: frame.y * size + spot.y,
+                    width: spot.size,
+                    height: spot.size,
+                    transform: [{ rotate: spot.rotate }],
+                  },
+                ]}
+              >
+                <Text style={[styles.ownerEmoji, { fontSize: Math.round(spot.size * 0.82), lineHeight: Math.round(spot.size * 0.92) }]}>
+                  {glyph}
+                </Text>
+              </View>
+            );
+          })
+        : null}
       {size > 0
         ? players.map((player, index) => {
             const spaceIndex = tokenSpace(tokenSpaces, player.id);
@@ -1545,6 +1584,15 @@ const styles = StyleSheet.create({
     color: colors.accent,
     fontSize: 22,
     fontWeight: '700',
+  },
+  ownerMark: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 4,
+  },
+  ownerEmoji: {
+    textAlign: 'center',
   },
   token: {
     position: 'absolute',

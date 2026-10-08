@@ -531,6 +531,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
         </View>
         <MonopolyBoard
           players={game.players}
+          owned={play.owned}
           tokenSpaces={game.tokenSpaces}
           tokenRoute={tokenRoute}
           drawnCards={drawnCards}
