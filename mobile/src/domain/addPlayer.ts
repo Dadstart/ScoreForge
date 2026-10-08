@@ -2,7 +2,7 @@ import { ensureBackgammonState } from './backgammon';
 import { ensureCheckersState } from './checkers';
 import { ensureChineseState, playerCap } from './chineseCheckers';
 import { createPlayer, type Game, type Player } from './models';
-import { PLAYER_TOKENS, playerToken } from './monopoly';
+import { PLAYER_TOKENS, playerLabel, playerToken, singleEmoji } from './monopoly';
 import { withoutMonopolyPlayer } from './monopolyPlay';
 import { ensureSorryState } from './sorry';
 
@@ -33,6 +33,45 @@ export function withAddedPlayer(game: Game, rawName: string, maxPlayers: number)
       ),
     ),
   );
+}
+
+export type MonopolySeat = { name: string; token: string; emojiText: string };
+
+/** Players typed on the Monopoly setup screen, each with their own piece. */
+export function playersFromMonopolySeats(
+  seats: MonopolySeat[],
+  maxPlayers: number,
+): { players: Player[] } | { error: string } {
+  if (seats.length < 1) return { error: 'Add at least one player.' };
+  if (seats.length > maxPlayers) return { error: `Monopoly allows up to ${maxPlayers} players.` };
+  const names = seats.map((seat) => seat.name.trim());
+  if (names.some((name) => !name)) return { error: 'Enter a name for each player.' };
+  const folded = names.map((name) => name.toLowerCase());
+  if (new Set(folded).size !== folded.length) return { error: 'Each player needs a different name.' };
+
+  const players: Player[] = [];
+  const marks = new Set<string>();
+  for (let i = 0; i < seats.length; i += 1) {
+    const seat = seats[i];
+    const name = names[i];
+    const typed = seat.emojiText.trim();
+    const typedEmoji = typed ? singleEmoji(typed) : null;
+    if (typed && !typedEmoji) return { error: `Enter one emoji for ${name}.` };
+    const token = playerToken(typedEmoji ?? seat.token)?.id ?? null;
+    const mark = playerToken(token)?.emoji ?? null;
+    if (mark && marks.has(mark)) return { error: `${playerLabel(name, token)} needs a different piece.` };
+    if (mark) marks.add(mark);
+    players.push({ ...createPlayer(name), token });
+  }
+  return { players };
+}
+
+/** The next classic piece nobody at the table has taken. */
+export function nextMonopolyToken(used: Array<string | null | undefined>): string {
+  const taken = new Set(
+    used.map((token) => playerToken(token)?.emoji).filter((emoji): emoji is string => Boolean(emoji)),
+  );
+  return PLAYER_TOKENS.find((token) => !taken.has(token.emoji))?.id ?? PLAYER_TOKENS[0].id;
 }
 
 /** The player who starts a game. A Monopoly host takes the first piece. */
