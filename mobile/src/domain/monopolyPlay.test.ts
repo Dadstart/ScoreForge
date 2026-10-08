@@ -82,6 +82,32 @@ describe('monopoly play', () => {
     assert.equal(moneyFromSquare(landed.play, paid), 3);
   });
 
+  it('gives another roll after doubles and jails the third doubles', () => {
+    const owned = table({ owned: { baltic: 'ada' } });
+    const again = resolveRoll(owned, { ada: 1 }, players, roll(1, 1));
+    assert.equal(again.tokens.ada, 3);
+    assert.equal(again.play.doubles, 1);
+    assert.equal(again.play.turn, 'ada');
+    assert.equal(again.play.pending, null);
+    assert.match(again.note, /Roll again/);
+
+    const second = resolveRoll(again.play, again.tokens, players, roll(1, 1));
+    assert.equal(second.play.doubles, 2);
+    assert.equal(second.play.pending?.kind, 'buy');
+    const passed = declineProperty(second.play, second.tokens, players);
+    assert.ok(!('error' in passed));
+    if ('error' in passed) return;
+    assert.equal(passed.play.turn, 'ada');
+    assert.equal(passed.play.doubles, 2);
+    assert.match(passed.note, /Roll again/);
+
+    const third = resolveRoll(passed.play, passed.tokens, players, roll(1, 1));
+    assert.equal(third.tokens.ada, 10);
+    assert.equal(third.play.jail.ada, 0);
+    assert.equal(third.play.doubles, 0);
+    assert.equal(third.play.turn, 'bea');
+  });
+
   it('sends the player to jail on the third doubles without moving there', () => {
     const play = table({ doubles: 2 });
     const jailed = resolveRoll(play, { ada: 0 }, players, roll(3, 3));

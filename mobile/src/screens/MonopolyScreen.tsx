@@ -488,21 +488,6 @@ export function MonopolyScreen({ navigation, route }: Props) {
                     }}
                     disabled={!play.undo && game.events.length === 0}
                   />
-                  {play.pending && pendingProperty ? (
-                    <>
-                      <Button
-                        label={`Buy ${formatMoney(pendingProperty.price)}`}
-                        variant="primary"
-                        disabled={!canBank || turnCash < pendingProperty.price}
-                        onPress={() => void commitPlay(buyProperty(play, game.tokenSpaces ?? {}, game.players, turnCash))}
-                      />
-                      <Button
-                        label="No thanks"
-                        disabled={!canBank}
-                        onPress={() => void commitPlay(declineProperty(play, game.tokenSpaces ?? {}, game.players))}
-                      />
-                    </>
-                  ) : null}
                   {inJail && !play.pending ? (
                     <>
                       <Button
@@ -554,7 +539,15 @@ export function MonopolyScreen({ navigation, route }: Props) {
           roll={
             <View pointerEvents="box-none" style={styles.rollStack}>
               <Button
-                label={rollingDice ? 'Rolling…' : inJail ? 'Roll for doubles' : `Roll for ${turnPlayer ? playerLabel(turnPlayer.name, turnPlayer.token) : 'player'}`}
+                label={
+                  rollingDice
+                    ? 'Rolling…'
+                    : inJail
+                      ? 'Roll for doubles'
+                      : play.doubles > 0
+                        ? 'Roll again'
+                        : `Roll for ${turnPlayer ? playerLabel(turnPlayer.name, turnPlayer.token) : 'player'}`
+                }
                 variant="primary"
                 disabled={!canBank || rollingDice || play.pending != null || !turnPlayer}
                 onPress={rollForPlayer}
@@ -566,6 +559,21 @@ export function MonopolyScreen({ navigation, route }: Props) {
                   disabled={!canBank}
                   onPress={() => void commitPlay(payDue(play, game.tokenSpaces ?? {}, game.players))}
                 />
+              ) : null}
+              {play.pending && pendingProperty ? (
+                <>
+                  <Button
+                    label={`Buy ${formatMoney(pendingProperty.price)}`}
+                    variant="primary"
+                    disabled={!canBank || turnCash < pendingProperty.price}
+                    onPress={() => void commitPlay(buyProperty(play, game.tokenSpaces ?? {}, game.players, turnCash))}
+                  />
+                  <Button
+                    label="No thanks"
+                    disabled={!canBank}
+                    onPress={() => void commitPlay(declineProperty(play, game.tokenSpaces ?? {}, game.players))}
+                  />
+                </>
               ) : null}
             </View>
           }
