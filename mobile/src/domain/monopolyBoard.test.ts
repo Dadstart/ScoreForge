@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { cellBox, layoutSharedTokens, ownerMarkPlacement, spaceToCell } from './monopolyBoard';
+import {
+  cellBox,
+  jailCell,
+  layoutJailedTokens,
+  layoutSharedTokens,
+  layoutVisitingTokens,
+  ownerMarkPlacement,
+  spaceToCell,
+} from './monopolyBoard';
 
 function boxesClear(a: { x: number; y: number; piece: number }, b: { x: number; y: number; piece: number }) {
   return (
@@ -53,6 +61,50 @@ describe('layoutSharedTokens', () => {
         }
       });
     }
+  }
+});
+
+function overlaps(a: { x: number; y: number; piece: number }, b: { x: number; y: number; width: number; height: number }) {
+  return a.x < b.x + b.width && a.x + a.piece > b.x && a.y < b.y + b.height && a.y + a.piece > b.y;
+}
+
+describe('jail tokens', () => {
+  for (const board of [320, 720, 1100]) {
+    const cell = board * 0.16;
+
+    it(`keeps jailed tokens inside the bars on a ${board}px board`, () => {
+      const box = jailCell(cell);
+      for (const count of [1, 2, 4]) {
+        const spots = layoutJailedTokens(cell, count);
+        assert.equal(spots.length, count);
+        for (const spot of spots) {
+          assert.ok(spot.x >= box.x - 0.01, 'left of the jail');
+          assert.ok(spot.y >= box.y - 0.01, 'above the jail');
+          assert.ok(spot.x + spot.piece <= box.x + box.width + 0.01, 'right of the jail');
+          assert.ok(spot.y + spot.piece <= box.y + box.height + 0.01, 'below the jail');
+          assert.ok(spot.y + spot.piece / 2 >= box.y + box.height * 0.36, 'covers the In Jail label');
+        }
+        for (let i = 0; i < spots.length; i += 1) {
+          for (let j = i + 1; j < spots.length; j += 1) {
+            assert.ok(boxesClear(spots[i], spots[j]), `jailed ${i} overlaps ${j}`);
+          }
+        }
+      }
+    });
+
+    it(`keeps visitors out of the jail on a ${board}px board`, () => {
+      const box = jailCell(cell);
+      for (const count of [1, 2, 4]) {
+        const spots = layoutVisitingTokens(cell, count);
+        for (const spot of spots) {
+          assert.ok(spot.x >= -0.01);
+          assert.ok(spot.y >= -0.01);
+          assert.ok(spot.x + spot.piece <= cell + 0.01);
+          assert.ok(spot.y + spot.piece <= cell + 0.01);
+          assert.equal(overlaps(spot, box), false);
+        }
+      }
+    });
   }
 });
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path, Rect } from 'react-native-svg';
 import { cardCopy, type CardDeck } from '../domain/monopolyCards';
 import { TRACK_DEPTH } from '../domain/monopolyBoard';
@@ -13,16 +13,17 @@ const FLIP_MS = 720;
 const PILE_ANGLE = 34;
 const LAYERS = 4;
 
-type FaceCard = { deck: CardDeck; id: string; nonce: number };
+type FaceCard = { deck: CardDeck; id: string; nonce: number | string };
 
 type Props = {
   boardSize: number;
   chanceCount: number;
   chestCount: number;
   face: FaceCard | null;
+  onAccept?: () => void;
 };
 
-export function MonopolyCardTable({ boardSize, chanceCount, chestCount, face }: Props) {
+export function MonopolyCardTable({ boardSize, chanceCount, chestCount, face, onAccept }: Props) {
   const center = boardSize * (1 - 2 * TRACK_DEPTH);
   const origin = boardSize * TRACK_DEPTH;
   const pileWidth = Math.max(72, center * 0.16);
@@ -32,7 +33,7 @@ export function MonopolyCardTable({ boardSize, chanceCount, chestCount, face }: 
 
   return (
     <View
-      pointerEvents="none"
+      pointerEvents="box-none"
       style={[styles.table, { left: origin, top: origin, width: center, height: center }]}
     >
       <CardPile deck="chest" count={chestCount} width={pileWidth} height={pileHeight} left={inset} top={pileTop} angle={-PILE_ANGLE} />
@@ -56,6 +57,7 @@ export function MonopolyCardTable({ boardSize, chanceCount, chestCount, face }: 
           pileLeft={face.deck === 'chance' ? center - inset - pileWidth : inset}
           pileTop={pileTop}
           angle={face.deck === 'chance' ? PILE_ANGLE : -PILE_ANGLE}
+          onAccept={onAccept}
         />
       ) : null}
     </View>
@@ -83,6 +85,7 @@ function CardPile({
   return (
     <View
       accessibilityLabel={deck === 'chance' ? 'Chance deck' : 'Community Chest deck'}
+      pointerEvents="none"
       style={[styles.pile, { left, top, width, height, transform: [{ rotate: `${angle}deg` }] }]}
     >
       {Array.from({ length: layers }, (_, layer) => {
@@ -109,6 +112,7 @@ function FlippedCard({
   pileLeft,
   pileTop,
   angle,
+  onAccept,
 }: {
   deck: CardDeck;
   id: string;
@@ -118,6 +122,7 @@ function FlippedCard({
   pileLeft: number;
   pileTop: number;
   angle: number;
+  onAccept?: () => void;
 }) {
   const copy = cardCopy(deck, id);
   const motion = diceMotionMs() > 0;
@@ -176,6 +181,7 @@ function FlippedCard({
 
   return (
     <Animated.View
+      pointerEvents="box-none"
       accessibilityLabel={`${copy.name}. ${copy.text}`}
       style={[
         styles.flipping,
@@ -189,7 +195,14 @@ function FlippedCard({
       ]}
     >
       {showFace ? (
-        <CardFront deck={deck} text={copy.text} name={copy.name} width={faceWidth} height={faceHeight} />
+        <CardFront
+          deck={deck}
+          text={copy.text}
+          name={copy.name}
+          width={faceWidth}
+          height={faceHeight}
+          onAccept={onAccept}
+        />
       ) : (
         <CardBack deck={deck} width={faceWidth} height={faceHeight} />
       )}
@@ -232,22 +245,34 @@ function CardFront({
   text,
   width,
   height,
+  onAccept,
 }: {
   deck: CardDeck;
   name: string;
   text: string;
   width: number;
   height: number;
+  onAccept?: () => void;
 }) {
   const long = text.length > 120;
-  const body = Math.max(11, Math.round(height * (long ? 0.046 : 0.055)));
+  const body = Math.max(11, Math.round(height * (long ? 0.046 : 0.052)));
   const radius = Math.round(width * 0.06);
   return (
-    <View style={[styles.front, { width, height, borderRadius: radius }]}>
+    <View pointerEvents="box-none" style={[styles.front, { width, height, borderRadius: radius }]}>
       <View style={[styles.band, { backgroundColor: deck === 'chance' ? '#e06a1f' : '#1d4f92' }]}>
         <Text style={[styles.bandText, { fontSize: Math.max(11, Math.round(height * 0.055)) }]}>{name.toUpperCase()}</Text>
       </View>
       <Text style={[styles.frontText, { fontSize: body, lineHeight: Math.round(body * 1.28) }]}>{text}</Text>
+      {onAccept ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Accept ${name}`}
+          onPress={onAccept}
+          style={({ pressed }) => [styles.accept, pressed && styles.acceptPressed]}
+        >
+          <Text style={[styles.acceptText, { fontSize: Math.max(13, Math.round(height * 0.055)) }]}>Accept</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -340,6 +365,23 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 10,
+  },
+  accept: {
+    marginHorizontal: 12,
+    marginBottom: 12,
+    borderRadius: 8,
+    paddingVertical: 8,
+    alignItems: 'center',
+    backgroundColor: '#1a1408',
+  },
+  acceptPressed: {
+    opacity: 0.82,
+  },
+  acceptText: {
+    fontFamily: fonts.display,
+    color: '#fff8ea',
+    fontWeight: '700',
+    letterSpacing: 0.6,
   },
 });

@@ -14,6 +14,8 @@ import type { ScoreEvent } from './models';
 import { fillRandom } from './secureRandom';
 
 export type BuyPending = { kind: 'buy'; propertyId: string };
+export type CardPending = { kind: 'card'; deck: CardDeck; id: string; space: number };
+export type PlayPending = BuyPending | CardPending;
 
 export type MonopolyUndo = {
   turn: string;
@@ -26,7 +28,7 @@ export type MonopolyUndo = {
   chest: string[];
   chanceFree: Record<string, number>;
   chestFree: Record<string, number>;
-  pending: BuyPending | null;
+  pending: PlayPending | null;
   tokens: Record<string, number>;
   events: number;
   prior: MonopolyUndo | null;
@@ -45,7 +47,7 @@ export type MonopolyPlay = {
   chest: string[];
   chanceFree: Record<string, number>;
   chestFree: Record<string, number>;
-  pending: BuyPending | null;
+  pending: PlayPending | null;
   undo: MonopolyUndo | null;
 };
 
@@ -260,6 +262,14 @@ export function normalizeMonopolyPlay(value: unknown, playerIds: string[]): Mono
   const pending = raw.pending;
   if (
     pending &&
+    pending.kind === 'card' &&
+    (pending.deck === 'chance' || pending.deck === 'chest') &&
+    typeof pending.id === 'string' &&
+    typeof pending.space === 'number'
+  ) {
+    play.pending = { kind: 'card', deck: pending.deck, id: pending.id, space: Math.trunc(pending.space) };
+  } else if (
+    pending &&
     pending.kind === 'buy' &&
     getProperty(pending.propertyId) &&
     play.owned[pending.propertyId] == null
@@ -276,7 +286,7 @@ export function unpackMonopoly(value: unknown, playerIds: string[]): MonopolyPla
 
 /** Property from the latest token move, including a buy decision still open on that square. */
 export function landedPropertyId(play: MonopolyPlay, tokens: Record<string, number>): string | null {
-  if (play.pending?.propertyId && getProperty(play.pending.propertyId)) return play.pending.propertyId;
+  if (play.pending?.kind === 'buy' && getProperty(play.pending.propertyId)) return play.pending.propertyId;
   let spaces = tokens;
   let undo = play.undo;
   const seen = new Set<MonopolyUndo>();
@@ -504,7 +514,9 @@ function drawCard(ctx: Ctx, playerId: string, deck: 'chance' | 'chest', from: nu
   if (deck === 'chance') ctx.play.chance = next;
   else ctx.play.chest = next;
   ctx.drawn.push({ deck, id, space: from });
-  applyCard(ctx, playerId, deck, id, from);
+  const label = deck === 'chance' ? 'Chance' : 'Community Chest';
+  ctx.play.pending = { kind: 'card', deck, id, space: from };
+  ctx.notes.push(`${label} card. Accept it to play.`);
 }
 
 function applyCard(ctx: Ctx, playerId: string, deck: 'chance' | 'chest', id: string, from: number) {
@@ -784,6 +796,45 @@ export function moneyFromSquare(prior: MonopolyPlay, result: PlayOutcome): numbe
   return null;
 }
 
+export function acceptCard(
+  play: MonopolyPlay,
+  tokens: Record<string, number>,
+  players: PlayPlayer[],
+  sample: () => number = Math.random,
+): PlayOutcome | { error: string } {
+  const pending = play.pending;
+  if (!pending || pending.kind !== 'card') return { error: 'There is no card to accept.' };
+  const before = play;
+  const ctx: Ctx = {
+    play: {
+      ...play,
+      pending: null,
+      jail: { ...play.jail },
+      owned: { ...play.owned },
+      houses: { ...play.houses },
+      mortgaged: [...play.mortgaged],
+      chance: [...play.chance],
+      chest: [...play.chest],
+      chanceFree: { ...play.chanceFree },
+      chestFree: { ...play.chestFree },
+    },
+    tokens: { ...tokens },
+    players,
+    events: [],
+    notes: [],
+    dice: 0,
+    rentScale: 1,
+    utilityDice: null,
+    sample,
+    depth: 0,
+    route: null,
+    drawn: [],
+  };
+  applyCard(ctx, play.turn, pending.deck, pending.id, pending.space);
+  finish(ctx, play.turn);
+  return commit(before, tokens, ctx);
+}
+
 export function buyProperty(
   play: MonopolyPlay,
   tokens: Record<string, number>,
@@ -791,7 +842,7 @@ export function buyProperty(
   cash: number,
 ): PlayOutcome | { error: string } {
   const pending = play.pending;
-  if (!pending) return { error: 'There is nothing to buy.' };
+  if (!pending || pending.kind !== 'buy') return { error: 'There is nothing to buy.' };
   const property = getProperty(pending.propertyId);
   if (!property) return { error: 'That property is not on the board.' };
   if (cash < property.price) return { error: `${playerName(players, play.turn)} does not have ${formatMoney(property.price)}.` };
@@ -812,7 +863,7 @@ export function buyProperty(
 }
 
 export function declineProperty(play: MonopolyPlay, tokens: Record<string, number>, players: PlayPlayer[]): PlayOutcome | { error: string } {
-  if (!play.pending) return { error: 'There is nothing to pass on.' };
+  if (play.pending?.kind !== 'buy') return { error: 'There is nothing to pass on.' };
   const property = getProperty(play.pending.propertyId);
   return afterChoice(
     play,
@@ -1022,6 +1073,10 @@ export function turnPrompt(play: MonopolyPlay, players: PlayPlayer[]): string {
     return property
       ? `${name} can buy ${property.name} for ${formatMoney(property.price)}.`
       : `${name}'s turn.`;
+  }
+  if (play.pending?.kind === 'card') {
+    const label = play.pending.deck === 'chance' ? 'Chance' : 'Community Chest';
+    return `${name} drew a ${label} card.`;
   }
   if (play.jail[play.turn] != null) {
     const spent = play.jail[play.turn] ?? 0;

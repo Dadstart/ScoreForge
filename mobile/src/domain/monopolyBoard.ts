@@ -172,6 +172,40 @@ export function layoutSharedTokens(
   });
 }
 
+export type JailBox = { x: number; y: number; width: number; height: number };
+
+/** The In Jail square, measured inside a corner cell whose side is `cell` pixels. */
+export function jailCell(cell: number): JailBox {
+  const inset = Math.max(4, Math.round(cell * 0.04));
+  const width = Math.round(cell * 0.54);
+  const height = Math.round(cell * 0.52);
+  return { x: cell - inset - width, y: inset, width, height };
+}
+
+function shiftSpots(spots: TokenSpot[], dx: number, dy: number): TokenSpot[] {
+  return spots.map((spot) => ({ x: spot.x + dx, y: spot.y + dy, piece: spot.piece }));
+}
+
+/** Tokens sent to jail sit in the bars, under the In Jail label. */
+export function layoutJailedTokens(cell: number, count: number): TokenSpot[] {
+  const box = jailCell(cell);
+  const pad = Math.max(2, Math.round(Math.min(box.width, box.height) * 0.06));
+  const title = Math.round(box.height * 0.36);
+  const width = Math.max(8, box.width - pad * 2);
+  const height = Math.max(8, box.height - title - pad);
+  return shiftSpots(layoutSharedTokens(width, height, 10, 0, count), box.x + pad, box.y + title);
+}
+
+/** Just Visiting stays on the track under the jail, not in the cell. */
+export function layoutVisitingTokens(cell: number, count: number): TokenSpot[] {
+  const box = jailCell(cell);
+  const gap = Math.max(2, Math.round(cell * 0.04));
+  const y = box.y + box.height + gap;
+  const height = Math.max(8, cell - y - gap);
+  const width = Math.max(8, cell - gap * 2);
+  return shiftSpots(layoutSharedTokens(width, height, 10, 0, count), gap, y);
+}
+
 export type OwnerMark = { x: number; y: number; size: number; rotate: '0deg' | '90deg' | '-90deg' | '180deg' };
 
 /**

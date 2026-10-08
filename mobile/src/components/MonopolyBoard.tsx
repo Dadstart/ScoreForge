@@ -13,7 +13,19 @@ import {
 } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import type { Player } from '../domain/models';
-import { boardSpaces, spaceToCell, tokenSpace, tokenSpacesBetween, TRACK_DEPTH, cellBox, layoutSharedTokens, ownerMarkPlacement } from '../domain/monopolyBoard';
+import {
+  boardSpaces,
+  cellBox,
+  jailCell,
+  layoutJailedTokens,
+  layoutSharedTokens,
+  layoutVisitingTokens,
+  ownerMarkPlacement,
+  spaceToCell,
+  tokenSpace,
+  tokenSpacesBetween,
+  TRACK_DEPTH,
+} from '../domain/monopolyBoard';
 import { getProperty, playerToken } from '../domain/monopoly';
 import { fitBoardLabel, fitSize } from '../domain/monopolyLabel';
 import { clampPan, clampZoom, panForZoom, stepZoom } from '../domain/monopolyZoom';
@@ -36,8 +48,12 @@ type Props = {
   /** Property id to the player who owns it. */
   owned?: Record<string, string>;
   tokenSpaces?: Record<string, number>;
+  /** Players currently in jail, keyed by player id. Just Visiting is everyone else on that square. */
+  inJail?: Record<string, number>;
   tokenRoute?: TokenRouteView | null;
   drawnCards?: DrawnCard[];
+  cardOffer?: { deck: 'chance' | 'chest'; id: string; space: number } | null;
+  onAcceptCard?: () => void;
   chanceCount?: number;
   chestCount?: number;
   moneyFlight?: MoneyFlight | null;
@@ -236,7 +252,7 @@ function PhoneBoard({ onDragging, diceRoll, startZoom = 1, ...props }: Props & {
             style={{ position: 'absolute', width: boardSize, height: boardSize, left: pan.x, top: pan.y }}
           />
         ) : null}
-        {diceRoll ? (
+        {diceRoll && !props.cardOffer ? (
           <View pointerEvents="none" style={styles.diceLayer}>
             <MonopolyDice roll={diceRoll} />
           </View>
@@ -274,8 +290,11 @@ function BoardCanvas({
   players,
   owned,
   tokenSpaces,
+  inJail,
   tokenRoute = null,
   drawnCards = [],
+  cardOffer = null,
+  onAcceptCard,
   chanceCount = 16,
   chestCount = 16,
   moneyFlight = null,
@@ -292,7 +311,6 @@ function BoardCanvas({
   flightRef.current = moneyFlight;
   const [burst, setBurst] = useState<{ id: number; space: number } | null>(null);
   const [size, setSize] = useState(0);
-  const [face, setFace] = useState<{ deck: DrawnCard['deck']; id: string; nonce: number } | null>(null);
   const drawnRef = useRef(drawnCards);
   drawnRef.current = drawnCards;
   const drawCursor = useRef(0);
@@ -301,7 +319,6 @@ function BoardCanvas({
   if (trackedDraw !== drawnKey) {
     setTrackedDraw(drawnKey);
     drawCursor.current = 0;
-    setFace(null);
   }
 
   const showDrawnCard = (space: number) => {
@@ -312,7 +329,6 @@ function BoardCanvas({
     const card = list[index];
     if (!card) return;
     drawCursor.current = index + 1;
-    setFace({ deck: card.deck, id: card.id, nonce: Date.now() });
   };
 
   useEffect(() => {
@@ -605,9 +621,12 @@ function BoardCanvas({
       {size > 0
         ? players.map((player, index) => {
             const spaceIndex = tokenSpace(tokenSpaces, player.id);
-            const sharing = players.filter(
-              (other) => tokenSpace(tokenSpaces, other.id) === spaceIndex,
-            );
+            const imprisoned = spaceIndex === 10 && inJail?.[player.id] != null;
+            const sharing = players.filter((other) => {
+              if (tokenSpace(tokenSpaces, other.id) !== spaceIndex) return false;
+              const otherJailed = spaceIndex === 10 && inJail?.[other.id] != null;
+              return otherJailed === imprisoned;
+            });
             const slot = sharing.findIndex((other) => other.id === player.id);
             const crowd = sharing.length;
             const route =
@@ -624,6 +643,7 @@ function BoardCanvas({
                 token={player.token}
                 color={TOKEN_COLORS[index % TOKEN_COLORS.length]}
                 spaceIndex={spaceIndex}
+                inJail={imprisoned}
                 slot={slot}
                 crowd={crowd}
                 size={size}
@@ -637,7 +657,17 @@ function BoardCanvas({
         })
       : null}
       {size > 0 ? (
-        <MonopolyCardTable boardSize={size} chanceCount={chanceCount} chestCount={chestCount} face={face} />
+        <MonopolyCardTable
+          boardSize={size}
+          chanceCount={chanceCount}
+          chestCount={chestCount}
+          face={
+            cardOffer
+              ? { deck: cardOffer.deck, id: cardOffer.id, nonce: `${cardOffer.deck}:${cardOffer.id}:${cardOffer.space}` }
+              : null
+          }
+          onAccept={cardOffer ? onAcceptCard : undefined}
+        />
       ) : null}
       <MoneyBills flight={burst} boardSize={size} />
       {pinDice && diceRoll ? (
@@ -694,14 +724,13 @@ function GoCorner({ cell, detail }: { cell: number; detail: boolean }) {
 
 function JailCorner({ cell, detail }: { cell: number; detail: boolean }) {
   const inset = Math.max(4, Math.round(cell * 0.04));
-  const box = Math.round(cell * 0.54);
-  const boxH = Math.round(cell * 0.52);
-  const title = displaySize('JAIL', box - 10, Math.round(boxH * 0.22));
-  const visitW = Math.max(24, cell - box - inset * 3);
+  const box = jailCell(cell);
+  const title = displaySize('JAIL', box.width - 10, Math.round(box.height * 0.22));
+  const visitW = Math.max(24, cell - box.width - inset * 3);
   const sub = fitSize('VISITING', visitW, Math.round(cell * (detail ? 0.13 : 0.16)));
   return (
     <View style={styles.cornerFill}>
-      <View style={[styles.jail, { position: 'absolute', top: inset, right: inset, width: box, height: boxH }]}>
+      <View style={[styles.jail, { position: 'absolute', top: box.y, left: box.x, width: box.width, height: box.height }]}>
         <Text style={[styles.cornerTitle, { fontSize: title, lineHeight: title + 1 }]} numberOfLines={1}>
           IN
         </Text>
@@ -719,9 +748,9 @@ function JailCorner({ cell, detail }: { cell: number; detail: boolean }) {
         style={{
           position: 'absolute',
           left: inset,
-          top: inset,
+          top: box.y,
           width: visitW,
-          height: boxH,
+          height: box.height,
           alignItems: 'center',
           justifyContent: 'center',
         }}
@@ -1163,11 +1192,17 @@ function clampInside(value: number, span: number, piece: number) {
   return Math.min(Math.max(0, span - piece), Math.max(0, value));
 }
 
-function piecePlace(index: number, size: number, slot: number, count = 1) {
+function piecePlace(index: number, size: number, slot: number, count = 1, inJail = false) {
   const { row, col } = spaceToCell(index);
   const frame = cellBox(row, col);
   const width = frame.w * size;
   const height = frame.h * size;
+  if (index === 10) {
+    const cell = Math.min(width, height);
+    const spots = inJail ? layoutJailedTokens(cell, count) : layoutVisitingTokens(cell, count);
+    const spot = spots[Math.max(0, Math.min(slot, spots.length - 1))];
+    return { left: frame.x * size + spot.x, top: frame.y * size + spot.y, piece: spot.piece };
+  }
   if (count > 1) {
     const spots = layoutSharedTokens(width, height, row, col, count);
     const spot = spots[Math.max(0, Math.min(slot, spots.length - 1))];
@@ -1210,6 +1245,7 @@ function Piece({
   token,
   color,
   spaceIndex,
+  inJail = false,
   slot,
   crowd,
   size,
@@ -1224,6 +1260,7 @@ function Piece({
   token?: string | null;
   color: string;
   spaceIndex: number;
+  inJail?: boolean;
   slot: number;
   crowd: number;
   size: number;
@@ -1234,7 +1271,7 @@ function Piece({
   onSettled: (playerId: string) => void;
 }) {
   const [flying, setFlying] = useState(false);
-  const resting = piecePlace(spaceIndex, size, slot, crowd);
+  const resting = piecePlace(spaceIndex, size, slot, crowd, inJail);
   const left = useRef(new Animated.Value(resting.left)).current;
   const top = useRef(new Animated.Value(resting.top)).current;
   const liftX = useRef(new Animated.Value(0)).current;
@@ -1246,9 +1283,11 @@ function Piece({
   const sizeRef = useRef(size);
   const slotRef = useRef(slot);
   const countRef = useRef(crowd);
+  const jailedRef = useRef(inJail);
   sizeRef.current = size;
   slotRef.current = slot;
   countRef.current = crowd;
+  jailedRef.current = inJail;
   const routeRef = useRef(routeSpaces);
   routeRef.current = routeSpaces;
   const settledNotice = useRef(onSettled);
@@ -1260,16 +1299,16 @@ function Piece({
 
   useEffect(() => {
     if (flyingRef.current || settled.current !== spaceIndex) return;
-    const place = piecePlace(spaceIndex, size, slot, crowd);
+    const place = piecePlace(spaceIndex, size, slot, crowd, inJail);
     left.setValue(place.left);
     top.setValue(place.top);
-  }, [crowd, left, size, slot, spaceIndex, top]);
+  }, [crowd, inJail, left, size, slot, spaceIndex, top]);
 
   useEffect(() => {
     if (spaceIndex === settled.current) return;
     const from = settled.current;
     const placeAt = (index: number, atSlot: number, atCount = 1) =>
-      piecePlace(index, sizeRef.current, atSlot, atCount);
+      piecePlace(index, sizeRef.current, atSlot, atCount, index === 10 && jailedRef.current);
     if (diceMotionMs() === 0) {
       settled.current = spaceIndex;
       lastPath.current = null;

@@ -43,6 +43,7 @@ import {
   canMortgage,
   canSellBuilding,
   cashOf,
+  acceptCard,
   createMonopolyPlay,
   declineProperty,
   landedPropertyId,
@@ -418,7 +419,8 @@ export function MonopolyScreen({ navigation, route }: Props) {
 
   const ownedDeeds = properties.filter((entry) => play.owned[entry.id]);
   const landedProperty = getProperty(landedPropertyId(play, game.tokenSpaces ?? {}) ?? '');
-  const pendingProperty = play.pending ? getProperty(play.pending.propertyId) : undefined;
+  const pendingProperty = play.pending?.kind === 'buy' ? getProperty(play.pending.propertyId) : undefined;
+  const pendingCard = play.pending?.kind === 'card' ? play.pending : null;
   const jailCards = (play.chanceFree[turnId] ?? 0) + (play.chestFree[turnId] ?? 0);
   const canDevelop = canBank && !play.pending && play.doubles === 0;
   const quoteDice = diceTotal ?? 7;
@@ -533,8 +535,15 @@ export function MonopolyScreen({ navigation, route }: Props) {
           players={game.players}
           owned={play.owned}
           tokenSpaces={game.tokenSpaces}
+          inJail={play.jail}
           tokenRoute={tokenRoute}
           drawnCards={drawnCards}
+          cardOffer={pendingCard}
+          onAcceptCard={
+            pendingCard && canBank
+              ? () => void commitPlay(acceptCard(play, game.tokenSpaces ?? {}, game.players))
+              : undefined
+          }
           chanceCount={play.chance.length}
           chestCount={play.chest.length}
           moneyFlight={moneyFlight}

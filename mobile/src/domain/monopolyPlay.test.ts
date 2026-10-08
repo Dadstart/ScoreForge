@@ -9,6 +9,7 @@ import {
   declineProperty,
   moneyFromSquare,
   mortgageProperty,
+  acceptCard,
   landedPropertyId,
   rentDue,
   resolveRoll,
@@ -24,6 +25,10 @@ const players: PlayPlayer[] = [
   { id: 'bea', name: 'Bea' },
 ];
 
+function offeredProperty(play: MonopolyPlay | undefined): string | undefined {
+  return play?.pending?.kind === 'buy' ? play.pending.propertyId : undefined;
+}
+
 function roll(first: number, second: number): DiceRoll {
   return { faces: [first, second], total: first + second, doubles: first === second };
 }
@@ -36,7 +41,7 @@ describe('monopoly play', () => {
   it('offers an unowned property and collects salary for passing Go', () => {
     const moved = resolveRoll(table(), { ada: 39 }, players, roll(1, 1));
     assert.equal(moved.tokens.ada, 1);
-    assert.equal(moved.play.pending?.propertyId, 'mediterranean');
+    assert.equal(offeredProperty(moved.play), 'mediterranean');
     assert.equal(moved.events.reduce((sum, event) => sum + event.points, 0), 200);
     assert.match(moved.note, /passing GO/);
     assert.match(moved.note, /Mediterranean Avenue/);
@@ -92,14 +97,17 @@ describe('monopoly play', () => {
   it('follows a Chance card onto a property', () => {
     const play = table({ chance: ['boardwalk', 'go'], owned: { boardwalk: 'bea' } });
     const drawn = resolveRoll(play, { ada: 5 }, players, roll(1, 1));
-    assert.equal(drawn.tokens.ada, 39);
-    assert.equal(drawn.events.find((event) => event.playerId === 'ada')?.points, -50);
-    assert.match(drawn.note, /Boardwalk/);
-    assert.equal(drawn.route?.spaces[0], 5);
-    assert.equal(drawn.route?.spaces.at(-1), 39);
-    assert.equal(drawn.route?.spaces.includes(7), true);
-    assert.ok((drawn.route?.spaces.length ?? 0) > 12);
+    assert.equal(drawn.tokens.ada, 7);
     assert.deepEqual(drawn.drawn, [{ deck: 'chance', id: 'boardwalk', space: 7 }]);
+    const accepted = acceptCard(drawn.play, drawn.tokens, players);
+    assert.ok(!('error' in accepted));
+    if ('error' in accepted) return;
+    assert.equal(accepted.tokens.ada, 39);
+    assert.equal(accepted.events.find((event) => event.playerId === 'ada')?.points, -50);
+    assert.match(accepted.note, /Boardwalk/);
+    assert.equal(accepted.route?.spaces[0], 7);
+    assert.equal(accepted.route?.spaces.at(-1), 39);
+    assert.ok((accepted.route?.spaces.length ?? 0) > 12);
   });
 
   it('builds evenly, then undoes the purchase and the move', () => {
@@ -125,7 +133,7 @@ describe('monopoly play', () => {
     const undoneBuy = undoMonopoly(bought.play, [...moved.events, ...bought.events]);
     assert.ok(undoneBuy);
     assert.equal(undoneBuy?.play.owned.mediterranean, undefined);
-    assert.equal(undoneBuy?.play.pending?.propertyId, 'mediterranean');
+    assert.equal(offeredProperty(undoneBuy?.play), 'mediterranean');
     assert.equal(undoneBuy?.events.length, moved.events.length);
     const chained = undoMonopoly(undoneBuy!.play, undoneBuy!.events);
     assert.equal(chained?.tokens.ada, 39);
@@ -158,23 +166,62 @@ describe('monopoly play', () => {
     assert.equal(moneyFromSquare(play, taxed), 4);
   });
 
-  it('walks back three spaces after landing on Chance', () => {
+  it('holds a Chance card until it is accepted', () => {
     const play = table({ chance: ['back-3', 'go'] });
     const moved = resolveRoll(play, { ada: 5 }, players, roll(1, 1));
-    assert.equal(moved.tokens.ada, 4);
-    assert.deepEqual(moved.route?.spaces, [5, 6, 7, 6, 5, 4]);
+    assert.equal(moved.tokens.ada, 7);
+    assert.equal(moved.play.pending?.kind, 'card');
+    assert.equal(moved.events.length, 0);
     assert.deepEqual(moved.drawn, [{ deck: 'chance', id: 'back-3', space: 7 }]);
+    const accepted = acceptCard(moved.play, moved.tokens, players);
+    assert.ok(!('error' in accepted));
+    if ('error' in accepted) return;
+    assert.equal(accepted.tokens.ada, 4);
+    assert.deepEqual(accepted.route?.spaces, [7, 6, 5, 4]);
+    assert.equal(accepted.play.pending, null);
   });
 
-  it('draws a second card when Chance sends the token onto Community Chest', () => {
+  it('waits to draw the next card until the first one is accepted', () => {
     const play = table({ chance: ['back-3', 'go'], chest: ['doctor', 'go'] });
     const moved = resolveRoll(play, { ada: 34 }, players, roll(1, 1));
-    assert.equal(moved.tokens.ada, 33);
-    assert.deepEqual(moved.drawn, [
-      { deck: 'chance', id: 'back-3', space: 36 },
-      { deck: 'chest', id: 'doctor', space: 33 },
-    ]);
-    assert.equal(moved.events.some((event) => event.points === -50), true);
+    assert.equal(moved.tokens.ada, 36);
+    assert.equal(moved.events.some((event) => event.points === -50), false);
+    const stepped = acceptCard(moved.play, moved.tokens, players);
+    assert.ok(!('error' in stepped));
+    if ('error' in stepped) return;
+    assert.equal(stepped.tokens.ada, 33);
+    assert.equal(stepped.play.pending?.kind, 'card');
+    if (stepped.play.pending?.kind !== 'card') return;
+    assert.equal(stepped.play.pending.id, 'doctor');
+    assert.equal(stepped.events.some((event) => event.points === -50), false);
+    const paid = acceptCard(stepped.play, stepped.tokens, players);
+    assert.ok(!('error' in paid));
+    if ('error' in paid) return;
+    assert.equal(paid.events.some((event) => event.points === -50), true);
+    assert.equal(paid.play.pending, null);
+  });
+
+  it('collects the bank dividend only after the card is accepted', () => {
+    const play = table({ chance: ['bank-50', 'go'] });
+    const moved = resolveRoll(play, { ada: 0 }, players, roll(3, 4));
+    assert.equal(moved.tokens.ada, 7);
+    assert.equal(moved.events.length, 0);
+    const accepted = acceptCard(moved.play, moved.tokens, players);
+    assert.ok(!('error' in accepted));
+    if ('error' in accepted) return;
+    assert.equal(accepted.events.find((event) => event.playerId === 'ada')?.points, 50);
+    assert.equal(accepted.play.turn, 'bea');
+  });
+
+  it('keeps a Get Out of Jail Free card when it is accepted', () => {
+    const play = table({ chest: ['jail-free', 'go'] });
+    const moved = resolveRoll(play, { ada: 0 }, players, roll(1, 1));
+    assert.equal(moved.play.chestFree.ada, undefined);
+    const accepted = acceptCard(moved.play, moved.tokens, players);
+    assert.ok(!('error' in accepted));
+    if ('error' in accepted) return;
+    assert.equal(accepted.play.chestFree.ada, 1);
+    assert.equal(accepted.play.chest.includes('jail-free'), false);
   });
 
   it('has wording for every Chance and Community Chest card', () => {
@@ -196,7 +243,7 @@ describe('monopoly play', () => {
 
   it('passes on a property and gives the turn to the next player', () => {
     const moved = resolveRoll(table(), { ada: 0 }, players, roll(2, 3));
-    assert.equal(moved.play.pending?.propertyId, 'reading');
+    assert.equal(offeredProperty(moved.play), 'reading');
     const passed = declineProperty(moved.play, moved.tokens, players);
     assert.ok(!('error' in passed));
     if ('error' in passed) return;
