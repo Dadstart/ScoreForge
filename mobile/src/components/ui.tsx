@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useNavigation } from '@react-navigation/native';
 import { useHeaderHeight } from '@react-navigation/elements';
 import {
   ActivityIndicator,
@@ -17,6 +18,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { Nav } from '../navigation/types';
 import { colors, fonts, radii, space, typography } from '../theme';
 
 const logo = require('../../assets/logo.jpg');
@@ -95,6 +97,7 @@ export function Screen({
   style?: StyleProp<ViewStyle>;
 }) {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<Nav>();
   const headerHeight = useHeaderHeight();
   const window = useWindowDimensions();
   const shellRef = useRef<View>(null);
@@ -131,14 +134,19 @@ export function Screen({
   const page = (
     <>
       <View style={[styles.logoBar, compact && styles.logoBarCompact]}>
-        <View style={[styles.logoFrame, compact && styles.logoFrameCompact]}>
-          <Image
-            source={logo}
-            accessibilityLabel="ScoreForge"
-            resizeMode="contain"
-            style={styles.logo}
-          />
-        </View>
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel="ScoreForge home"
+          onPress={() => navigation.navigate('Home')}
+          style={({ pressed }) => [
+            styles.logoFrame,
+            compact && styles.logoFrameCompact,
+            web && styles.logoLink,
+            pressed && styles.logoPressed,
+          ]}
+        >
+          <Image source={logo} accessible={false} resizeMode="contain" style={styles.logo} />
+        </Pressable>
       </View>
       {children}
     </>
@@ -317,6 +325,12 @@ const styles = StyleSheet.create({
   },
   logoFrameCompact: {
     maxWidth: 240,
+  },
+  logoLink: {
+    cursor: 'pointer',
+  },
+  logoPressed: {
+    opacity: 0.85,
   },
   logo: {
     width: '100%',
