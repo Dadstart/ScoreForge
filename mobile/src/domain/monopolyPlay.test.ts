@@ -9,6 +9,7 @@ import {
   declineProperty,
   moneyFromSquare,
   mortgageProperty,
+  landedPropertyId,
   rentDue,
   resolveRoll,
   undoMonopoly,
@@ -134,6 +135,20 @@ describe('monopoly play', () => {
     const undoneRoll = undoMonopoly(moved.play, moved.events);
     assert.equal(undoneRoll?.tokens.ada, 39);
     assert.equal(undoneRoll?.events.length, 0);
+  });
+
+  it('remembers the property from the latest landing', () => {
+    const baltic = resolveRoll(table(), { ada: 0 }, players, roll(1, 2));
+    assert.equal(landedPropertyId(baltic.play, baltic.tokens), 'baltic');
+
+    const bought = buyProperty(baltic.play, baltic.tokens, players, 1500);
+    assert.ok(!('error' in bought));
+    if ('error' in bought) return;
+    assert.equal(landedPropertyId(bought.play, bought.tokens), 'baltic');
+
+    const tax = resolveRoll(table(), { ada: 0 }, players, roll(2, 2));
+    assert.equal(landedPropertyId(tax.play, tax.tokens), null);
+    assert.equal(landedPropertyId(table(), { ada: 0 }), null);
   });
 
   it('sends bills from a tax square', () => {

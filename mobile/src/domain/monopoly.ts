@@ -82,7 +82,7 @@ export const properties: BoardProperty[] = [
   utility('water', 'Water Works'),
 ];
 
-const RAILROAD_RENTS: Record<RailroadCount, number> = {
+export const RAILROAD_RENTS: Record<RailroadCount, number> = {
   1: 25,
   2: 50,
   3: 100,

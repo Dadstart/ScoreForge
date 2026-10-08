@@ -274,6 +274,30 @@ export function unpackMonopoly(value: unknown, playerIds: string[]): MonopolyPla
   return normalizeMonopolyPlay(value, playerIds);
 }
 
+/** Property from the latest token move, including a buy decision still open on that square. */
+export function landedPropertyId(play: MonopolyPlay, tokens: Record<string, number>): string | null {
+  if (play.pending?.propertyId && getProperty(play.pending.propertyId)) return play.pending.propertyId;
+  let spaces = tokens;
+  let undo = play.undo;
+  const seen = new Set<MonopolyUndo>();
+  while (undo && !seen.has(undo)) {
+    seen.add(undo);
+    const prior = undo.tokens ?? {};
+    const ids = new Set([...Object.keys(spaces), ...Object.keys(prior)]);
+    let moved: string | null = null;
+    for (const id of ids) {
+      if ((spaces[id] ?? 0) !== (prior[id] ?? 0)) {
+        moved = id;
+        break;
+      }
+    }
+    if (moved) return getBoardSpace(spaces[moved] ?? 0)?.propertyId ?? null;
+    spaces = prior;
+    undo = undo.prior ?? null;
+  }
+  return null;
+}
+
 function playerName(players: PlayPlayer[], id: string): string {
   return players.find((player) => player.id === id)?.name ?? 'Player';
 }

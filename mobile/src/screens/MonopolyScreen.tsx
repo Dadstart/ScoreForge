@@ -24,9 +24,14 @@ import {
   getProperty,
   playerToken,
   properties,
+  RAILROAD_COUNTS,
+  RAILROAD_RENTS,
   singleEmoji,
+  STREET_LEVELS,
   transferEvents,
+  UTILITY_COUNTS,
   withoutLastCashAction,
+  type BoardProperty,
 } from '../domain/monopoly';
 import { diceMotionMs } from '../components/MonopolyDice';
 import { rollMonopolyDice, type DiceRoll } from '../domain/monopolyDice';
@@ -40,9 +45,11 @@ import {
   cashOf,
   createMonopolyPlay,
   declineProperty,
+  landedPropertyId,
   moneyFromSquare,
   mortgageProperty,
   mortgageValue,
+  ownsMonopoly,
   payToLeaveJail,
   rentDue,
   resolveRoll,
@@ -410,6 +417,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
     .filter((emoji): emoji is string => Boolean(emoji));
 
   const ownedDeeds = properties.filter((entry) => play.owned[entry.id]);
+  const landedProperty = getProperty(landedPropertyId(play, game.tokenSpaces ?? {}) ?? '');
   const pendingProperty = play.pending ? getProperty(play.pending.propertyId) : undefined;
   const jailCards = (play.chanceFree[turnId] ?? 0) + (play.chestFree[turnId] ?? 0);
   const canDevelop = canBank && !play.pending && play.doubles === 0;
@@ -532,6 +540,17 @@ export function MonopolyScreen({ navigation, route }: Props) {
           onDragging={setBoardDragging}
           diceRoll={diceRoll}
         />
+
+        {landedProperty ? (
+          <RentLookup
+            property={landedProperty}
+            play={play}
+            dice={quoteDice}
+            ownerName={
+              play.owned[landedProperty.id] ? partyName(play.owned[landedProperty.id]) : null
+            }
+          />
+        ) : null}
 
         <View style={styles.wrap}>
           {snapshot.standings.map((standing) => {
@@ -828,6 +847,86 @@ export function MonopolyScreen({ navigation, route }: Props) {
   );
 }
 
+function RentLookup({
+  property,
+  play,
+  dice,
+  ownerName,
+}: {
+  property: BoardProperty;
+  play: NonNullable<Game['monopoly']>;
+  dice: number;
+  ownerName: string | null;
+}) {
+  const mortgaged = play.mortgaged.includes(property.id);
+  const owned = Boolean(ownerName) && !mortgaged;
+  const level = play.houses[property.id] ?? 0;
+  const doubled =
+    owned && property.kind === 'street' && level === 0 && ownsMonopoly(play, play.owned[property.id] ?? '', property.group);
+  const summary = !ownerName
+    ? `Unowned. Price ${formatMoney(property.price)}.`
+    : mortgaged
+      ? `${ownerName} owns it. Mortgaged, so no rent is due.`
+      : doubled
+        ? `${ownerName} owns the color set. Rent ${formatMoney(rentDue(play, property.id, dice))}.`
+        : property.kind === 'utility'
+          ? `${ownerName} owns it. Rent ${formatMoney(rentDue(play, property.id, dice))} on a dice total of ${dice}.`
+          : `${ownerName} owns it. Rent ${formatMoney(rentDue(play, property.id, dice))}.`;
+  const lines = rentLines(property, play, dice, owned);
+
+  return (
+    <Card>
+      <Text style={typography.section}>Rent lookup</Text>
+      <View style={styles.rentTitle}>
+        <View style={[styles.rentSwatch, { backgroundColor: property.swatch }]} />
+        <Text style={styles.rentName}>{property.name}</Text>
+      </View>
+      <Text style={styles.rentPreview}>{summary}</Text>
+      {lines.map((line) => (
+        <View key={line.label} style={[styles.rentRow, line.active && styles.rentRowActive]}>
+          <Text style={[styles.rentLabel, line.active && styles.rentActiveText]}>{line.label}</Text>
+          <Text style={[styles.rentAmount, line.active && styles.rentActiveText]}>{line.amount}</Text>
+        </View>
+      ))}
+    </Card>
+  );
+}
+
+function rentLines(property: BoardProperty, play: NonNullable<Game['monopoly']>, dice: number, owned: boolean) {
+  if (property.kind === 'street' && property.rents) {
+    const level = owned ? (play.houses[property.id] ?? 0) : -1;
+    return STREET_LEVELS.map((entry) => ({
+      label: entry.label,
+      amount: formatMoney(property.rents?.[entry.id] ?? 0),
+      active: entry.id === level,
+    }));
+  }
+  if (property.kind === 'railroad') {
+    const owner = play.owned[property.id];
+    const count = owned
+      ? properties.filter(
+          (entry) => entry.kind === 'railroad' && play.owned[entry.id] === owner && !play.mortgaged.includes(entry.id),
+        ).length
+      : 0;
+    return RAILROAD_COUNTS.map((entry) => ({
+      label: entry.label,
+      amount: formatMoney(RAILROAD_RENTS[entry.id]),
+      active: entry.id === count,
+    }));
+  }
+  const owner = play.owned[property.id];
+  const count = owned
+    ? properties.filter(
+        (entry) => entry.kind === 'utility' && play.owned[entry.id] === owner && !play.mortgaged.includes(entry.id),
+      ).length
+    : 0;
+  return UTILITY_COUNTS.map((entry) => ({
+    label: entry.label,
+    amount: formatMoney((entry.id === 2 ? 10 : 4) * dice),
+    active: entry.id === count,
+  }));
+}
+
 function sanitizeCashInput(text: string): string {
   const negative = text.trim().startsWith('-');
   const digits = text.replace(/\D/g, '');
@@ -874,7 +973,7 @@ const styles = StyleSheet.create({
   bannerText: { ...typography.label, fontSize: 15 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   error: { color: colors.danger },
-  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: 'center' },
   cashCard: {
     width: 168,
     borderWidth: 1.5,
@@ -938,4 +1037,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.accent,
   },
+  rentTitle: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  rentSwatch: { width: 18, height: 18, borderRadius: 4, borderWidth: 1, borderColor: colors.border },
+  rentName: { ...typography.label, fontSize: 16 },
+  rentRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: radii.sm,
+  },
+  rentRowActive: { backgroundColor: colors.accentSoft },
+  rentLabel: { ...typography.label, color: colors.textDim, fontWeight: '500' },
+  rentAmount: { ...typography.label, fontSize: 15 },
+  rentActiveText: { color: colors.accent, fontWeight: '700' },
 });
