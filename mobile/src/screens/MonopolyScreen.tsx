@@ -22,6 +22,7 @@ import {
   cashFromDelta,
   formatMoney,
   getProperty,
+  playerLabel,
   playerToken,
   properties,
   RAILROAD_COUNTS,
@@ -248,8 +249,11 @@ export function MonopolyScreen({ navigation, route }: Props) {
     }
   };
 
-  const partyName = (id: string) =>
-    id === BANK_PARTY_ID ? 'The Bank' : game.players.find((player) => player.id === id)?.name ?? 'Player';
+  const partyName = (id: string) => {
+    if (id === BANK_PARTY_ID) return 'The Bank';
+    const player = game.players.find((entry) => entry.id === id);
+    return player ? playerLabel(player.name, player.token) : 'Player';
+  };
 
   const transfer = async (value: number) => {
     if (!canBank || value <= 0) return;
@@ -395,9 +399,11 @@ export function MonopolyScreen({ navigation, route }: Props) {
     return true;
   };
 
+  const winner = game.players.find((player) => player.name === snapshot.winnerName);
+  const winnerLabel = winner ? playerLabel(winner.name, winner.token) : snapshot.winnerName;
   const banner = complete
-    ? snapshot.winnerName
-      ? `${snapshot.winnerName} wins with the most cash`
+    ? winnerLabel
+      ? `${winnerLabel} wins with the most cash`
       : 'Game complete'
     : turnPrompt(play, game.players);
 
@@ -405,7 +411,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
     { id: BANK_PARTY_ID, label: 'The Bank' },
     ...game.players.map((player) => ({
       id: player.id,
-      label: player.id === localPlayerId ? `${player.name} (you)` : player.name,
+      label: player.id === localPlayerId ? `${playerLabel(player.name, player.token)} (you)` : playerLabel(player.name, player.token),
     })),
   ];
 
@@ -480,7 +486,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
                     disabled={!play.undo && game.events.length === 0}
                   />
                   <Button
-                    label={rollingDice ? 'Rolling…' : inJail ? 'Roll for doubles' : `Roll for ${turnPlayer?.name ?? 'player'}`}
+                    label={rollingDice ? 'Rolling…' : inJail ? 'Roll for doubles' : `Roll for ${turnPlayer ? playerLabel(turnPlayer.name, turnPlayer.token) : 'player'}`}
                     variant="primary"
                     disabled={!canBank || rollingDice || play.pending != null || !turnPlayer}
                     onPress={rollForPlayer}
@@ -579,7 +585,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
               <Pressable
                 key={standing.playerId}
                 accessibilityRole="button"
-                accessibilityLabel={paying ? `${standing.playerName}, paying` : `Select ${standing.playerName} as paying`}
+                accessibilityLabel={paying ? `${playerLabel(standing.playerName, player?.token)}, paying` : `Select ${playerLabel(standing.playerName, player?.token)} as paying`}
                 accessibilityState={{ selected: paying, disabled: !canBank }}
                 disabled={!canBank}
                 onPress={() => setPayerId(standing.playerId)}
@@ -592,7 +598,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
                 {canBank ? (
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={editing ? `Save ${standing.playerName}` : `Edit ${standing.playerName}`}
+                    accessibilityLabel={editing ? `Save ${playerLabel(standing.playerName, player?.token)}` : `Edit ${playerLabel(standing.playerName, player?.token)}`}
                     onPress={() => {
                       if (editing) {
                         void savePlayerEdit();
@@ -660,7 +666,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
                 {editing && game.players.length > 1 ? (
                   confirmingRemoveId === standing.playerId ? (
                     <View style={styles.removeConfirm}>
-                      <Text style={styles.removePrompt}>Remove {standing.playerName}?</Text>
+                      <Text style={styles.removePrompt}>Remove {playerLabel(standing.playerName, player?.token)}?</Text>
                       <Button
                         label="Cancel"
                         variant="ghost"
@@ -765,7 +771,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
               return (
                 <View key={entry.id} style={styles.deed}>
                   <Text style={styles.cardTitle}>
-                    {entry.name} · {owner?.name ?? 'Owner'} · {status}
+                    {entry.name} · {owner ? playerLabel(owner.name, owner.token) : 'Owner'} · {status}
                   </Text>
                   {yours && canDevelop ? (
                     <View style={styles.row}>
@@ -836,7 +842,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
 
       {showCelebration ? (
         <FireworksOverlay
-          winnerName={snapshot.winnerName}
+          winnerName={winnerLabel}
           subtitle="Monopoly"
           onDismiss={dismissCelebration}
         />

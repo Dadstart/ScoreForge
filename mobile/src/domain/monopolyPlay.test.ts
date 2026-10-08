@@ -13,6 +13,7 @@ import {
   landedPropertyId,
   rentDue,
   resolveRoll,
+  turnPrompt,
   undoMonopoly,
   useJailCard,
   type MonopolyPlay,
@@ -239,6 +240,14 @@ describe('monopoly play', () => {
     assert.equal(used.play.jail.ada, undefined);
     assert.equal(used.play.chanceFree.ada, 0);
     assert.equal(used.play.chance.at(-1), 'jail-free');
+  });
+
+  it('puts the piece before the player name', () => {
+    const marked = [{ id: 'ada', name: 'Ada', token: 'car' }];
+    const play = table({ turn: 'ada' });
+    assert.equal(turnPrompt(play, marked), "🚗 Ada's turn. Roll the dice.");
+    const jailed = table({ turn: 'ada', jail: { ada: 0 } });
+    assert.match(turnPrompt(jailed, marked), /^🚗 Ada is in jail/);
   });
 
   it('passes on a property and gives the turn to the next player', () => {

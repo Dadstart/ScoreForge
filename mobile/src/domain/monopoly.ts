@@ -173,6 +173,12 @@ export function emojiFieldValue(value: string): string {
   return pictures[pictures.length - 1] ?? '';
 }
 
+/** The piece, then the name: "🚗 Alex". A player with no piece is just the name. */
+export function playerLabel(name: string, token?: string | null): string {
+  const emoji = playerToken(token)?.emoji;
+  return emoji ? `${emoji} ${name}` : name;
+}
+
 export function playerToken(id: string | null | undefined): { id: string; emoji: string; label: string } | null {
   if (!id) return null;
   const known = PLAYER_TOKENS.find((token) => token.id === id || token.emoji === id);

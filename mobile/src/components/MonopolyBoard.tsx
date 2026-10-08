@@ -26,7 +26,7 @@ import {
   tokenSpacesBetween,
   TRACK_DEPTH,
 } from '../domain/monopolyBoard';
-import { getProperty, playerToken } from '../domain/monopoly';
+import { getProperty, playerLabel, playerToken } from '../domain/monopoly';
 import { fitBoardLabel, fitSize } from '../domain/monopolyLabel';
 import { clampPan, clampZoom, panForZoom, stepZoom } from '../domain/monopolyZoom';
 import { diceMotionMs, MonopolyDice } from './MonopolyDice';
@@ -599,7 +599,7 @@ function BoardCanvas({
               <View
                 key={`owner-${space.index}`}
                 pointerEvents="none"
-                accessibilityLabel={`${owner.name} owns ${space.name}`}
+                accessibilityLabel={`${playerLabel(owner.name, owner.token)} owns ${space.name}`}
                 style={[
                   styles.ownerMark,
                   {
@@ -1433,7 +1433,7 @@ function Piece({
   return (
     <Animated.View
       pointerEvents="none"
-      accessibilityLabel={emoji ? `${name} ${emoji.emoji} piece` : `${name} piece`}
+      accessibilityLabel={emoji ? `${emoji.emoji} ${name} piece` : `${name} piece`}
       style={[
         styles.token,
         {

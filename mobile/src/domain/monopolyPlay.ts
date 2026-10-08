@@ -6,6 +6,7 @@ import {
   cashFromDelta,
   formatMoney,
   getProperty,
+  playerLabel,
   properties,
   transferEvents,
   type BoardProperty,
@@ -51,7 +52,7 @@ export type MonopolyPlay = {
   undo: MonopolyUndo | null;
 };
 
-export type PlayPlayer = { id: string; name: string };
+export type PlayPlayer = { id: string; name: string; token?: string | null };
 
 export type TokenRoute = { playerId: string; spaces: number[] };
 
@@ -309,7 +310,9 @@ export function landedPropertyId(play: MonopolyPlay, tokens: Record<string, numb
 }
 
 function playerName(players: PlayPlayer[], id: string): string {
-  return players.find((player) => player.id === id)?.name ?? 'Player';
+  const player = players.find((entry) => entry.id === id);
+  if (!player) return 'Player';
+  return playerLabel(player.name, player.token);
 }
 
 function nextPlayer(players: PlayPlayer[], current: string): string {
