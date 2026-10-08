@@ -11,6 +11,7 @@ import {
   mortgageProperty,
   acceptCard,
   landedPropertyId,
+  normalizeMonopolyPlay,
   payDue,
   rentDue,
   resolveRoll,
@@ -311,4 +312,49 @@ describe('monopoly play', () => {
     assert.equal(passed.play.owned.reading, undefined);
     assert.equal(passed.play.turn, 'bea');
   });
+
+  it('ends the turn after buying or passing when the undo history is very deep', () => {
+    let prior: MonopolyPlay['undo'] = null;
+    for (let step = 0; step < 40; step += 1) {
+      prior = {
+        turn: 'ada',
+        doubles: 0,
+        jail: {},
+        owned: {},
+        houses: {},
+        mortgaged: [],
+        chance: ['go'],
+        chest: ['go'],
+        chanceFree: {},
+        chestFree: {},
+        pending: null,
+        tokens: { ada: 0 },
+        events: 0,
+        prior,
+      };
+    }
+    const loaded = normalizeMonopolyPlay(table({ undo: prior }), ['ada', 'bea']);
+    assert.ok(loaded);
+    if (!loaded) return;
+    assert.ok(nestingDepth({ monopoly: loaded }) <= 20);
+    const moved = resolveRoll(loaded, { ada: 0 }, players, roll(2, 3));
+    const passed = declineProperty(moved.play, moved.tokens, players);
+    const bought = buyProperty(moved.play, moved.tokens, players, 1500);
+    assert.ok(!('error' in passed));
+    assert.ok(!('error' in bought));
+    if ('error' in passed || 'error' in bought) return;
+    assert.equal(passed.play.turn, 'bea');
+    assert.equal(bought.play.turn, 'bea');
+    assert.equal(passed.play.pending, null);
+    assert.equal(bought.play.pending, null);
+    assert.ok(nestingDepth({ monopoly: passed.play }) <= 20);
+    assert.ok(nestingDepth({ monopoly: bought.play }) <= 20);
+  });
 });
+
+function nestingDepth(value: unknown, depth = 0): number {
+  if (value == null || typeof value !== 'object') return depth;
+  const next = depth + 1;
+  if (Array.isArray(value)) return value.reduce((max, item) => Math.max(max, nestingDepth(item, next)), next);
+  return Object.values(value).reduce((max, item) => Math.max(max, nestingDepth(item, next)), next);
+}

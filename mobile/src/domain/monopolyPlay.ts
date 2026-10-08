@@ -297,7 +297,7 @@ export function normalizeMonopolyPlay(value: unknown, playerIds: string[]): Mono
       label: pending.label,
     };
   }
-  play.undo = raw.undo && typeof raw.undo === 'object' ? raw.undo : null;
+  play.undo = raw.undo && typeof raw.undo === 'object' ? linkedUndo(raw.undo, MAX_UNDO_LINKS) : null;
   return play;
 }
 
@@ -678,6 +678,19 @@ function stamped(events: ScoreEvent[]): ScoreEvent[] {
   return events.map((event) => ({ ...event, timestamp: stamp }));
 }
 
+/**
+ * Firestore rejects a map nested more than 20 levels deep. Each undo keeps the
+ * previous one, so a long game has to drop the oldest links.
+ */
+const MAX_UNDO_LINKS = 8;
+
+function linkedUndo(undo: MonopolyUndo | null | undefined, remaining: number): MonopolyUndo | null {
+  if (!undo || remaining <= 0) return null;
+  const prior = linkedUndo(undo.prior, remaining - 1);
+  if ((undo.prior ?? null) === prior) return undo;
+  return { ...undo, prior };
+}
+
 function packUndo(play: MonopolyPlay, tokens: Record<string, number>, events: number): MonopolyUndo {
   return {
     turn: play.turn,
@@ -693,7 +706,7 @@ function packUndo(play: MonopolyPlay, tokens: Record<string, number>, events: nu
     pending: play.pending ? { ...play.pending } : null,
     tokens: { ...tokens },
     events,
-    prior: play.undo,
+    prior: linkedUndo(play.undo, MAX_UNDO_LINKS - 1),
   };
 }
 

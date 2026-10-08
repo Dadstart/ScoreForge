@@ -1,6 +1,6 @@
 {
   "name": "scoreforge",
-  "version": "1.5.0",
+  "version": "2.1.0",
   "main": "index.ts",
   "dependencies": {
     "@expo/metro-runtime": "~57.0.16",
