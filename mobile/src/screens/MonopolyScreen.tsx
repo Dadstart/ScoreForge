@@ -445,13 +445,15 @@ export function MonopolyScreen({ navigation, route }: Props) {
         ]}
       >
         <View style={styles.header}>
-          <View style={{ flex: 1, gap: 4 }}>
-            <Text style={typography.title}>{game.name}</Text>
-            <Badge label="Monopoly" tone="accent" />
+          <View style={styles.titleBlock}>
+            <Text style={[typography.title, styles.centerText]}>{game.name}</Text>
+            <Badge label="Monopoly" tone="accent" style={styles.centerBadge} />
           </View>
-          <GameHelp templateId="monopoly" />
-          <ShareCodePanel shareCode={game.shareCode} />
-          <HomeButton onPress={() => navigation.navigate('Home')} />
+          <View style={styles.headerTools}>
+            <GameHelp templateId="monopoly" />
+            <ShareCodePanel shareCode={game.shareCode} />
+            <HomeButton onPress={() => navigation.navigate('Home')} />
+          </View>
         </View>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -702,9 +704,9 @@ export function MonopolyScreen({ navigation, route }: Props) {
           })}
         </View>
 
-        <Card>
-          <Text style={typography.section}>Payment</Text>
-          <Text style={typography.body}>
+        <Card style={styles.panel}>
+          <Text style={[typography.section, styles.centerText]}>Payment</Text>
+          <Text style={[typography.body, styles.centerText]}>
             Choose who pays and who receives. The bank is where money comes from for passing Go, and where it goes for taxes or buying property.
           </Text>
           <OptionSelect
@@ -713,6 +715,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
             disabled={!canBank}
             options={partyOptions}
             onChange={setPayerId}
+            centered
           />
           <OptionSelect
             label="Receiving"
@@ -720,13 +723,14 @@ export function MonopolyScreen({ navigation, route }: Props) {
             disabled={!canBank}
             options={partyOptions}
             onChange={setReceiverId}
+            centered
           />
           {paymentPreview ? <Text style={styles.error}>{paymentPreview}</Text> : null}
         </Card>
 
-        <Card>
-          <Text style={typography.section}>Adjust cash</Text>
-          <Text style={typography.body}>A trade, or any other payment the cards do not cover.</Text>
+        <Card style={styles.panel}>
+          <Text style={[typography.section, styles.centerText]}>Adjust cash</Text>
+          <Text style={[typography.body, styles.centerText]}>A trade, or any other payment the cards do not cover.</Text>
           <Field
             value={amount}
             onChangeText={(text) => {
@@ -736,6 +740,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
             keyboardType="number-pad"
             placeholder="Amount"
             editable={canBank}
+            style={styles.amountField}
           />
           <Button
             label={
@@ -746,13 +751,12 @@ export function MonopolyScreen({ navigation, route }: Props) {
             variant="primary"
             disabled={!canBank || !parsedAmount || sameParty}
             onPress={() => void applyAmount()}
-            style={{ alignSelf: 'stretch' }}
           />
         </Card>
 
         {ownedDeeds.length > 0 ? (
-          <Card>
-            <Text style={typography.section}>Deeds</Text>
+          <Card style={styles.panel}>
+            <Text style={[typography.section, styles.centerText]}>Deeds</Text>
             {ownedDeeds.map((entry) => {
               const ownerId = play.owned[entry.id];
               const owner = game.players.find((player) => player.id === ownerId);
@@ -817,8 +821,8 @@ export function MonopolyScreen({ navigation, route }: Props) {
           </Card>
         ) : null}
 
-        <Card>
-          <Text style={typography.section}>Rent lookup</Text>
+        <Card style={styles.panel}>
+          <Text style={[typography.section, styles.centerText]}>Rent lookup</Text>
           <OptionSelect
             label="Property"
             value={property.id}
@@ -830,6 +834,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
               group: entry.group,
             }))}
             onChange={setPropertyId}
+            centered
           />
           <Text style={styles.rentPreview}>
             {quoteOwner
@@ -891,8 +896,8 @@ function RentLookup({
   const lines = rentLines(property, play, dice, owned);
 
   return (
-    <Card>
-      <Text style={typography.section}>Rent lookup</Text>
+    <Card style={styles.panel}>
+      <Text style={[typography.section, styles.centerText]}>Rent lookup</Text>
       <View style={styles.rentTitle}>
         <View style={[styles.rentSwatch, { backgroundColor: property.swatch }]} />
         <Text style={styles.rentName}>{property.name}</Text>
@@ -969,27 +974,48 @@ function CheckIcon() {
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: space.lg, gap: 12 },
+  content: {
+    width: '100%',
+    maxWidth: 1080,
+    alignSelf: 'center',
+    paddingHorizontal: space.lg,
+    gap: 12,
+    alignItems: 'center',
+  },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  header: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 8,
+  },
+  titleBlock: { alignItems: 'center', gap: 4 },
+  headerTools: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  centerText: { textAlign: 'center', alignSelf: 'stretch' },
+  centerBadge: { alignSelf: 'center' },
+  panel: { alignSelf: 'stretch', alignItems: 'center' },
+  amountField: { alignSelf: 'stretch', textAlign: 'center' },
   banner: {
+    alignSelf: 'stretch',
     backgroundColor: colors.accentSoft,
     borderWidth: 1,
     borderColor: 'rgba(212, 168, 75, 0.35)',
     padding: 12,
     borderRadius: radii.md,
     gap: 4,
+    alignItems: 'center',
   },
   bannerNote: {
     ...typography.label,
     fontSize: 13,
     color: colors.textDim,
+    textAlign: 'center',
+    alignSelf: 'stretch',
   },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  bannerText: { ...typography.label, fontSize: 15 },
-  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  error: { color: colors.danger },
-  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: 'center' },
+  actions: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
+  bannerText: { ...typography.label, fontSize: 15, textAlign: 'center', alignSelf: 'stretch' },
+  row: { alignSelf: 'stretch', flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
+  error: { color: colors.danger, textAlign: 'center', alignSelf: 'stretch' },
+  wrap: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: 'center' },
   cashCard: {
     width: 168,
     borderWidth: 1.5,
@@ -1047,16 +1073,19 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: colors.danger,
   },
-  deed: { gap: 8, paddingVertical: 4 },
+  deed: { alignSelf: 'stretch', alignItems: 'center', gap: 8, paddingVertical: 4 },
   rentPreview: {
     ...typography.label,
     fontSize: 16,
     color: colors.accent,
+    textAlign: 'center',
+    alignSelf: 'stretch',
   },
-  rentTitle: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  rentTitle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   rentSwatch: { width: 18, height: 18, borderRadius: 4, borderWidth: 1, borderColor: colors.border },
   rentName: { ...typography.label, fontSize: 16 },
   rentRow: {
+    alignSelf: 'stretch',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',

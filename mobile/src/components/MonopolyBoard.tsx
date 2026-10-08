@@ -225,7 +225,7 @@ function PhoneBoard({ onDragging, diceRoll, startZoom = 1, ...props }: Props & {
   const boardSize = viewport * zoom;
 
   return (
-    <View style={{ gap: 8 }}>
+    <View style={styles.frame}>
       <View
         ref={viewportRef}
         style={[styles.viewport, zoom < 1 && viewport > 0 ? { height: boardSize } : styles.viewportSquare]}
@@ -1461,6 +1461,7 @@ function Piece({
 }
 
 const styles = StyleSheet.create({
+  frame: { width: '100%', alignSelf: 'stretch', gap: 8 },
   viewport: {
     width: '100%',
     overflow: 'hidden',
