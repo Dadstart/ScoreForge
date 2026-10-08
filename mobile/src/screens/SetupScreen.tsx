@@ -6,11 +6,14 @@ import {
   View,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { TokenPicker } from '../components/TokenPicker';
 import { Button, Field, Screen } from '../components/ui';
 import { setupDetail, setupSummary, type ChineseMode, type PlayerCount, type SetCount, type TwoSetGoals } from '../domain/chineseCheckers';
 import type { DrawCount } from '../domain/klondike';
 import type { SuitCount } from '../domain/spider';
-import { createPlayer } from '../domain/models';
+import { nextMonopolyToken, openingPlayer, playersFromMonopolySeats } from '../domain/addPlayer';
+import { createPlayer, type Player } from '../domain/models';
+import { playerToken } from '../domain/monopoly';
 import { getTemplate, templates } from '../domain/templates';
 import { loadDisplayName, saveDisplayName } from '../storage/displayNameStore';
 import { createAndSaveGame } from '../storage/gameStore';
@@ -19,11 +22,27 @@ import { gameScreenForTemplate, type RootStackParamList } from '../navigation/ty
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Setup'>;
 
+type Seat = { id: string; name: string; token: string; emojiText: string };
+
+function newSeat(name: string, token: string): Seat {
+  return { id: createPlayer(name).id, name, token, emojiText: '' };
+}
+
+function nextSeatName(seats: Seat[]): string {
+  const taken = new Set(seats.map((seat) => seat.name.trim().toLowerCase()));
+  for (let n = seats.length + 1; n < seats.length + 20; n += 1) {
+    const name = `Player ${n}`;
+    if (!taken.has(name.toLowerCase())) return name;
+  }
+  return 'Player';
+}
+
 export function SetupScreen({ navigation }: Props) {
   const [templateId, setTemplateId] = useState(templates[0].id);
   const template = useMemo(() => getTemplate(templateId)!, [templateId]);
   const [name, setName] = useState(templates[0].name);
   const [hostName, setHostName] = useState('Player 1');
+  const [seats, setSeats] = useState<Seat[]>(() => [newSeat('Player 1', 'car')]);
   const [targetScore, setTargetScore] = useState(String(templates[0].defaultTargetScore ?? ''));
   const [maxRounds, setMaxRounds] = useState(String(templates[0].defaultMaxRounds ?? '18'));
   const [requireJumps, setRequireJumps] = useState(true);
@@ -38,7 +57,14 @@ export function SetupScreen({ navigation }: Props) {
 
   useEffect(() => {
     void loadDisplayName().then((saved) => {
-      if (saved.trim()) setHostName(saved.trim());
+      const name = saved.trim();
+      if (!name) return;
+      setHostName(name);
+      setSeats((current) => {
+        const [first, ...rest] = current;
+        if (!first || first.name !== 'Player 1') return current;
+        return [{ ...first, name }, ...rest];
+      });
     });
   }, []);
 
@@ -59,25 +85,61 @@ export function SetupScreen({ navigation }: Props) {
     setTableMode('ffa');
     setTableSets(1);
     setTableGoals('opponent');
+    if (id === 'monopoly' && templateId !== 'monopoly') {
+      setSeats([newSeat(hostName.trim() || 'Player 1', 'car')]);
+    }
+    setValidation(null);
+  };
+
+  const updateSeat = (id: string, patch: Partial<Seat>) => {
+    setSeats((current) => current.map((seat) => (seat.id === id ? { ...seat, ...patch } : seat)));
+    setValidation(null);
+  };
+
+  const addSeat = () => {
+    setSeats((current) => {
+      if (current.length >= template.maxPlayers) return current;
+      const used = current.map((seat) => seat.emojiText.trim() || seat.token);
+      return [...current, newSeat(nextSeatName(current), nextMonopolyToken(used))];
+    });
+    setValidation(null);
+  };
+
+  const removeSeat = (id: string) => {
+    const removingHost = seats[0]?.id === id;
+    const nextHost = seats.find((seat) => seat.id !== id);
+    setSeats((current) => (current.length <= 1 ? current : current.filter((seat) => seat.id !== id)));
+    if (removingHost && nextHost) setHostName(nextHost.name);
     setValidation(null);
   };
 
   const start = async () => {
     const host = hostName.trim();
-    if (!host) {
+    if (template.id !== 'monopoly' && !host) {
       setValidation('Enter your display name.');
+      return;
+    }
+
+    const monopolyPlayers =
+      template.id === 'monopoly' ? playersFromMonopolySeats(seats, template.maxPlayers) : null;
+    if (monopolyPlayers && 'error' in monopolyPlayers) {
+      setValidation(monopolyPlayers.error);
       return;
     }
 
     setBusy(true);
     setValidation(null);
     try {
-      await saveDisplayName(host);
+      const players: Player[] =
+        monopolyPlayers && 'players' in monopolyPlayers
+          ? monopolyPlayers.players
+          : [openingPlayer(template.id, host)];
+      await saveDisplayName(players[0]?.name || host);
 
       const game = await createAndSaveGame({
         name: name.trim() || template.name,
         templateId: template.id,
-        players: [createPlayer(host)],
+        players,
         targetScore: showTarget && targetScore ? Number(targetScore) : null,
         maxRounds: showMaxRounds && maxRounds ? Number(maxRounds) : null,
         requireJumps: template.id === 'checkers' ? requireJumps : undefined,
@@ -237,21 +299,72 @@ export function SetupScreen({ navigation }: Props) {
           </>
         ) : null}
 
-        <Text style={[typography.section, styles.section]}>Your name</Text>
-        <Text style={styles.hint}>
-          {template.id === 'klondike' || template.id === 'pyramid' || template.id === 'tripeaks' || template.id === 'spider'
-            ? 'Solo. Use this name on another device to keep playing.'
-            : 'Start alone, then share the code so others can join.'}
-        </Text>
-        <Field
-          value={hostName}
-          onChangeText={(text) => {
-            setHostName(text);
-            setValidation(null);
-          }}
-          placeholder="Your name"
-          maxLength={40}
-        />
+        {template.id === 'monopoly' ? (
+          <>
+            <Text style={[typography.section, styles.section]}>Players</Text>
+            <Text style={styles.hint}>Add everyone at the table and pick a piece for each person.</Text>
+            {seats.map((seat, index) => {
+              const taken = seats
+                .filter((other) => other.id !== seat.id)
+                .map((other) => playerToken(other.emojiText.trim() || other.token)?.emoji)
+                .filter((emoji): emoji is string => Boolean(emoji));
+              return (
+                <View key={seat.id} style={styles.seat}>
+                  <View style={styles.seatName}>
+                    <Field
+                      value={seat.name}
+                      onChangeText={(text) => {
+                        updateSeat(seat.id, { name: text });
+                        if (index === 0) setHostName(text);
+                      }}
+                      placeholder={index === 0 ? 'Your name' : 'Player name'}
+                      accessibilityLabel={index === 0 ? 'Your name' : `Player ${index + 1} name`}
+                      maxLength={40}
+                      style={styles.seatField}
+                    />
+                    {seats.length > 1 ? (
+                      <Button
+                        label="Remove"
+                        variant="ghost"
+                        onPress={() => removeSeat(seat.id)}
+                      />
+                    ) : null}
+                  </View>
+                  <TokenPicker
+                    value={seat.token}
+                    text={seat.emojiText}
+                    taken={taken}
+                    onChange={(token) => updateSeat(seat.id, { token })}
+                    onText={(emojiText) => updateSeat(seat.id, { emojiText })}
+                  />
+                </View>
+              );
+            })}
+            {seats.length < template.maxPlayers ? (
+              <Button label="Add player" variant="secondary" onPress={addSeat} style={styles.addPlayer} />
+            ) : (
+              <Text style={styles.hint}>All {template.maxPlayers} seats are filled.</Text>
+            )}
+          </>
+        ) : (
+          <>
+            <Text style={[typography.section, styles.section]}>Your name</Text>
+            <Text style={styles.hint}>
+              {template.id === 'klondike' || template.id === 'pyramid' || template.id === 'tripeaks' || template.id === 'spider'
+                ? 'Solo. Use this name on another device to keep playing.'
+                : 'Start alone, then share the code so others can join.'}
+            </Text>
+            <Field
+              value={hostName}
+              onChangeText={(text) => {
+                setHostName(text);
+                setValidation(null);
+              }}
+              placeholder="Your name"
+              maxLength={40}
+            />
+          </>
+        )}
 
         {validation ? <Text style={styles.error}>{validation}</Text> : null}
 
@@ -320,5 +433,17 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   row: { flexDirection: 'row', gap: 8, marginTop: space.sm },
+  seat: {
+    marginTop: space.sm,
+    padding: space.sm,
+    gap: 8,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  seatName: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  seatField: { flex: 1 },
+  addPlayer: { alignSelf: 'flex-start', marginTop: space.sm },
   error: { color: colors.danger, marginTop: space.sm },
 });

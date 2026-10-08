@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { withAddedPlayer, withoutPlayer } from './addPlayer';
+import { openingPlayer, withAddedPlayer, withoutPlayer } from './addPlayer';
 import { findLocalPlayerId, nextRoundForPlayer } from './localPlayer';
 import { createGame, createPlayer, createScoreEvent, normalizeShareCode } from './models';
 import { gameScreenForTemplate } from '../navigation/types';
@@ -23,6 +23,23 @@ describe('players', () => {
     assert.throws(() => withAddedPlayer(added, '  ', 4), /player name/);
     const full = withAddedPlayer(withAddedPlayer(added, 'Cy', 4), 'Di', 4);
     assert.throws(() => withAddedPlayer(full, 'Ed', 4), /maximum of 4/);
+  });
+
+  it('gives the Monopoly host the first piece', () => {
+    assert.equal(openingPlayer('monopoly', 'Ada').token, 'car');
+    assert.equal(openingPlayer('rounds', 'Ada').token, undefined);
+  });
+
+  it('gives a new Monopoly player the first free token', () => {
+    const game = fresh('monopoly');
+    const host = game.players[0];
+    assert.ok(host);
+    host.token = 'car';
+    const added = withAddedPlayer(game, 'Bea', 8);
+    assert.equal(added.players[1]?.token, 'dog');
+    assert.equal(added.events.length, 0);
+    host.token = '🚗';
+    assert.equal(withAddedPlayer(game, 'Cy', 8).players[1]?.token, 'dog');
   });
 
   it('removes a player and that player’s scores, and keeps the last one', () => {

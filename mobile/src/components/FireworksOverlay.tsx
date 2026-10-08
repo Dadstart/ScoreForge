@@ -1,6 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
-import { LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
-import Svg, { Circle, Line } from 'react-native-svg';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Animated, Easing, LayoutChangeEvent, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Circle, Path } from 'react-native-svg';
+import type { Nav } from '../navigation/types';
+import { colors, fonts } from '../theme';
+import { createFireworkShow, type FireworkScene, type FireworkShow } from './fireworksShow';
 
 type Props = {
   winnerName: string | null;
@@ -9,203 +14,201 @@ type Props = {
   onDismiss: () => void;
 };
 
-type Particle = {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  life: number;
-  maxLife: number;
-  radius: number;
-  color: string;
-};
-
-type Rocket = {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  burstAtY: number;
-  life: number;
-  color: string;
-};
-
-const PALETTE = ['#ffd740', '#ff5252', '#448aff', '#69f0ae', '#e040fb', '#ffab40', '#ffffff'];
-
 export function FireworksOverlay({ winnerName, subtitle = 'ScoreForge', onDismiss }: Props) {
-  const [size, setSize] = useState({ width: 300, height: 500 });
-  const [frame, setFrame] = useState(0);
-  const particles = useRef<Particle[]>([]);
-  const rockets = useRef<Rocket[]>([]);
-  const elapsed = useRef(0);
-  const nextLaunch = useRef(0);
-  const random = useRef(Math.random);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  const entrance = useRef(new Animated.Value(0)).current;
+  const navigation = useNavigation<Nav>();
+  const insets = useSafeAreaInsets();
+  const leftHome = useRef(false);
 
-  const burst = (x: number, y: number, color: string) => {
-    const count = 28 + Math.floor(Math.random() * 20);
-    for (let i = 0; i < count; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const speed = 60 + Math.random() * 160;
-      particles.current.push({
-        x,
-        y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        life: 0.7 + Math.random() * 1.1,
-        maxLife: 1.8,
-        radius: 1.6 + Math.random() * 2.4,
-        color: Math.random() < 0.25 ? PALETTE[Math.floor(Math.random() * PALETTE.length)] : color,
-      });
-    }
-  };
-
-  const launch = (immediate: boolean) => {
-    const { width, height } = size;
-    const color = PALETTE[Math.floor(Math.random() * PALETTE.length)];
-    const x = width * (0.15 + Math.random() * 0.7);
-    const burstY = height * (0.18 + Math.random() * 0.35);
-    if (immediate) {
-      burst(x, burstY, color);
-      return;
-    }
-    const startY = height + 10;
-    rockets.current.push({
-      x,
-      y: startY,
-      vx: (Math.random() - 0.5) * 40,
-      vy: -Math.sqrt(2 * 180 * (startY - burstY)) * (0.85 + Math.random() * 0.25),
-      burstAtY: burstY,
-      life: 2.5,
-      color,
-    });
-  };
+  const goHome = useCallback(() => {
+    if (leftHome.current) return;
+    leftHome.current = true;
+    onDismiss();
+    navigation.navigate('Home');
+  }, [navigation, onDismiss]);
 
   useEffect(() => {
-    particles.current = [];
-    rockets.current = [];
-    elapsed.current = 0;
-    nextLaunch.current = 0;
-    for (let i = 0; i < 3; i++) launch(true);
+    entrance.setValue(0);
+    Animated.timing(entrance, {
+      toValue: 1,
+      duration: 480,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: Platform.OS !== 'web',
+    }).start();
+  }, [entrance]);
 
-    const id = setInterval(() => {
-      const dt = 0.016;
-      elapsed.current += dt;
-      const { width, height } = size;
-
-      if (elapsed.current < 5.5 && elapsed.current >= nextLaunch.current) {
-        launch(false);
-        nextLaunch.current = elapsed.current + 0.18 + Math.random() * 0.24;
-      }
-
-      rockets.current = rockets.current.flatMap((rocket) => {
-        const next = {
-          ...rocket,
-          vy: rocket.vy + 18 * dt,
-          x: rocket.x + rocket.vx * dt,
-          y: rocket.y + rocket.vy * dt,
-          life: rocket.life - dt,
-        };
-        if (next.y <= next.burstAtY || next.life <= 0 || next.vy > 40) {
-          burst(next.x, next.y, next.color);
-          return [];
-        }
-        return [next];
-      });
-
-      particles.current = particles.current
-        .map((p) => ({
-          ...p,
-          vy: p.vy + 120 * dt,
-          vx: p.vx * 0.985,
-          x: p.x + p.vx * dt,
-          y: p.y + p.vy * dt,
-          life: p.life - dt,
-          radius: p.radius * 0.995,
-        }))
-        .filter((p) => p.life > 0 && p.y < height + 20);
-
-      void width;
-      setFrame((f) => f + 1);
-    }, 16);
-
-    return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [size.width, size.height]);
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      goHome();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [goHome]);
 
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
-    if (width > 0 && height > 0) setSize({ width, height });
+    if (width <= 0 || height <= 0) return;
+    setSize((prev) => (prev.width === width && prev.height === height ? prev : { width, height }));
   };
 
+  const titleLift = entrance.interpolate({ inputRange: [0, 1], outputRange: [14, 0] });
+
   return (
-    <View style={styles.overlay} onLayout={onLayout}>
-      <Svg width={size.width} height={size.height} style={StyleSheet.absoluteFill}>
-        {rockets.current.map((r, i) => (
-          <Line
-            key={`r-${frame}-${i}`}
-            x1={r.x}
-            y1={r.y}
-            x2={r.x - r.vx * 0.04}
-            y2={r.y - r.vy * 0.04}
-            stroke={r.color}
-            strokeWidth={2}
-            opacity={0.7}
+    <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={goHome}>
+      <View style={styles.overlay} onLayout={onLayout}>
+        {size.width > 0 && size.height > 0 ? <FireworkField width={size.width} height={size.height} /> : null}
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back to home"
+          onPress={goHome}
+          style={[styles.close, { top: insets.top + 12, right: Math.max(12, insets.right + 12) }]}
+        >
+          <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+            <Path d="M6 6 18 18M18 6 6 18" stroke={colors.text} strokeWidth={2.4} strokeLinecap="round" />
+          </Svg>
+        </Pressable>
+
+        <Animated.View style={[styles.center, { opacity: entrance, transform: [{ translateY: titleLift }] }]}>
+          <Text style={styles.winner}>{winnerName ? `${winnerName} wins!` : 'Winner!'}</Text>
+          <Text style={styles.sub}>{subtitle}</Text>
+        </Animated.View>
+
+        <Animated.View
+          pointerEvents="box-none"
+          style={[styles.buttonBar, { opacity: entrance, bottom: Math.max(24, insets.bottom + 16) }]}
+        >
+          <Pressable style={styles.btn} onPress={onDismiss}>
+            <Text style={styles.btnText}>Continue</Text>
+          </Pressable>
+        </Animated.View>
+      </View>
+    </Modal>
+  );
+}
+
+function FireworkField({ width, height }: { width: number; height: number }) {
+  const showRef = useRef<FireworkShow | null>(null);
+  if (showRef.current == null) showRef.current = createFireworkShow(width, height);
+  const show = showRef.current;
+  const [scene, setScene] = useState<FireworkScene>(() => show.step(1 / 60));
+
+  useEffect(() => {
+    show.resize(width, height);
+  }, [show, width, height]);
+
+  useEffect(() => {
+    let frame = 0;
+    let last = performance.now();
+    const loop = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      setScene(show.step(dt));
+      frame = requestAnimationFrame(loop);
+    };
+    frame = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(frame);
+  }, [show]);
+
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <Svg width={width} height={height}>
+        {scene.stars.map((star, index) => (
+          <Circle
+            key={`star-${index}`}
+            cx={star.x}
+            cy={star.y}
+            r={star.r}
+            fill={star.gold ? colors.accent : '#f3f6f4'}
+            opacity={star.opacity}
           />
         ))}
-        {particles.current.map((p, i) => (
+        {scene.flashes.map((flash) => (
           <Circle
-            key={`p-${frame}-${i}`}
-            cx={p.x}
-            cy={p.y}
-            r={p.radius}
-            fill={p.color}
-            opacity={Math.max(0, p.life / p.maxLife)}
+            key={`ring-${flash.id}`}
+            cx={flash.x}
+            cy={flash.y}
+            r={Math.max(1, flash.ringRadius)}
+            stroke={flash.color}
+            strokeWidth={1.4}
+            fill="none"
+            opacity={flash.ringOpacity}
+          />
+        ))}
+        {scene.streaks.map((streak) => (
+          <Path
+            key={streak.key}
+            d={streak.d}
+            stroke={streak.color}
+            strokeWidth={streak.width}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            fill="none"
+            opacity={streak.opacity}
           />
         ))}
       </Svg>
-
-      <View style={styles.center}>
-        <Text style={styles.winner}>{winnerName ? `${winnerName} wins!` : 'Winner!'}</Text>
-        <Text style={styles.sub}>{subtitle}</Text>
-      </View>
-
-      <Pressable style={styles.btn} onPress={onDismiss}>
-        <Text style={styles.btnText}>Continue</Text>
-      </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   overlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(8,6,18,0.72)',
-    zIndex: 100,
+    flex: 1,
+    backgroundColor: 'rgba(3, 8, 6, 0.84)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  center: { alignItems: 'center', gap: 6 },
-  winner: {
-    color: '#fff',
-    fontSize: 36,
-    fontWeight: '800',
-    textAlign: 'center',
-    paddingHorizontal: 16,
-  },
-  sub: { color: '#ffd740', fontSize: 18, fontWeight: '600' },
-  btn: {
+  close: {
     position: 'absolute',
-    bottom: 36,
-    backgroundColor: '#d4a84b',
+    zIndex: 2,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(3, 8, 6, 0.55)',
+    borderWidth: 1,
+    borderColor: 'rgba(243, 246, 244, 0.4)',
+  },
+  center: { alignItems: 'center', gap: 6, paddingHorizontal: 24 },
+  winner: {
+    fontFamily: fonts.display,
+    color: colors.text,
+    fontSize: 36,
+    fontWeight: '700',
+    letterSpacing: -0.4,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 12,
+  },
+  sub: {
+    fontFamily: fonts.body,
+    color: colors.accent,
+    fontSize: 18,
+    fontWeight: '600',
+    textShadowColor: 'rgba(0, 0, 0, 0.7)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 8,
+  },
+  buttonBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  btn: {
+    backgroundColor: colors.accent,
     paddingHorizontal: 28,
     paddingVertical: 14,
     borderRadius: 12,
     minWidth: 140,
     alignItems: 'center',
   },
-  btnText: { color: '#1a1408', fontWeight: '700', fontSize: 16 },
+  btnText: { fontFamily: fonts.body, color: colors.accentText, fontWeight: '700', fontSize: 16 },
 });

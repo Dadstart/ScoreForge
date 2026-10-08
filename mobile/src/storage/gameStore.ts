@@ -20,6 +20,7 @@ import { createKlondikeState, packKlondike, unpackKlondike, type DrawCount } fro
 import { createPyramidState, packPyramid, unpackPyramid } from '../domain/pyramid';
 import { createSpiderState, packSpider, unpackSpider, type SuitCount } from '../domain/spider';
 import { createTriPeaksState, packTriPeaks, unpackTriPeaks } from '../domain/tripeaks';
+import { unpackMonopoly } from '../domain/monopolyPlay';
 import { createYahtzeeState } from '../domain/yahtzee';
 import {
   isShareCode,
@@ -151,7 +152,7 @@ function fromStored(shareCode: string, data: StoredGame, events: ScoreEvent[]): 
     spider: unpackSpider(data.spider),
     tripeaks: unpackTriPeaks(data.tripeaks),
     yahtzee: data.yahtzee ?? null,
-    monopoly: data.monopoly ?? null,
+    monopoly: unpackMonopoly(data.monopoly, Array.isArray(data.players) ? data.players.map((player) => player.id) : []),
     revision: revisionOf(data),
     createdAt: typeof data.createdAt === 'string' ? data.createdAt : new Date().toISOString(),
     updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : new Date().toISOString(),

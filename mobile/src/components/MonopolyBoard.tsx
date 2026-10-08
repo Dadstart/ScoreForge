@@ -1,10 +1,11 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
+  Animated,
+  Easing,
   PanResponder,
   Pressable,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
   type GestureResponderEvent,
   type StyleProp,
@@ -14,62 +15,116 @@ import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import type { Player } from '../domain/models';
 import {
   boardSpaces,
-  cellToSpace,
+  cellBox,
+  centerTitleFont,
+  jailCell,
+  layoutJailedTokens,
+  layoutSharedTokens,
+  layoutVisitingTokens,
+  ownerMarkPlacement,
   spaceToCell,
   tokenSpace,
-  type BoardSpace,
+  tokenSpacesBetween,
+  TRACK_DEPTH,
 } from '../domain/monopolyBoard';
-import { getProperty, playerToken } from '../domain/monopoly';
+import { getProperty, playerLabel, playerToken } from '../domain/monopoly';
+import { fitBoardLabel, fitSize } from '../domain/monopolyLabel';
+import { clampPan, clampZoom, panForZoom, stepZoom } from '../domain/monopolyZoom';
+import { diceMotionMs, MonopolyDice } from './MonopolyDice';
+import { CARD_REVEAL_MS, MonopolyCardTable } from './MonopolyCards';
+import { MoneyBills, type MoneyFlight } from './MoneyBills';
 import { colors, fonts, radii } from '../theme';
+import type { DrawnCard } from '../domain/monopolyPlay';
 
 const TOKEN_COLORS = ['#e86a5c', '#6fbf8a', '#7eb6ff', '#d4a84b', '#d93a96', '#f7941d', '#c5d0c9', '#f2e3a0'];
+/** Cells at least this wide show names and prices. Smaller cells are a color map. */
+const CLOSE_CELL = 96;
+
+type DiceRollView = { id: number; faces: [number, number] };
+
+export type TokenRouteView = { id: number; playerId: string; spaces: number[] };
 
 type Props = {
   players: Player[];
+  /** Property id to the player who owns it. */
+  owned?: Record<string, string>;
   tokenSpaces?: Record<string, number>;
-  enabled: boolean;
-  onLand: (playerId: string, space: BoardSpace) => void;
+  /** Players currently in jail, keyed by player id. Just Visiting is everyone else on that square. */
+  inJail?: Record<string, number>;
+  tokenRoute?: TokenRouteView | null;
+  drawnCards?: DrawnCard[];
+  cardOffer?: { deck: 'chance' | 'chest'; id: string; space: number } | null;
+  onAcceptCard?: () => void;
+  chanceCount?: number;
+  chestCount?: number;
+  moneyFlight?: MoneyFlight | null;
   onDragging: (dragging: boolean) => void;
+  diceRoll?: DiceRollView | null;
+  /** Roll control, drawn at the top middle of the green center. */
+  roll?: ReactNode;
 };
 
-type Origin = { x: number; y: number; size: number };
-
-const PHONE_LAYOUT = 760;
-const START_ZOOM = 2;
-const MIN_ZOOM = 1;
-const MAX_ZOOM = 3.5;
-
-function clampZoom(zoom: number) {
-  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
-}
-
-function clampPan(pan: { x: number; y: number }, zoom: number, viewport: number) {
-  const min = Math.min(0, viewport * (1 - zoom));
-  return {
-    x: Math.min(0, Math.max(min, pan.x)),
-    y: Math.min(0, Math.max(min, pan.y)),
-  };
-}
+const VIEW_FRAME = 0;
 
 function touchDistance(a: { pageX: number; pageY: number }, b: { pageX: number; pageY: number }) {
   return Math.hypot(a.pageX - b.pageX, a.pageY - b.pageY);
 }
 
 export function MonopolyBoard(props: Props) {
-  const window = useWindowDimensions();
-  if (Math.min(window.width, window.height) < PHONE_LAYOUT) return <PhoneBoard {...props} />;
-  return <BoardCanvas {...props} />;
+  return <PhoneBoard {...props} startZoom={1} />;
 }
 
-function PhoneBoard({ onDragging, ...props }: Props) {
+const ZOOM_BTN = 44;
+const ZOOM_GAP = 8;
+const ZOOM_INSET = 12;
+
+/** How far owner marks hang into the green from the track. */
+function ownerClearance(board: number) {
+  const along = (board * (1 - 2 * TRACK_DEPTH)) / 9;
+  return Math.round(along * 0.62 + board * TRACK_DEPTH * 0.04) + 10;
+}
+
+/** Keep + and − on the green center, and inside the view when that corner is off screen. */
+function zoomDockSpot(pan: { x: number; y: number }, zoom: number, viewport: number) {
+  const board = viewport * zoom;
+  const edge = TRACK_DEPTH;
+  const viewLeft = board <= 0 ? 0 : -pan.x / board;
+  const viewTop = board <= 0 ? 0 : -pan.y / board;
+  const viewRight = board <= 0 ? 1 : (-pan.x + viewport) / board;
+  const viewBottom = board <= 0 ? 1 : (-pan.y + viewport) / board;
+  const feltTop = Math.max(edge, viewTop);
+  const feltRight = Math.min(1 - edge, viewRight);
+  const feltLeft = Math.max(edge, viewLeft);
+  const feltBottom = Math.min(1 - edge, viewBottom);
+  const stack = ZOOM_BTN * 2 + ZOOM_GAP;
+  const onFelt = feltRight > feltLeft && feltBottom > feltTop;
+  const ownerClear = ownerClearance(board);
+  let top = onFelt ? pan.y + feltTop * board + ownerClear : ZOOM_INSET;
+  let right = onFelt ? viewport - (pan.x + feltRight * board) + ownerClear : ZOOM_INSET;
+  top = Math.min(Math.max(ZOOM_INSET, top), Math.max(ZOOM_INSET, viewport - stack - ZOOM_INSET));
+  right = Math.min(Math.max(ZOOM_INSET, right), Math.max(ZOOM_INSET, viewport - ZOOM_BTN - ZOOM_INSET));
+  return { top, right };
+}
+
+/** Top middle of the green, below the owner marks that hang in from the top row. */
+function rollDockBox(pan: { x: number; y: number }, zoom: number, viewport: number) {
+  const board = viewport * zoom;
+  const inset = TRACK_DEPTH * board;
+  return {
+    left: pan.x + inset,
+    top: pan.y + inset + ownerClearance(board),
+    width: Math.max(0, board - inset * 2),
+  };
+}
+
+function PhoneBoard({ onDragging, diceRoll, roll, startZoom = 1, ...props }: Props & { startZoom?: number }) {
   const viewportRef = useRef<View>(null);
   const [viewport, setViewport] = useState(0);
-  const [zoom, setZoom] = useState(START_ZOOM);
+  const [zoom, setZoom] = useState(startZoom);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const zoomRef = useRef(zoom);
   const panRef = useRef(pan);
   const viewportRefSize = useRef(0);
-  const movingPiece = useRef(false);
   const onDraggingRef = useRef(onDragging);
   zoomRef.current = zoom;
   panRef.current = pan;
@@ -86,9 +141,8 @@ function PhoneBoard({ onDragging, ...props }: Props) {
 
   const responder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => !movingPiece.current,
+      onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: (evt, g) => {
-        if (movingPiece.current) return false;
         return (evt.nativeEvent.touches?.length ?? 0) >= 2 || Math.abs(g.dx) > 6 || Math.abs(g.dy) > 6;
       },
       onPanResponderTerminationRequest: () => false,
@@ -130,11 +184,11 @@ function PhoneBoard({ onDragging, ...props }: Props) {
       },
       onPanResponderRelease: () => {
         gesture.current.pinch = null;
-        if (!movingPiece.current) onDraggingRef.current(false);
+        onDraggingRef.current(false);
       },
       onPanResponderTerminate: () => {
         gesture.current.pinch = null;
-        if (!movingPiece.current) onDraggingRef.current(false);
+        onDraggingRef.current(false);
       },
     }),
   ).current;
@@ -176,20 +230,10 @@ function PhoneBoard({ onDragging, ...props }: Props) {
     setPan(nextPan);
   };
 
-  const changeZoom = (delta: number) => {
+  const changeZoom = (direction: -1 | 1) => {
     const prev = zoomRef.current;
-    const next = clampZoom(prev + delta);
-    const size = viewportRefSize.current;
-    const focus = size / 2;
-    const current = panRef.current;
-    const nextPan = clampPan(
-      {
-        x: focus - ((focus - current.x) * next) / prev,
-        y: focus - ((focus - current.y) * next) / prev,
-      },
-      next,
-      size,
-    );
+    const next = stepZoom(prev, direction);
+    const nextPan = panForZoom(panRef.current, prev, next, viewportRefSize.current);
     zoomRef.current = next;
     panRef.current = nextPan;
     setZoom(next);
@@ -199,255 +243,524 @@ function PhoneBoard({ onDragging, ...props }: Props) {
   const boardSize = viewport * zoom;
 
   return (
-    <View style={{ gap: 8 }}>
+    <View style={styles.frame}>
       <View
         ref={viewportRef}
-        style={styles.viewport}
+        style={[styles.viewport, zoom < 1 && viewport > 0 ? { height: boardSize } : styles.viewportSquare]}
         onLayout={(event) => {
-          const width = event.nativeEvent.layout.width;
+          const width = Math.max(0, event.nativeEvent.layout.width - VIEW_FRAME * 2);
           if (width <= 0 || width === viewportRefSize.current) return;
           const first = viewportRefSize.current === 0;
           viewportRefSize.current = width;
           setViewport(width);
           if (first) {
-            const origin = width - width * START_ZOOM;
+            const origin = width - width * startZoom;
             const next = { x: origin, y: origin };
             panRef.current = next;
             setPan(next);
           }
         }}
         onTouchStart={() => onDraggingRef.current(true)}
-        onTouchEnd={() => {
-          if (!movingPiece.current) onDraggingRef.current(false);
-        }}
-        onTouchCancel={() => {
-          if (!movingPiece.current) onDraggingRef.current(false);
-        }}
+        onTouchEnd={() => onDraggingRef.current(false)}
+        onTouchCancel={() => onDraggingRef.current(false)}
       >
         {viewport > 0 ? (
           <BoardCanvas
             {...props}
-            onDragging={(dragging) => {
-              movingPiece.current = dragging;
-              onDraggingRef.current(dragging);
-            }}
             panHandlers={responder.panHandlers}
-            showCenter={false}
             style={{ position: 'absolute', width: boardSize, height: boardSize, left: pan.x, top: pan.y }}
           />
         ) : null}
-        <View style={styles.zoomDock} pointerEvents="box-none">
+        {diceRoll && !props.cardOffer ? (
+          <View pointerEvents="none" style={styles.diceLayer}>
+            <MonopolyDice roll={diceRoll} />
+          </View>
+        ) : null}
+        {viewport > 0 && roll ? (
+          <View pointerEvents="box-none" style={[styles.rollDock, rollDockBox(pan, zoom, viewport)]}>
+            {roll}
+          </View>
+        ) : null}
+        <View
+          pointerEvents="box-none"
+          style={[styles.zoomDock, zoomDockSpot(pan, zoom, viewport)]}
+        >
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Zoom in"
-            onPress={() => changeZoom(0.5)}
-            style={styles.zoomBtn}
+            onPress={() => changeZoom(1)}
+            style={({ pressed }) => [styles.zoomBtn, pressed && styles.zoomBtnPressed]}
           >
             <Text style={styles.zoomLabel}>+</Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Zoom out"
-            onPress={() => changeZoom(-0.5)}
-            style={styles.zoomBtn}
+            onPress={() => changeZoom(-1)}
+            style={({ pressed }) => [styles.zoomBtn, pressed && styles.zoomBtnPressed]}
           >
             <Text style={styles.zoomLabel}>−</Text>
           </Pressable>
         </View>
       </View>
-      <Text style={styles.phoneHint}>Drag the board to look around. Pinch, or use + and −, to zoom.</Text>
+      {startZoom > 1 ? (
+        <Text style={styles.phoneHint}>Drag the board to look around. Pinch, or use + and −, to zoom.</Text>
+      ) : null}
     </View>
   );
 }
 
 function BoardCanvas({
   players,
+  owned,
   tokenSpaces,
-  enabled,
-  onLand,
-  onDragging,
+  inJail,
+  tokenRoute = null,
+  drawnCards = [],
+  cardOffer = null,
+  onAcceptCard,
+  chanceCount = 16,
+  chestCount = 16,
+  moneyFlight = null,
   style,
   panHandlers,
-  showCenter = true,
-}: Props & {
+  diceRoll = null,
+  pinDice = false,
+}: Omit<Props, 'onDragging'> & {
   style?: StyleProp<ViewStyle>;
   panHandlers?: ReturnType<typeof PanResponder.create>['panHandlers'];
-  showCenter?: boolean;
+  pinDice?: boolean;
 }) {
-  const boardRef = useRef<View>(null);
-  const origin = useRef<Origin>({ x: 0, y: 0, size: 0 });
+  const flightRef = useRef(moneyFlight);
+  flightRef.current = moneyFlight;
+  const [burst, setBurst] = useState<{ id: number; space: number } | null>(null);
   const [size, setSize] = useState(0);
-  const [hover, setHover] = useState<number | null>(null);
+  const drawnRef = useRef(drawnCards);
+  drawnRef.current = drawnCards;
+  const drawCursor = useRef(0);
+  const drawnKey = drawnCards.map((card) => `${card.deck}:${card.space}:${card.id}`).join('|');
+  const [trackedDraw, setTrackedDraw] = useState(drawnKey);
+  if (trackedDraw !== drawnKey) {
+    setTrackedDraw(drawnKey);
+    drawCursor.current = 0;
+  }
 
-  const rememberOrigin = () => {
-    boardRef.current?.measureInWindow((x, y, width) => {
-      origin.current = { x, y, size: width };
-      setSize(width);
-    });
+  const showDrawnCard = (space: number) => {
+    const list = drawnRef.current;
+    let index = list.findIndex((card, item) => item >= drawCursor.current && card.space === space);
+    if (index < 0 && drawCursor.current < list.length) index = drawCursor.current;
+    if (index < 0) return;
+    const card = list[index];
+    if (!card) return;
+    drawCursor.current = index + 1;
   };
 
-  const spaceAt = (pageX: number, pageY: number): number | null => {
-    const { x, y, size: boardSize } = origin.current;
-    if (boardSize <= 0) return null;
-    const cell = boardSize / 11;
-    const col = Math.floor((pageX - x) / cell);
-    const row = Math.floor((pageY - y) / cell);
-    return cellToSpace(row, col);
+  useEffect(() => {
+    if (!moneyFlight) {
+      setBurst(null);
+      return;
+    }
+    if (moneyFlight.routeId != null) return;
+    setBurst({ id: moneyFlight.id, space: moneyFlight.space });
+  }, [moneyFlight]);
+
+  const onTokenSettled = (playerId: string) => {
+    const flight = flightRef.current;
+    if (!flight || flight.routeId == null || flight.playerId !== playerId) return;
+    setBurst({ id: flight.id, space: flight.space });
   };
+
+  const cell = size > 0 ? size * TRACK_DEPTH : 48;
+  const detail = cell >= CLOSE_CELL;
 
   return (
     <View
-      ref={boardRef}
-      onLayout={rememberOrigin}
+      onLayout={(event) => {
+        const width = event.nativeEvent.layout.width;
+        setSize((current) => (current === width ? current : width));
+      }}
       style={[styles.board, style]}
       accessibilityLabel="Monopoly board"
       {...panHandlers}
     >
       {boardSpaces.map((space) => {
         const { row, col } = spaceToCell(space.index);
+        const frame = cellBox(row, col);
+        const boardPx = size > 0 ? size : 480;
+        const pxW = frame.w * boardPx;
+        const pxH = frame.h * boardPx;
+        const inward = row === 0 || row === 10 ? pxH : pxW;
+        const along = row === 0 || row === 10 ? pxW : pxH;
         const property = space.propertyId ? getProperty(space.propertyId) : undefined;
         const isRailroad = property?.kind === 'railroad';
+        const isUtility = property?.kind === 'utility';
         const isCorner = space.index % 10 === 0;
-        const swatch = property && !isRailroad ? property.swatch : undefined;
-        const cell = size > 0 ? size / 11 : 48;
-        const bar = Math.max(10, Math.round(cell * 0.22));
-        const label = Math.max(11, Math.round(cell * 0.13));
+        const swatch = property && !isRailroad && !isUtility ? property.swatch : undefined;
+        const bar = swatch
+          ? detail
+            ? Math.max(12, Math.round(cell * 0.18))
+            : Math.max(8, Math.round(cell * 0.36))
+          : 0;
+        const label = detail ? Math.max(12, Math.round(cell * 0.13)) : Math.max(10, Math.round(cell * 0.2));
         const lane = !isCorner && (col === 0 || col === 10) ? sideLane(cell) : tokenLane(cell);
-        const fitted = space.propertyId
-          ? fitPropertyLabel(space.name, labelBounds(row, col, cell, bar, isRailroad), label)
+        const mark = space.name === 'Chance' ? 'chance' : space.name === 'Community Chest' ? 'chest' : null;
+        const priceLine = detail && (property || space.tax) ? Math.max(12, Math.round(cell * 0.11)) : 0;
+        const nameReserve = priceLine + 40;
+        const utility = isUtility ? Math.min(utilityExtent(cell, detail), Math.max(18, pxH - nameReserve)) : 0;
+        const sidewaysRail = isRailroad && (col === 0 || col === 10);
+        const train = isRailroad
+          ? railroadMark(cell, col, detail, pxW, pxH, lane, sidewaysRail ? 0 : nameReserve)
           : null;
+        const trainHeight = train?.height ?? 0;
+        const trainWidth = sidewaysRail ? (train?.width ?? 0) : 0;
+        const trainInset = trainWidth > 0 ? trainWidth + 4 : 0;
+        const farRail = !detail && isRailroad && (row === 0 || row === 10);
+        const railCaption = farRail ? Math.max(12, Math.round(cell * 0.26)) : 0;
+        const padLane = farRail ? Math.min(lane, Math.max(8, cell - railCaption - 18)) : lane;
+        const bounds = labelBounds(row, col, pxW, pxH, bar, lane, trainHeight, priceLine, utility, trainInset);
+        const fullName = property?.name ?? space.name;
+        const nameText = mark || farRail ? null : !detail && space.tax ? `$${space.tax}` : fullName;
+        const fitted =
+          nameText && bounds.width >= 22 && bounds.height >= 12
+            ? fitBoardLabel(nameText, !detail && space.tax ? nameText : space.short, bounds, label)
+            : null;
+        const barFit = !detail && swatch && !fitted
+          ? fitBoardLabel(fullName, space.short, { width: Math.max(8, along - 8), height: Math.max(8, bar - 2) }, Math.max(8, bar - 4), 1)
+          : null;
+        const barLabel = barFit?.lines[0] ?? null;
+        const barTurn = col === 0 ? '-90deg' : col === 10 ? '90deg' : null;
+        const amount = detail && fitted ? (property?.price ?? space.tax) : undefined;
         return (
           <View
             key={space.index}
             accessibilityLabel={space.name}
             style={[
               styles.cell,
-              isCorner ? null : spacePadding(row, col, lane, isRailroad ? 0 : bar),
+              { backgroundColor: spaceTint(space.name, property?.kind) },
+              isCorner ? null : spacePadding(row, col, padLane, swatch ? bar : 0, inward, railCaption, trainInset),
               {
-                left: `${(col * 100) / 11}%`,
-                top: `${(row * 100) / 11}%`,
+                left: `${frame.x * 100}%`,
+                top: `${frame.y * 100}%`,
+                width: `${frame.w * 100}%`,
+                height: `${frame.h * 100}%`,
               },
-              hover === space.index && styles.cellHover,
             ]}
           >
             {isCorner ? (
-              <View pointerEvents="none" style={cornerFrame(row, col, cell, lane)}>
-                <CornerArt index={space.index} cell={Math.max(36, cell - lane)} />
+              <View pointerEvents="none" style={styles.cornerFill}>
+                <CornerArt index={space.index} cell={Math.max(48, cell)} detail={detail} />
               </View>
             ) : (
               <>
                 {swatch ? (
-                  <View style={[styles.swatch, barEdge(row, col, bar), { backgroundColor: swatch }]} />
+                  <View
+                    style={[
+                      styles.swatch,
+                      barEdge(row, col, bar),
+                      {
+                        backgroundColor: swatch,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        overflow: 'hidden',
+                      },
+                    ]}
+                  >
+                    {barLabel && barTurn ? (
+                      <View
+                        style={{
+                          position: 'absolute',
+                          width: along - 4,
+                          height: bar,
+                          left: (bar - (along - 4)) / 2,
+                          top: (along - bar) / 2,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          transform: [{ rotate: barTurn }],
+                        }}
+                      >
+                        <Text
+                          style={{
+                            color: inkOn(swatch),
+                            fontFamily: fonts.body,
+                            fontWeight: '800',
+                            fontSize: fitSize(barLabel, along - 8, Math.max(8, bar - 4)),
+                            lineHeight: Math.max(10, bar - 2),
+                            width: along - 8,
+                            textAlign: 'center',
+                          }}
+                          numberOfLines={1}
+                        >
+                          {barLabel}
+                        </Text>
+                      </View>
+                    ) : barLabel ? (
+                      <Text
+                        style={{
+                          color: inkOn(swatch),
+                          fontFamily: fonts.body,
+                          fontWeight: '800',
+                          fontSize: fitSize(barLabel, along - 6, Math.max(8, bar - 4)),
+                          lineHeight: Math.max(10, bar - 2),
+                          textAlign: 'center',
+                        }}
+                        numberOfLines={1}
+                      >
+                        {barLabel}
+                      </Text>
+                    ) : null}
+                  </View>
                 ) : null}
-                {isRailroad ? <TrainMark row={row} col={col} cell={cell} /> : null}
-                <Text
-                  style={[
-                    styles.cellText,
-                    {
-                      fontSize: fitted?.fontSize ?? label,
-                      lineHeight: fitted?.lineHeight ?? Math.round(label * 1.15),
-                      width: '100%',
-                    },
-                  ]}
-                  numberOfLines={fitted?.lines ?? 2}
-                >
-                  {fitted?.text ?? space.short}
-                </Text>
+                {train ? (
+                  <TrainMark
+                    row={row}
+                    col={col}
+                    cell={cell}
+                    detail={detail}
+                    maxHeight={sidewaysRail ? 0 : trainHeight}
+                    beside={sidewaysRail ? { width: train.width, height: train.height, span: pxH } : undefined}
+                  />
+                ) : null}
+                {railCaption > 0 ? (
+                  <Text
+                    pointerEvents="none"
+                    style={[styles.cellText, railName(row, cell, railCaption, space.short)]}
+                    numberOfLines={1}
+                  >
+                    {space.short}
+                  </Text>
+                ) : null}
+                {isUtility ? (
+                  <UtilityMark kind={property?.id === 'water' ? 'water' : 'electric'} size={utility} />
+                ) : null}
+                {mark === 'chance' ? <ChanceMark row={row} col={col} cell={cell} detail={detail} /> : null}
+                {mark === 'chest' ? <ChestMark row={row} col={col} cell={cell} detail={detail} /> : null}
+                {fitted ? (
+                  <View style={styles.nameBlock}>
+                    {fitted.lines.map((line, index) => (
+                      <Text
+                        key={`${line}-${index}`}
+                        style={[
+                          styles.cellText,
+                          {
+                            fontSize: fitted.fontSize,
+                            lineHeight: fitted.lineHeight,
+                            width: '100%',
+                          },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {line}
+                      </Text>
+                    ))}
+                  </View>
+                ) : null}
+                {detail && mark ? (
+                  <Text
+                    style={[
+                      styles.cellText,
+                      {
+                        fontSize: Math.max(10, Math.round(cell * 0.11)),
+                        lineHeight: Math.max(12, Math.round(cell * 0.13)),
+                        width: '100%',
+                      },
+                    ]}
+                  >
+                    {mark === 'chance' ? 'Chance' : 'Chest'}
+                  </Text>
+                ) : null}
+                {amount != null ? (
+                  <Text
+                    style={[
+                      styles.cellPrice,
+                      {
+                        fontSize: Math.max(10, priceLine - 2),
+                        lineHeight: priceLine,
+                      },
+                    ]}
+                  >
+                    ${amount}
+                  </Text>
+                ) : null}
               </>
             )}
           </View>
         );
       })}
-      <View style={styles.center} pointerEvents="none">
-        {showCenter ? (
-          <>
-            <Text style={styles.centerTitle}>Board</Text>
-            <Text style={styles.centerHint}>Drag a piece onto a space</Text>
-          </>
-        ) : null}
+      <View
+        pointerEvents="none"
+        style={[
+          styles.center,
+          {
+            left: `${TRACK_DEPTH * 100}%`,
+            top: `${TRACK_DEPTH * 100}%`,
+            width: `${(1 - 2 * TRACK_DEPTH) * 100}%`,
+            height: `${(1 - 2 * TRACK_DEPTH) * 100}%`,
+          },
+        ]}
+      >
+        <Text
+          style={[
+            styles.centerTitle,
+            { fontSize: centerTitleFont(cell), letterSpacing: 1 },
+          ]}
+        >
+          MONOPOLY
+        </Text>
+        <View style={styles.centerRule} />
       </View>
       {size > 0
-        ? players.map((player, index) => {
-            const spaceIndex = tokenSpace(tokenSpaces, player.id);
-            const { row, col } = spaceToCell(spaceIndex);
-            const sharing = players.filter(
-              (other) => tokenSpace(tokenSpaces, other.id) === spaceIndex,
-            );
-            const slot = sharing.findIndex((other) => other.id === player.id);
+        ? boardSpaces.map((space) => {
+            const propertyId = space.propertyId;
+            const ownerId = propertyId ? owned?.[propertyId] : undefined;
+            const owner = ownerId ? players.find((player) => player.id === ownerId) : undefined;
+            if (!propertyId || !owner) return null;
+            const { row, col } = spaceToCell(space.index);
+            const frame = cellBox(row, col);
+            const spot = ownerMarkPlacement(row, col, frame.w * size, frame.h * size);
+            const piece = playerToken(owner.token);
+            const glyph = piece?.emoji ?? (owner.name.trim().charAt(0).toUpperCase() || '?');
             return (
-              <Piece
-                key={player.id}
-                name={player.name}
-                token={player.token}
-                color={TOKEN_COLORS[index % TOKEN_COLORS.length]}
-                row={row}
-                col={col}
-                slot={slot}
-                size={size}
-                enabled={enabled}
-                onDragStart={() => {
-                  rememberOrigin();
-                  onDragging(true);
-                }}
-                onDragMove={(dx, dy) => {
-                  const center = tokenCenter(origin.current, row, col, slot, dx, dy);
-                  setHover(spaceAt(center.x, center.y));
-                }}
-                onDragEnd={(dx, dy) => {
-                  onDragging(false);
-                  setHover(null);
-                  boardRef.current?.measureInWindow((x, y, width) => {
-                    origin.current = { x, y, size: width };
-                    const center = tokenCenter(origin.current, row, col, slot, dx, dy);
-                    const landed = spaceAt(center.x, center.y);
-                    const space = landed == null ? undefined : boardSpaces[landed];
-                    if (space) onLand(player.id, space);
-                  });
-                }}
-                onDragCancel={() => {
-                  onDragging(false);
-                  setHover(null);
-                }}
-              />
+              <View
+                key={`owner-${space.index}`}
+                pointerEvents="none"
+                accessibilityLabel={`${playerLabel(owner.name, owner.token)} owns ${space.name}`}
+                style={[
+                  styles.ownerMark,
+                  {
+                    left: frame.x * size + spot.x,
+                    top: frame.y * size + spot.y,
+                    width: spot.size,
+                    height: spot.size,
+                    transform: [{ rotate: spot.rotate }],
+                  },
+                ]}
+              >
+                <Text style={[styles.ownerEmoji, { fontSize: Math.round(spot.size * 0.82), lineHeight: Math.round(spot.size * 0.92) }]}>
+                  {glyph}
+                </Text>
+              </View>
             );
           })
         : null}
+      {size > 0
+        ? players.map((player, index) => {
+            const spaceIndex = tokenSpace(tokenSpaces, player.id);
+            const imprisoned = spaceIndex === 10 && inJail?.[player.id] != null;
+            const sharing = players.filter((other) => {
+              if (tokenSpace(tokenSpaces, other.id) !== spaceIndex) return false;
+              const otherJailed = spaceIndex === 10 && inJail?.[other.id] != null;
+              return otherJailed === imprisoned;
+            });
+            const slot = sharing.findIndex((other) => other.id === player.id);
+            const crowd = sharing.length;
+            const route =
+              tokenRoute &&
+              tokenRoute.playerId === player.id &&
+              tokenRoute.spaces[tokenRoute.spaces.length - 1] === spaceIndex
+                ? tokenRoute
+                : null;
+            return (
+              <Piece
+                key={player.id}
+                playerId={player.id}
+                name={player.name}
+                token={player.token}
+                color={TOKEN_COLORS[index % TOKEN_COLORS.length]}
+                spaceIndex={spaceIndex}
+                inJail={imprisoned}
+                slot={slot}
+                crowd={crowd}
+                size={size}
+                routeId={route?.id ?? 0}
+                routeSpaces={route?.spaces ?? null}
+                holdSpaces={route ? drawnCards.map((card) => card.space) : []}
+                onCardStop={showDrawnCard}
+                onSettled={onTokenSettled}
+            />
+          );
+        })
+      : null}
+      {size > 0 ? (
+        <MonopolyCardTable
+          boardSize={size}
+          chanceCount={chanceCount}
+          chestCount={chestCount}
+          face={
+            cardOffer
+              ? { deck: cardOffer.deck, id: cardOffer.id, nonce: `${cardOffer.deck}:${cardOffer.id}:${cardOffer.space}` }
+              : null
+          }
+          onAccept={cardOffer ? onAcceptCard : undefined}
+        />
+      ) : null}
+      <MoneyBills flight={burst} boardSize={size} />
+      {pinDice && diceRoll ? (
+        <View pointerEvents="none" style={styles.diceLayer}>
+          <MonopolyDice roll={diceRoll} />
+        </View>
+      ) : null}
     </View>
   );
 }
 
-function CornerArt({ index, cell }: { index: number; cell: number }) {
-  if (index === 0) return <GoCorner cell={cell} />;
-  if (index === 10) return <JailCorner cell={cell} />;
-  if (index === 20) return <FreeParkingCorner cell={cell} />;
-  return <GoToJailCorner cell={cell} />;
+function spaceTint(name: string, kind?: string) {
+  if (name === 'Chance') return '#f6e2cf';
+  if (name === 'Community Chest') return '#f3ead0';
+  if (name === 'Income Tax' || name === 'Luxury Tax') return '#f6e0dc';
+  if (kind === 'railroad') return '#e3ebf1';
+  if (kind === 'utility') return '#f6f0d2';
+  if (name === 'Go' || name === 'Jail' || name === 'Free Parking' || name === 'Go to Jail') return '#f3ead8';
+  return '#f7f1e6';
 }
 
-function GoCorner({ cell }: { cell: number }) {
-  const go = Math.round(cell * 0.36);
-  const fine = Math.max(7, Math.round(cell * 0.095));
-  const arrowW = Math.round(cell * 0.62);
-  const arrowH = Math.round(cell * 0.14);
+function displaySize(text: string, width: number, start: number) {
+  return fitSize(text, Math.max(8, Math.round(width * 0.78)), start);
+}
+
+function CornerArt({ index, cell, detail }: { index: number; cell: number; detail: boolean }) {
+  if (index === 0) return <GoCorner cell={cell} detail={detail} />;
+  if (index === 10) return <JailCorner cell={cell} detail={detail} />;
+  if (index === 20) return <FreeParkingCorner cell={cell} detail={detail} />;
+  return <GoToJailCorner cell={cell} detail={detail} />;
+}
+
+function GoCorner({ cell, detail }: { cell: number; detail: boolean }) {
+  const pad = Math.round(cell * 0.04);
+  const width = cell - pad * 2;
+  const go = fitSize('GO', width, Math.round(cell * (detail ? 0.42 : 0.56)));
+  const fine = fitSize('COLLECT $200', width, Math.round(cell * 0.12));
+  const arrowH = Math.round(cell * (detail ? 0.14 : 0.2));
   return (
-    <View style={styles.corner}>
+    <View style={[styles.corner, { padding: pad }]}>
       <Text style={[styles.cornerGo, { fontSize: go, lineHeight: go }]}>GO</Text>
-      <Svg width={arrowW} height={arrowH} viewBox="0 0 72 16">
+      <Svg width={width} height={arrowH} viewBox="0 0 72 16">
         <Path d="M72 5H24V1L4 8l20 7V11h48V5z" fill="#ed1b24" />
       </Svg>
-      <Text style={[styles.cornerFine, { fontSize: fine, lineHeight: fine + 2 }]}>COLLECT $200</Text>
-      <Text style={[styles.cornerFine, { fontSize: fine, lineHeight: fine + 2 }]}>AS YOU PASS</Text>
+      {detail ? (
+        <>
+          <Text style={[styles.cornerFine, { fontSize: fine, lineHeight: fine + 1 }]}>COLLECT $200</Text>
+          <Text style={[styles.cornerFine, { fontSize: fine, lineHeight: fine + 1 }]}>AS YOU PASS</Text>
+        </>
+      ) : null}
     </View>
   );
 }
 
-function JailCorner({ cell }: { cell: number }) {
-  const title = Math.max(8, Math.round(cell * 0.13));
-  const sub = Math.max(7, Math.round(cell * 0.1));
-  const box = Math.round(cell * 0.62);
+function JailCorner({ cell, detail }: { cell: number; detail: boolean }) {
+  const inset = Math.max(4, Math.round(cell * 0.04));
+  const box = jailCell(cell);
+  const title = displaySize('JAIL', box.width - 10, Math.round(box.height * 0.22));
+  const visitW = Math.max(24, cell - box.width - inset * 3);
+  const sub = fitSize('VISITING', visitW, Math.round(cell * (detail ? 0.13 : 0.16)));
   return (
-    <View style={styles.corner}>
-      <View style={[styles.jail, { width: box, height: Math.round(box * 0.78) }]}>
-        <Text style={[styles.cornerTitle, { fontSize: title, lineHeight: title + 1 }]}>IN JAIL</Text>
+    <View style={styles.cornerFill}>
+      <View style={[styles.jail, { position: 'absolute', top: box.y, left: box.x, width: box.width, height: box.height }]}>
+        <Text style={[styles.cornerTitle, { fontSize: title, lineHeight: title + 1 }]} numberOfLines={1}>
+          IN
+        </Text>
+        <Text style={[styles.cornerTitle, { fontSize: title, lineHeight: title + 1 }]} numberOfLines={1}>
+          JAIL
+        </Text>
         <View style={styles.jailBars}>
           <View style={styles.jailBar} />
           <View style={styles.jailBar} />
@@ -455,41 +768,77 @@ function JailCorner({ cell }: { cell: number }) {
           <View style={styles.jailBar} />
         </View>
       </View>
-      <Text style={[styles.cornerFine, { fontSize: sub, lineHeight: sub + 2 }]}>JUST VISITING</Text>
+      <View
+        style={{
+          position: 'absolute',
+          left: inset,
+          top: box.y,
+          width: visitW,
+          height: box.height,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Text style={[styles.cornerFine, { fontSize: sub, lineHeight: sub + 1 }]} numberOfLines={1}>
+          JUST
+        </Text>
+        <Text style={[styles.cornerFine, { fontSize: sub, lineHeight: sub + 1 }]} numberOfLines={1}>
+          VISITING
+        </Text>
+      </View>
     </View>
   );
 }
 
-function FreeParkingCorner({ cell }: { cell: number }) {
-  const title = Math.max(10, Math.round(cell * 0.16));
+function ParkingCar({ width, height }: { width: number; height: number }) {
   return (
-    <View style={styles.corner}>
-      <Svg width={Math.round(cell * 0.58)} height={Math.round(cell * 0.26)} viewBox="0 0 64 30">
-        <Path
-          d="M6 18c0-4 3-6 8-7l6-7h18l8 7h8c4 0 8 2 8 6v3H6v-2z"
-          fill="#ed1b24"
-        />
-        <Path d="M22 8h16l6 6H18z" fill="#b9d7ea" />
-        <Circle cx="18" cy="23" r="5" fill="#1a1408" />
-        <Circle cx="46" cy="23" r="5" fill="#1a1408" />
-        <Circle cx="18" cy="23" r="2" fill="#f4efe4" />
-        <Circle cx="46" cy="23" r="2" fill="#f4efe4" />
-      </Svg>
-      <Text style={[styles.cornerTitle, { fontSize: title, lineHeight: title + 1 }]}>FREE</Text>
-      <Text style={[styles.cornerTitle, { fontSize: title, lineHeight: title + 1 }]}>PARKING</Text>
+    <Svg width={width} height={height} viewBox="4 6 58 24">
+      <Path d="M6 18c0-4 3-6 8-7l6-7h18l8 7h8c4 0 8 2 8 6v3H6v-2z" fill="#ed1b24" />
+      <Path d="M22 8h16l6 6H18z" fill="#b9d7ea" />
+      <Circle cx="18" cy="23" r="5" fill="#1a1408" />
+      <Circle cx="46" cy="23" r="5" fill="#1a1408" />
+      <Circle cx="18" cy="23" r="2" fill="#f4efe4" />
+      <Circle cx="46" cy="23" r="2" fill="#f4efe4" />
+    </Svg>
+  );
+}
+
+function FreeParkingCorner({ cell, detail }: { cell: number; detail: boolean }) {
+  const pad = Math.round(cell * 0.04);
+  const width = cell - pad * 2;
+  const title = displaySize('PARKING', width, Math.round(cell * (detail ? 0.22 : 0.28)));
+  const carH = Math.round(cell * (detail ? 0.42 : 0.48));
+  return (
+    <View style={[styles.corner, { padding: pad }]}>
+      <ParkingCar width={width} height={carH} />
+      <Text style={[styles.cornerTitle, { fontSize: title, lineHeight: title }]} numberOfLines={1}>
+        FREE
+      </Text>
+      <Text style={[styles.cornerTitle, { fontSize: title, lineHeight: title }]} numberOfLines={1}>
+        PARKING
+      </Text>
     </View>
   );
 }
 
-function GoToJailCorner({ cell }: { cell: number }) {
-  const kicker = Math.max(8, Math.round(cell * 0.12));
-  const title = Math.max(12, Math.round(cell * 0.2));
-  const fine = Math.max(6, Math.round(cell * 0.08));
+function GoToJailCorner({ cell, detail }: { cell: number; detail: boolean }) {
+  const pad = Math.round(cell * 0.04);
+  const width = cell - pad * 2;
+  const kicker = fitSize('GO TO', width, Math.round(cell * 0.13));
+  const title = displaySize('JAIL', width, Math.round(cell * (detail ? 0.28 : 0.4)));
+  const fine = fitSize('Do not collect $200', width, Math.round(cell * 0.09));
+  const icon = Math.round(cell * (detail ? 0.32 : 0.4));
   return (
-    <View style={styles.corner}>
-      <Text style={[styles.cornerFine, { fontSize: kicker, lineHeight: kicker + 1 }]}>GO TO</Text>
-      <Text style={[styles.cornerGo, { fontSize: title, lineHeight: title }]}>JAIL</Text>
-      <Svg width={Math.round(cell * 0.34)} height={Math.round(cell * 0.28)} viewBox="0 0 40 36">
+    <View style={[styles.corner, { padding: pad }]}>
+      {detail ? (
+        <Text style={[styles.cornerFine, { fontSize: kicker, lineHeight: kicker }]} numberOfLines={1}>
+          GO TO
+        </Text>
+      ) : null}
+      <Text style={[styles.cornerGo, { fontSize: title, lineHeight: title }]} numberOfLines={1}>
+        JAIL
+      </Text>
+      <Svg width={icon} height={Math.round(icon * 0.9)} viewBox="0 0 40 36">
         <Path d="M10 12h20l-2 4H12z" fill="#1d4e89" />
         <Rect x="6" y="15" width="28" height="3" rx="1" fill="#1d4e89" />
         <Circle cx="20" cy="22" r="4.5" fill="#f0c9a0" />
@@ -497,110 +846,137 @@ function GoToJailCorner({ cell }: { cell: number }) {
         <Path d="M13 31 L2 27h11z" fill="#1d4e89" />
         <Circle cx="24" cy="31" r="1.5" fill="#f2d36b" />
       </Svg>
-      <Text style={[styles.cornerFine, { fontSize: fine, lineHeight: fine + 1 }]}>Do not pass GO</Text>
-      <Text style={[styles.cornerFine, { fontSize: fine, lineHeight: fine + 1 }]}>Do not collect $200</Text>
+      {detail ? (
+        <>
+          <Text style={[styles.cornerFine, { fontSize: fine, lineHeight: fine + 1 }]} numberOfLines={1}>
+            Do not pass GO
+          </Text>
+          <Text style={[styles.cornerFine, { fontSize: fine, lineHeight: fine + 1 }]} numberOfLines={1}>
+            Do not collect $200
+          </Text>
+        </>
+      ) : null}
     </View>
   );
 }
 
-/** Advances for DM Sans at weight 800 and 17px. */
-const GLYPH_WIDTH: Record<string, number> = {
-  A: 12.04, B: 10.83, C: 12.56, D: 12.05, E: 9.89, F: 9.43, G: 13.21, H: 12.12, I: 4.61,
-  J: 9.18, K: 11.08, L: 9.49, M: 15.08, N: 12.38, O: 13.36, P: 10.42, Q: 13.36, R: 10.71,
-  S: 10.25, T: 10.15, U: 11.64, V: 11.98, W: 17.29, X: 11.37, Y: 10.78, Z: 9.77,
-  a: 9.94, b: 11.13, c: 10.3, d: 11.13, e: 10.23, f: 6.27, g: 10.13, h: 10.47, i: 4.64,
-  j: 4.66, k: 9.83, l: 4.52, m: 16, n: 10.47, o: 10.37, p: 11.13, q: 11.13, r: 6.92,
-  s: 9.03, t: 7.33, u: 10.47, v: 9.57, w: 13.89, x: 9.71, y: 10.27, z: 8.3,
-  '.': 4.27, '&': 13.26, ' ': 3.99,
-};
-
-function textWidth(text: string, fontSize: number) {
-  const scale = fontSize / 17;
-  let width = 0;
-  for (const ch of text) width += (GLYPH_WIDTH[ch] ?? 10.2) * scale;
-  return width;
+function inkOn(swatch: string) {
+  const hex = swatch.replace('#', '');
+  const r = Number.parseInt(hex.slice(0, 2), 16);
+  const g = Number.parseInt(hex.slice(2, 4), 16);
+  const b = Number.parseInt(hex.slice(4, 6), 16);
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum > 0.62 ? '#1a1408' : '#f7f1e6';
 }
 
-function wrapWords(name: string, maxWidth: number, fontSize: number) {
-  const words = name.split(/\s+/).filter(Boolean);
-  if (words.length <= 1) return [name];
-  if (textWidth(name, fontSize) <= maxWidth - 16) return [name];
-  const lines = packWords(words, maxWidth, fontSize);
-  if (lines.length === 1) return [words.slice(0, -1).join(' '), words[words.length - 1]];
-  return lines;
-}
-
-function packWords(words: string[], maxWidth: number, fontSize: number) {
-  const lines: string[] = [];
-  let current = '';
-  for (const word of words) {
-    const next = current ? `${current} ${word}` : word;
-    if (current && textWidth(next, fontSize) > maxWidth) {
-      lines.push(current);
-      current = word;
-    } else {
-      current = next;
-    }
-  }
-  if (current) lines.push(current);
-  return lines;
-}
-
-function trainExtent(cell: number, col: number) {
-  const long = Math.max(28, Math.round(cell * 0.5));
+function trainExtent(cell: number, col: number, detail: boolean) {
+  const long = detail ? Math.max(26, Math.round(cell * 0.46)) : Math.max(16, Math.round(cell * 0.36));
   const short = Math.round(long * 0.56);
   const sideways = col === 0 || col === 10;
-  return { long, short, sideways, height: sideways ? long : short };
+  return { long, short, sideways, height: short };
 }
 
-function labelBounds(row: number, col: number, cell: number, bar: number, railroad: boolean) {
-  const border = 2;
-  const lane = row === 0 || row === 10 ? tokenLane(cell) : sideLane(cell);
-  let width = cell - border;
-  let height = cell - border;
+/** Side railroads are short along the edge, so the train lies across the space beside the name. */
+function railroadMark(
+  cell: number,
+  col: number,
+  detail: boolean,
+  pxW: number,
+  pxH: number,
+  lane: number,
+  nameReserve: number,
+) {
+  const extent = trainExtent(cell, col, detail);
+  if (extent.sideways) {
+    const nameCol = Math.max(44, Math.round(pxW * 0.28));
+    const maxW = Math.max(28, pxW - lane - nameCol - 8);
+    const maxH = Math.max(22, pxH - 8);
+    const scale = Math.min(1, maxW / extent.long, maxH / extent.short);
+    return {
+      width: Math.max(18, Math.round(extent.long * scale)),
+      height: Math.max(12, Math.round(extent.short * scale)),
+    };
+  }
+  const cap = Math.max(18, pxH - nameReserve);
+  const scale = Math.min(1, cap / extent.short);
+  return { width: Math.round(extent.long * scale), height: Math.round(extent.short * scale) };
+}
+
+function utilityExtent(cell: number, detail: boolean) {
+  return detail ? Math.max(22, Math.round(cell * 0.28)) : Math.max(16, Math.round(cell * 0.38));
+}
+
+function labelBounds(
+  row: number,
+  col: number,
+  boxW: number,
+  boxH: number,
+  bar: number,
+  lane: number,
+  trainHeight: number,
+  priceLine: number,
+  utility = 0,
+  trainWidth = 0,
+) {
+  let width = boxW - 8;
+  let height = boxH - 4;
   const horizontal = row === 0 || row === 10;
   if (horizontal) height -= lane;
   else width -= lane;
-  if (railroad) height -= trainExtent(cell, col).height;
+  if (trainWidth) width -= trainWidth;
+  else if (trainHeight) height -= trainHeight;
+  else if (utility) height -= utility;
   else if (horizontal) height -= bar;
   else width -= bar;
+  height -= priceLine;
   return { width: Math.max(8, width), height: Math.max(8, height) };
 }
 
-function fitPropertyLabel(
-  name: string,
-  bounds: { width: number; height: number },
-  startSize: number,
-) {
-  const minSize = 8;
-  let fontSize = startSize;
-  while (fontSize >= minSize) {
-    const lines = wrapWords(name, bounds.width, fontSize);
-    const lineHeight = Math.max(fontSize + 1, Math.round(fontSize * 1.1));
-    const fitsWidth = lines.every((line) => textWidth(line, fontSize) <= bounds.width);
-    const fitsHeight = lines.length * lineHeight <= bounds.height;
-    if (fitsWidth && fitsHeight) {
-      return { text: lines.join('\n'), fontSize, lineHeight, lines: lines.length };
-    }
-    fontSize -= 1;
+function TrainMark({
+  row,
+  col,
+  cell,
+  detail,
+  maxHeight,
+  beside,
+}: {
+  row: number;
+  col: number;
+  cell: number;
+  detail: boolean;
+  maxHeight: number;
+  beside?: { width: number; height: number; span: number };
+}) {
+  if (beside) {
+    return (
+      <View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          top: Math.max(1, (beside.span - beside.height) / 2),
+          ...(col === 0 ? { left: 2 } : { right: 2 }),
+          width: beside.width,
+          height: beside.height,
+          transform: col === 0 ? [{ scaleX: -1 as const }] : undefined,
+        }}
+      >
+        <TrainSvg width={beside.width} height={beside.height} />
+      </View>
+    );
   }
-  const lines = wrapWords(name, bounds.width, minSize);
-  const lineHeight = Math.round(minSize * 1.1);
-  return { text: lines.join('\n'), fontSize: minSize, lineHeight, lines: lines.length };
-}
-
-function TrainMark({ row, col, cell }: { row: number; col: number; cell: number }) {
-  const { long, short, sideways } = trainExtent(cell, col);
-  const transform =
-    row === 10
-      ? [{ scaleX: -1 as const }]
-      : [{ rotate: col === 0 ? '-90deg' : row === 0 ? '0deg' : '90deg' }];
+  let { long, short } = trainExtent(cell, col, detail);
+  if (maxHeight > 0 && short > maxHeight) {
+    const scale = maxHeight / short;
+    long = Math.round(long * scale);
+    short = Math.round(short * scale);
+  }
+  const transform = row === 10 ? [{ scaleX: -1 as const }] : undefined;
   return (
     <View
       pointerEvents="none"
       style={{
-        width: sideways ? short : long,
-        height: sideways ? long : short,
+        width: long,
+        height: short,
         alignItems: 'center',
         justifyContent: 'center',
       }}
@@ -609,6 +985,111 @@ function TrainMark({ row, col, cell }: { row: number; col: number; cell: number 
         <TrainSvg width={long} height={short} />
       </View>
     </View>
+  );
+}
+
+function cardMarkSize(row: number, col: number, cell: number, detail: boolean) {
+  const lane = row === 0 || row === 10 ? tokenLane(cell) : sideLane(cell);
+  const along = col === 0 || col === 10 ? cell - 6 : cell - lane - 6;
+  const across = row === 0 || row === 10 ? cell - 6 : cell - lane - 6;
+  const fraction = detail ? 0.3 : 0.48;
+  return Math.max(detail ? 18 : 14, Math.round(Math.min(cell * fraction, along, across)));
+}
+
+function UtilityMark({ kind, size }: { kind: 'electric' | 'water'; size: number }) {
+  return (
+    <View pointerEvents="none" style={{ width: size, height: size }}>
+      {kind === 'water' ? <WaterSvg size={size} /> : <BulbSvg size={size} />}
+    </View>
+  );
+}
+
+function BulbSvg({ size }: { size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 32 32">
+      <Path
+        d="M16 1.5c-5.4 0-9.2 4.1-9.2 9.4 0 3.3 1.7 5.8 3.6 7.6.9.9 1.4 1.9 1.4 3v1.3h8.4v-1.3c0-1.1.5-2.1 1.4-3 1.9-1.8 3.6-4.3 3.6-7.6 0-5.3-3.8-9.4-9.2-9.4z"
+        fill="#f2c14b"
+      />
+      <Path d="M11.2 9.2c1-2.4 2.8-3.8 4.8-3.8" fill="none" stroke="#fff6d4" strokeWidth="1.6" strokeLinecap="round" />
+      <Rect x="11.6" y="23.2" width="8.8" height="2.1" rx="0.4" fill="#7a5a22" />
+      <Rect x="12.2" y="26" width="7.6" height="1.8" rx="0.4" fill="#7a5a22" />
+      <Rect x="13" y="28.4" width="6" height="2.2" rx="0.7" fill="#4e3912" />
+    </Svg>
+  );
+}
+
+function WaterSvg({ size }: { size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 32 32">
+      <Path d="M16 2c5.2 7.2 11 12.2 11 18.2a11 11 0 1 1-22 0C5 14.2 10.8 9.2 16 2z" fill="#2b86c4" />
+      <Path d="M11.5 18.5c1.2 4 3.4 6 6.8 6.8" fill="none" stroke="#d7f1fb" strokeWidth="1.8" strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+function ChanceMark({
+  row,
+  col,
+  cell,
+  detail,
+}: {
+  row: number;
+  col: number;
+  cell: number;
+  detail: boolean;
+}) {
+  const size = cardMarkSize(row, col, cell, detail);
+  return (
+    <Text
+      pointerEvents="none"
+      style={{
+        fontFamily: fonts.display,
+        fontSize: size,
+        lineHeight: size,
+        fontWeight: '700',
+        color: '#c2410c',
+        textAlign: 'center',
+        width: '100%',
+      }}
+    >
+      ?
+    </Text>
+  );
+}
+
+function ChestMark({
+  row,
+  col,
+  cell,
+  detail,
+}: {
+  row: number;
+  col: number;
+  cell: number;
+  detail: boolean;
+}) {
+  const size = cardMarkSize(row, col, cell, detail);
+  return (
+    <View pointerEvents="none" style={{ width: size, height: size }}>
+      <ChestSvg size={size} />
+    </View>
+  );
+}
+
+function ChestSvg({ size }: { size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 64 64">
+      <Path d="M10 30c0-12 9-20 22-20s22 8 22 20v2H10v-2z" fill="#8d4e28" />
+      <Path d="M14 22c2-7 8-12 18-12s16 5 18 12" fill="none" stroke="#e2b34a" strokeWidth="3" />
+      <Rect x="8" y="30" width="48" height="8" rx="2" fill="#e2b34a" />
+      <Path d="M8 36h48v16c0 3-2 5-5 5H13c-3 0-5-2-5-5V36z" fill="#6b3a1c" />
+      <Rect x="28" y="30" width="8" height="27" fill="#e2b34a" />
+      <Circle cx="32" cy="44" r="5.5" fill="#f3d78a" />
+      <Circle cx="32" cy="44" r="2.2" fill="#6b4a16" />
+      <Rect x="12" y="55" width="8" height="4" rx="1" fill="#3a2212" />
+      <Rect x="44" y="55" width="8" height="4" rx="1" fill="#3a2212" />
+    </Svg>
   );
 }
 
@@ -648,17 +1129,31 @@ function sideLane(cell: number) {
   return Math.round(pieceSize(cell) * 0.55);
 }
 
-function spacePadding(row: number, col: number, lane: number, bar: number) {
+function railName(row: number, cell: number, caption: number, text: string) {
+  return {
+    position: 'absolute' as const,
+    left: 1,
+    right: 1,
+    ...(row === 0 ? { top: 1 } : { bottom: 1 }),
+    fontSize: fitSize(text, cell - 6, Math.max(8, caption - 2)),
+    lineHeight: caption - 1,
+  };
+}
+
+function spacePadding(row: number, col: number, lane: number, bar: number, cell: number, caption = 0, art = 0) {
+  const inner = Math.max(0, cell - 4);
+  const edge = Math.min(bar + caption + art, inner);
+  const room = Math.min(lane, Math.max(0, inner - edge));
   if (row === 10) {
-    return { paddingTop: lane, paddingBottom: bar, paddingLeft: 2, paddingRight: 2, justifyContent: 'flex-end' as const };
+    return { paddingTop: room, paddingBottom: edge, paddingLeft: 2, paddingRight: 2, justifyContent: 'flex-end' as const };
   }
   if (row === 0) {
-    return { paddingBottom: lane, paddingTop: bar, paddingLeft: 2, paddingRight: 2, justifyContent: 'flex-start' as const };
+    return { paddingBottom: room, paddingTop: edge, paddingLeft: 2, paddingRight: 2, justifyContent: 'flex-start' as const };
   }
   if (col === 0) {
     return {
-      paddingRight: lane,
-      paddingLeft: bar,
+      paddingRight: room,
+      paddingLeft: edge,
       paddingTop: 2,
       paddingBottom: 2,
       alignItems: 'flex-start' as const,
@@ -666,8 +1161,8 @@ function spacePadding(row: number, col: number, lane: number, bar: number) {
     };
   }
   return {
-    paddingLeft: lane,
-    paddingRight: bar,
+    paddingLeft: room,
+    paddingRight: edge,
     paddingTop: 2,
     paddingBottom: 2,
     alignItems: 'flex-end' as const,
@@ -675,161 +1170,303 @@ function spacePadding(row: number, col: number, lane: number, bar: number) {
   };
 }
 
-function cornerFrame(row: number, col: number, cell: number, lane: number) {
-  const box = Math.max(36, cell - lane);
-  const base = { position: 'absolute' as const, width: box, height: box };
-  if (row === 10 && col === 10) return { ...base, right: 1, bottom: 1 };
-  if (row === 10 && col === 0) return { ...base, left: 1, bottom: 1 };
-  if (row === 0 && col === 0) return { ...base, left: 1, top: 1 };
-  return { ...base, right: 1, top: 1 };
-}
-
 function pieceSize(cell: number) {
   return Math.max(28, Math.round(cell * 0.34));
 }
 
-function pieceOffset(row: number, col: number, cell: number, piece: number, slot: number) {
-  const gap = Math.max(3, Math.round(cell * 0.03));
-  const hang = Math.round(piece * 0.28);
-  const shift = slot === 0 ? 0 : (slot % 2 === 0 ? -1 : 1) * Math.round(piece * 0.62 * Math.ceil(slot / 2));
+function fittedPiece(width: number, height: number) {
+  const room = Math.max(16, Math.min(width, height) - 4);
+  return Math.min(pieceSize(Math.max(width, height)), room);
+}
+
+function pieceOffset(row: number, col: number, width: number, height: number, piece: number, slot: number) {
+  const gap = Math.max(2, Math.round(Math.min(width, height) * 0.04));
+  const shift = slot === 0 ? 0 : (slot % 2 === 0 ? -1 : 1) * Math.round(piece * 0.55 * Math.ceil(slot / 2));
   const corner = (row === 0 || row === 10) && (col === 0 || col === 10);
-  let x = (cell - piece) / 2;
-  let y = (cell - piece) / 2;
+  let x = (width - piece) / 2;
+  let y = (height - piece) / 2;
   if (corner) {
-    x = col === 0 ? cell - piece - gap : gap;
-    y = row === 0 ? cell - piece - gap : gap;
+    if (row === 10 && col === 0) {
+      x = (width - piece) / 2 + shift;
+      y = height - piece - gap;
+    } else {
+      x = col === 0 ? width - piece - gap : gap;
+      y = row === 0 ? height - piece - gap : gap;
+    }
   } else if (row === 10) {
-    y = gap - hang;
+    y = gap;
     x += shift;
   } else if (row === 0) {
-    y = cell - piece - gap + hang;
+    y = height - piece - gap;
     x += shift;
   } else if (col === 0) {
-    x = cell - sideLane(cell);
-    y = (cell - piece) / 2 + shift;
+    x = width - piece - gap;
+    y += shift;
   } else {
-    x = sideLane(cell) - piece;
-    y = (cell - piece) / 2 + shift;
+    x = gap;
+    y += shift;
   }
-  const minX = !corner && col === 10 ? sideLane(cell) - piece : 1;
-  const maxX = !corner && col === 0 ? cell - sideLane(cell) : cell - piece - 1;
-  const minY = !corner && row === 10 ? gap - hang : 1;
-  const maxY = !corner && row === 0 ? cell - piece - gap + hang : cell - piece - 1;
   return {
-    x: Math.max(minX, Math.min(maxX, x)),
-    y: Math.max(minY, Math.min(maxY, y)),
+    x: clampInside(x, width, piece),
+    y: clampInside(y, height, piece),
   };
 }
 
-function tokenCenter(
-  board: Origin,
-  row: number,
-  col: number,
-  slot: number,
-  dx = 0,
-  dy = 0,
-) {
-  const cell = board.size / 11;
-  const piece = pieceSize(cell);
-  const offset = pieceOffset(row, col, cell, piece, slot);
-  return {
-    x: board.x + col * cell + offset.x + piece / 2 + dx,
-    y: board.y + row * cell + offset.y + piece / 2 + dy,
-  };
+function clampInside(value: number, span: number, piece: number) {
+  return Math.min(Math.max(0, span - piece), Math.max(0, value));
+}
+
+function piecePlace(index: number, size: number, slot: number, count = 1, inJail = false) {
+  const { row, col } = spaceToCell(index);
+  const frame = cellBox(row, col);
+  const width = frame.w * size;
+  const height = frame.h * size;
+  if (index === 10) {
+    const cell = Math.min(width, height);
+    const spots = inJail ? layoutJailedTokens(cell, count) : layoutVisitingTokens(cell, count);
+    const spot = spots[Math.max(0, Math.min(slot, spots.length - 1))];
+    return { left: frame.x * size + spot.x, top: frame.y * size + spot.y, piece: spot.piece };
+  }
+  if (count > 1) {
+    const spots = layoutSharedTokens(width, height, row, col, count);
+    const spot = spots[Math.max(0, Math.min(slot, spots.length - 1))];
+    return { left: frame.x * size + spot.x, top: frame.y * size + spot.y, piece: spot.piece };
+  }
+  const piece = fittedPiece(width, height);
+  const offset = pieceOffset(row, col, width, height, piece, slot);
+  return { left: frame.x * size + offset.x, top: frame.y * size + offset.y, piece };
+}
+
+function adjacentSpaces(a: number, b: number) {
+  const delta = (a - b + 40) % 40;
+  return delta === 1 || delta === 39;
+}
+
+function inwardHop(index: number) {
+  const { row, col } = spaceToCell(index);
+  if (row === 10) return { x: 0, y: -1 };
+  if (row === 0) return { x: 0, y: 1 };
+  if (col === 0) return { x: 1, y: 0 };
+  return { x: -1, y: 0 };
+}
+
+function stepMs(spaces: number[]) {
+  const hops = Math.max(1, spaces.length - 1);
+  if (hops > 16) return 90;
+  if (hops > 8) return 130;
+  return 180;
+}
+
+function travelSpaces(from: number, to: number, route: number[] | null, last: number[] | null) {
+  if (route && route.length > 1 && route[0] === from && route[route.length - 1] === to) return route;
+  if (last && last.length > 1 && last[last.length - 1] === from && last[0] === to) return [...last].reverse();
+  return tokenSpacesBetween(from, to);
 }
 
 function Piece({
+  playerId,
   name,
   token,
   color,
-  row,
-  col,
+  spaceIndex,
+  inJail = false,
   slot,
+  crowd,
   size,
-  enabled,
-  onDragStart,
-  onDragMove,
-  onDragEnd,
-  onDragCancel,
+  routeId,
+  routeSpaces,
+  holdSpaces,
+  onCardStop,
+  onSettled,
 }: {
+  playerId: string;
   name: string;
   token?: string | null;
   color: string;
-  row: number;
-  col: number;
+  spaceIndex: number;
+  inJail?: boolean;
   slot: number;
+  crowd: number;
   size: number;
-  enabled: boolean;
-  onDragStart: () => void;
-  onDragMove: (dx: number, dy: number) => void;
-  onDragEnd: (dx: number, dy: number) => void;
-  onDragCancel: () => void;
+  routeId: number;
+  routeSpaces: number[] | null;
+  holdSpaces: number[];
+  onCardStop: (space: number) => void;
+  onSettled: (playerId: string) => void;
 }) {
-  const [drag, setDrag] = useState<{ dx: number; dy: number } | null>(null);
-  const enabledRef = useRef(enabled);
-  enabledRef.current = enabled;
-  const startRef = useRef(onDragStart);
-  const moveRef = useRef(onDragMove);
-  const endRef = useRef(onDragEnd);
-  const cancelRef = useRef(onDragCancel);
-  startRef.current = onDragStart;
-  moveRef.current = onDragMove;
-  endRef.current = onDragEnd;
-  cancelRef.current = onDragCancel;
+  const [flying, setFlying] = useState(false);
+  const resting = piecePlace(spaceIndex, size, slot, crowd, inJail);
+  const left = useRef(new Animated.Value(resting.left)).current;
+  const top = useRef(new Animated.Value(resting.top)).current;
+  const liftX = useRef(new Animated.Value(0)).current;
+  const liftY = useRef(new Animated.Value(0)).current;
+  const bulge = useRef(new Animated.Value(1)).current;
+  const settled = useRef(spaceIndex);
+  const lastPath = useRef<number[] | null>(null);
+  const flyingRef = useRef(false);
+  const sizeRef = useRef(size);
+  const slotRef = useRef(slot);
+  const countRef = useRef(crowd);
+  const jailedRef = useRef(inJail);
+  sizeRef.current = size;
+  slotRef.current = slot;
+  countRef.current = crowd;
+  jailedRef.current = inJail;
+  const routeRef = useRef(routeSpaces);
+  routeRef.current = routeSpaces;
+  const settledNotice = useRef(onSettled);
+  settledNotice.current = onSettled;
+  const holdRef = useRef(holdSpaces);
+  holdRef.current = holdSpaces;
+  const cardNotice = useRef(onCardStop);
+  cardNotice.current = onCardStop;
 
-  const responder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => enabledRef.current,
-      onStartShouldSetPanResponderCapture: () => enabledRef.current,
-      onMoveShouldSetPanResponder: () => enabledRef.current,
-      onMoveShouldSetPanResponderCapture: () => enabledRef.current,
-      onPanResponderTerminationRequest: () => false,
-      onPanResponderGrant: () => {
-        startRef.current();
-        setDrag({ dx: 0, dy: 0 });
-      },
-      onPanResponderMove: (_, gesture) => {
-        setDrag({ dx: gesture.dx, dy: gesture.dy });
-        moveRef.current(gesture.dx, gesture.dy);
-      },
-      onPanResponderRelease: (_, gesture) => {
-        setDrag(null);
-        endRef.current(gesture.dx, gesture.dy);
-      },
-      onPanResponderTerminate: () => {
-        setDrag(null);
-        cancelRef.current();
-      },
-    }),
-  ).current;
+  useEffect(() => {
+    if (flyingRef.current || settled.current !== spaceIndex) return;
+    const place = piecePlace(spaceIndex, size, slot, crowd, inJail);
+    left.setValue(place.left);
+    top.setValue(place.top);
+  }, [crowd, inJail, left, size, slot, spaceIndex, top]);
 
-  const cell = size / 11;
-  const piece = pieceSize(cell);
-  const offset = pieceOffset(row, col, cell, piece, slot);
-  const left = col * cell + offset.x;
-  const top = row * cell + offset.y;
+  useEffect(() => {
+    if (spaceIndex === settled.current) return;
+    const from = settled.current;
+    const placeAt = (index: number, atSlot: number, atCount = 1) =>
+      piecePlace(index, sizeRef.current, atSlot, atCount, index === 10 && jailedRef.current);
+    if (diceMotionMs() === 0) {
+      settled.current = spaceIndex;
+      lastPath.current = null;
+      flyingRef.current = false;
+      setFlying(false);
+      const place = placeAt(spaceIndex, slotRef.current, countRef.current);
+      left.setValue(place.left);
+      top.setValue(place.top);
+      const holds = holdRef.current;
+      if (holds.length > 0) cardNotice.current(holds[holds.length - 1]);
+      settledNotice.current(playerId);
+      return;
+    }
+    const spaces = travelSpaces(from, spaceIndex, routeRef.current, lastPath.current);
+    if (spaces.length < 2) {
+      settled.current = spaceIndex;
+      const place = placeAt(spaceIndex, slotRef.current, countRef.current);
+      left.setValue(place.left);
+      top.setValue(place.top);
+      return;
+    }
+    settled.current = spaceIndex;
+    lastPath.current = spaces;
+    flyingRef.current = true;
+    setFlying(true);
+    const hop = Math.max(8, Math.round(placeAt(spaces[0], 0).piece * 0.22));
+    const pace = stepMs(spaces);
+    let current: Animated.CompositeAnimation | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let finishWait: (() => void) | null = null;
+    let finished = false;
+    let cancelled = false;
+    const play = (animation: Animated.CompositeAnimation) =>
+      new Promise<boolean>((resolve) => {
+        current = animation;
+        animation.start(({ finished: done }) => resolve(done));
+      });
+    const pause = (ms: number) =>
+      new Promise<void>((resolve) => {
+        finishWait = () => {
+          finishWait = null;
+          resolve();
+        };
+        timer = setTimeout(() => finishWait?.(), ms);
+      });
+    const run = async () => {
+      const holds = [...holdRef.current];
+      for (let step = 1; step < spaces.length; step += 1) {
+        const index = spaces[step];
+        const place = placeAt(
+          index,
+          step === spaces.length - 1 ? slotRef.current : 0,
+          step === spaces.length - 1 ? countRef.current : 1,
+        );
+        const along = adjacentSpaces(spaces[step - 1], index);
+        const dir = along ? inwardHop(spaces[step - 1]) : { x: 0, y: 0 };
+        const duration = along ? pace : Math.round(pace * 2.4);
+        const half = duration / 2;
+        const done = await play(
+          Animated.parallel([
+            Animated.timing(left, { toValue: place.left, duration, easing: Easing.inOut(Easing.quad), useNativeDriver: false }),
+            Animated.timing(top, { toValue: place.top, duration, easing: Easing.inOut(Easing.quad), useNativeDriver: false }),
+            Animated.sequence([
+              Animated.timing(liftX, { toValue: dir.x * hop, duration: half, useNativeDriver: false }),
+              Animated.timing(liftX, { toValue: 0, duration: half, useNativeDriver: false }),
+            ]),
+            Animated.sequence([
+              Animated.timing(liftY, { toValue: dir.y * hop, duration: half, useNativeDriver: false }),
+              Animated.timing(liftY, { toValue: 0, duration: half, useNativeDriver: false }),
+            ]),
+            Animated.sequence([
+              Animated.timing(bulge, { toValue: along ? 1.1 : 1.06, duration: half, useNativeDriver: false }),
+              Animated.timing(bulge, { toValue: 1, duration: half, useNativeDriver: false }),
+            ]),
+          ]),
+        );
+        if (cancelled || !done) return;
+        const holdAt = holds.indexOf(index);
+        if (holdAt >= 0) {
+          holds.splice(holdAt, 1);
+          cardNotice.current(index);
+          if (step < spaces.length - 1) {
+            await pause(CARD_REVEAL_MS);
+            if (cancelled) return;
+          }
+        }
+      }
+      finished = true;
+      flyingRef.current = false;
+      setFlying(false);
+      const place = placeAt(settled.current, slotRef.current, countRef.current);
+      left.setValue(place.left);
+      top.setValue(place.top);
+      liftX.setValue(0);
+      liftY.setValue(0);
+      bulge.setValue(1);
+      settledNotice.current(playerId);
+    };
+    void run();
+    return () => {
+      cancelled = true;
+      finishWait?.();
+      if (timer) clearTimeout(timer);
+      current?.stop();
+      if (!finished) {
+        flyingRef.current = false;
+        settled.current = from;
+        setFlying(false);
+        const place = placeAt(from, slotRef.current, countRef.current);
+        left.setValue(place.left);
+        top.setValue(place.top);
+        liftX.setValue(0);
+        liftY.setValue(0);
+        bulge.setValue(1);
+      }
+    };
+  }, [bulge, left, liftX, liftY, playerId, routeId, spaceIndex, top]);
+
   const emoji = playerToken(token);
+  const piece = resting.piece;
 
   return (
-    <View
-      {...responder.panHandlers}
-      accessibilityRole="button"
-      accessibilityLabel={emoji ? `${name} ${emoji.label} piece` : `${name} piece`}
+    <Animated.View
+      pointerEvents="none"
+      accessibilityLabel={emoji ? `${emoji.emoji} ${name} piece` : `${name} piece`}
       style={[
         styles.token,
-        emoji
-          ? styles.tokenEmoji
-          : {
-              borderRadius: piece / 2,
-              backgroundColor: color,
-            },
         {
           left,
           top,
           width: piece,
           height: piece,
-          zIndex: drag ? 30 : 10 + slot,
-          transform: drag ? [{ translateX: drag.dx }, { translateY: drag.dy }] : undefined,
+          zIndex: flying ? 30 : 10 + slot,
+          transform: [{ translateX: liftX }, { translateY: liftY }, { scale: bulge }],
         },
       ]}
     >
@@ -837,48 +1474,66 @@ function Piece({
         style={
           emoji
             ? [styles.tokenEmojiText, { fontSize: Math.round(piece * 0.78), lineHeight: Math.round(piece * 0.9) }]
-            : [styles.tokenText, { fontSize: Math.round(piece * 0.5) }]
+            : [styles.tokenText, { fontSize: Math.round(piece * 0.72), color }]
         }
       >
         {emoji?.emoji ?? (name.trim().charAt(0).toUpperCase() || '?')}
       </Text>
-    </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
+  frame: { width: '100%', alignSelf: 'stretch', gap: 8 },
   viewport: {
     width: '100%',
-    aspectRatio: 1,
     overflow: 'hidden',
-    borderRadius: radii.md,
-    backgroundColor: colors.woodDark,
-    borderWidth: 2,
-    borderColor: colors.wood,
     position: 'relative',
+  },
+  viewportSquare: {
+    aspectRatio: 1,
   },
   zoomDock: {
     position: 'absolute',
-    top: 8,
-    right: 8,
     gap: 8,
     zIndex: 40,
+  },
+  rollDock: {
+    position: 'absolute',
+    zIndex: 32,
+    alignItems: 'center',
+  },
+  diceLayer: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 25,
   },
   zoomBtn: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
+    backgroundColor: colors.accent,
+    borderWidth: 2,
+    borderColor: '#f7f1e6',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#0c1612',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.55,
+    shadowRadius: 4,
+    elevation: 6,
+  },
+  zoomBtnPressed: {
+    backgroundColor: colors.accentPressed,
   },
   zoomLabel: {
-    color: colors.accent,
-    fontSize: 24,
-    fontWeight: '700',
-    lineHeight: 28,
+    color: colors.accentText,
+    fontSize: 26,
+    fontWeight: '800',
+    lineHeight: 30,
   },
   phoneHint: {
     fontFamily: fonts.body,
@@ -889,28 +1544,23 @@ const styles = StyleSheet.create({
   board: {
     width: '100%',
     aspectRatio: 1,
-    backgroundColor: colors.woodDark,
-    borderRadius: radii.md,
-    borderWidth: 3,
-    borderColor: colors.wood,
+    backgroundColor: 'transparent',
     position: 'relative',
     overflow: 'hidden',
   },
   cell: {
     position: 'absolute',
-    width: `${100 / 11}%`,
-    height: `${100 / 11}%`,
-    backgroundColor: '#f4efe4',
+    backgroundColor: '#f7f1e6',
     borderWidth: 1,
     borderColor: '#c4b49a',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 1,
+    overflow: 'hidden',
   },
-  cellHover: {
-    borderColor: colors.accent,
-    borderWidth: 2,
-    zIndex: 2,
+  nameBlock: {
+    width: '100%',
+    alignItems: 'center',
   },
   cellText: {
     fontFamily: fonts.body,
@@ -918,13 +1568,25 @@ const styles = StyleSheet.create({
     color: '#1a1408',
     textAlign: 'center',
   },
+  cellPrice: {
+    fontFamily: fonts.body,
+    fontWeight: '700',
+    color: '#6b4e32',
+    textAlign: 'center',
+    width: '100%',
+  },
+  cornerFill: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+  },
   corner: {
     width: '100%',
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 3,
-    paddingVertical: 2,
   },
   cornerGo: {
     fontFamily: fonts.display,
@@ -967,18 +1629,24 @@ const styles = StyleSheet.create({
   },
   swatch: {
     position: 'absolute',
+    borderWidth: 1,
+    borderColor: 'rgba(26, 20, 8, 0.28)',
   },
   center: {
     position: 'absolute',
-    left: `${100 / 11}%`,
-    top: `${100 / 11}%`,
-    width: `${(100 * 9) / 11}%`,
-    height: `${(100 * 9) / 11}%`,
     backgroundColor: '#14352c',
+    borderWidth: 2,
+    borderColor: 'rgba(212, 168, 75, 0.55)',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 12,
-    gap: 4,
+    gap: 6,
+  },
+  centerRule: {
+    width: '22%',
+    height: 2,
+    backgroundColor: colors.accent,
+    opacity: 0.85,
   },
   centerTitle: {
     fontFamily: fonts.display,
@@ -986,26 +1654,24 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700',
   },
-  centerHint: {
-    fontFamily: fonts.body,
-    color: '#d5e4dc',
-    fontSize: 12,
+  ownerMark: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 4,
+  },
+  ownerEmoji: {
     textAlign: 'center',
   },
   token: {
     position: 'absolute',
-    borderWidth: 2,
-    borderColor: '#1a1408',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  tokenEmoji: {
-    borderWidth: 0,
     backgroundColor: 'transparent',
   },
   tokenText: {
-    color: '#1a1408',
     fontWeight: '800',
+    textAlign: 'center',
   },
   tokenEmojiText: {
     textAlign: 'center',

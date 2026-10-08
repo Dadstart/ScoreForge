@@ -17,15 +17,16 @@ type Props = {
   options: SelectOption[];
   onChange: (id: string) => void;
   disabled?: boolean;
+  centered?: boolean;
 };
 
-export function OptionSelect({ label, value, options, onChange, disabled }: Props) {
+export function OptionSelect({ label, value, options, onChange, disabled, centered }: Props) {
   const [open, setOpen] = useState(false);
   const selected = options.find((option) => option.id === value);
 
   return (
-    <View style={styles.wrap}>
-      <Text style={typography.section}>{label}</Text>
+    <View style={[styles.wrap, centered && styles.wrapCentered]}>
+      <Text style={[typography.section, centered && styles.centeredLabel]}>{label}</Text>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={label}
@@ -34,7 +35,7 @@ export function OptionSelect({ label, value, options, onChange, disabled }: Prop
         style={({ pressed }) => [styles.trigger, disabled && styles.disabled, pressed && styles.pressed]}
       >
         {selected?.swatch ? <View style={[styles.swatch, { backgroundColor: selected.swatch }]} /> : null}
-        <Text style={styles.value} numberOfLines={1}>
+        <Text style={[styles.value, centered && styles.valueCentered]} numberOfLines={1}>
           {selected?.label ?? 'Choose'}
         </Text>
         <Text style={styles.chevron}>▾</Text>
@@ -93,6 +94,8 @@ export function OptionSelect({ label, value, options, onChange, disabled }: Prop
 
 const styles = StyleSheet.create({
   wrap: { gap: 6 },
+  wrapCentered: { alignSelf: 'stretch' },
+  centeredLabel: { textAlign: 'center' },
   trigger: {
     minHeight: 48,
     borderRadius: radii.md,
@@ -113,6 +116,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  valueCentered: { textAlign: 'center' },
   chevron: { color: colors.muted, fontSize: 16 },
   swatch: {
     width: 14,

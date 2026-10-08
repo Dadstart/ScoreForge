@@ -82,7 +82,7 @@ export const properties: BoardProperty[] = [
   utility('water', 'Water Works'),
 ];
 
-const RAILROAD_RENTS: Record<RailroadCount, number> = {
+export const RAILROAD_RENTS: Record<RailroadCount, number> = {
   1: 25,
   2: 50,
   3: 100,
@@ -131,20 +131,61 @@ export type RentQuote = {
 
 export const PURCHASE_OPTION = 'purchase';
 
-/** Current Monopoly tokens that have a clear emoji. */
+/** Classic Monopoly pieces first, then the later set. Each one has a clear emoji. */
 export const PLAYER_TOKENS = [
-  { id: 'car', emoji: '🚗', label: 'Car' },
-  { id: 'dog', emoji: '🐶', label: 'Dog' },
+  { id: 'car', emoji: '🚗', label: 'Race car' },
+  { id: 'dog', emoji: '🐶', label: 'Scottie dog' },
   { id: 'hat', emoji: '🎩', label: 'Top hat' },
   { id: 'ship', emoji: '🚢', label: 'Battleship' },
   { id: 'cat', emoji: '🐱', label: 'Cat' },
+  { id: 'boot', emoji: '👢', label: 'Boot' },
   { id: 'penguin', emoji: '🐧', label: 'Penguin' },
   { id: 'trex', emoji: '🦖', label: 'T-Rex' },
   { id: 'duck', emoji: '🦆', label: 'Duck' },
 ] as const;
 
-export function playerToken(id: string | null | undefined) {
-  return PLAYER_TOKENS.find((token) => token.id === id) ?? null;
+const PICTOGRAPHIC = /\p{Extended_Pictographic}/u;
+
+function graphemes(value: string): string[] {
+  if (typeof Intl !== 'undefined' && 'Segmenter' in Intl) {
+    return [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(value)].map(
+      (part) => part.segment,
+    );
+  }
+  return Array.from(value);
+}
+
+/** One emoji, including a joined sequence such as a family. Empty and words are not a piece. */
+export function singleEmoji(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const pictures = graphemes(value).filter((part) => PICTOGRAPHIC.test(part));
+  if (pictures.length !== 1) return null;
+  const emoji = pictures[0];
+  if (!emoji || emoji.length > 40) return null;
+  if (value.replace(emoji, '').trim()) return null;
+  return emoji;
+}
+
+/** Keep the latest emoji the system picker inserted, and leave plain typing alone. */
+export function emojiFieldValue(value: string): string {
+  const pictures = graphemes(value).filter((part) => PICTOGRAPHIC.test(part));
+  if (pictures.length === 0) return value;
+  return pictures[pictures.length - 1] ?? '';
+}
+
+/** The piece, then the name: "🚗 Alex". A player with no piece is just the name. */
+export function playerLabel(name: string, token?: string | null): string {
+  const emoji = playerToken(token)?.emoji;
+  return emoji ? `${emoji} ${name}` : name;
+}
+
+export function playerToken(id: string | null | undefined): { id: string; emoji: string; label: string } | null {
+  if (!id) return null;
+  const known = PLAYER_TOKENS.find((token) => token.id === id || token.emoji === id);
+  if (known) return known;
+  const emoji = singleEmoji(id);
+  if (!emoji) return null;
+  return PLAYER_TOKENS.find((token) => token.emoji === emoji) ?? { id: emoji, emoji, label: 'Custom' };
 }
 
 export function quoteRent(input: {

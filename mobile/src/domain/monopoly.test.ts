@@ -3,8 +3,11 @@ import { describe, it } from 'node:test';
 import {
   BANK_PARTY_ID,
   cashFromDelta,
+  emojiFieldValue,
   formatMoney,
+  playerToken,
   quoteRent,
+  singleEmoji,
   transferEvents,
   withoutLastCashAction,
 } from './monopoly';
@@ -92,6 +95,17 @@ describe('monopoly', () => {
     assert.equal(cashFromDelta(-200), 1300);
     assert.equal(formatMoney(1500), '$1,500');
     assert.equal(formatMoney(-40), '-$40');
+  });
+
+  it('maps classic pieces and a single custom emoji', () => {
+    assert.equal(playerToken('car')?.emoji, '🚗');
+    assert.equal(playerToken('🚗')?.id, 'car');
+    assert.equal(playerToken('🦄')?.emoji, '🦄');
+    assert.equal(singleEmoji('🦄'), '🦄');
+    assert.equal(singleEmoji('hi'), null);
+    assert.equal(singleEmoji('🦄🐶'), null);
+    assert.equal(emojiFieldValue('hi🦄'), '🦄');
+    assert.equal(emojiFieldValue('boot'), 'boot');
   });
 
   it('undoes the latest payment, including both sides', () => {
