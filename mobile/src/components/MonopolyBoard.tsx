@@ -631,13 +631,23 @@ function BoardCanvas({
                     top: frame.y * size + spot.y,
                     width: spot.size,
                     height: spot.size,
-                    transform: [{ rotate: spot.rotate }],
+                    transform: spot.flipX ? [{ scaleX: -1 }] : undefined,
                   },
                 ]}
               >
-                <Text style={[styles.ownerEmoji, { fontSize: Math.round(spot.size * 0.82), lineHeight: Math.round(spot.size * 0.92) }]}>
-                  {glyph}
-                </Text>
+                <View
+                  style={{
+                    width: spot.size,
+                    height: spot.size,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transform: [{ rotate: spot.rotate }],
+                  }}
+                >
+                  <Text style={[styles.ownerEmoji, { fontSize: Math.round(spot.size * 0.82), lineHeight: Math.round(spot.size * 0.92) }]}>
+                    {glyph}
+                  </Text>
+                </View>
               </View>
             );
           })

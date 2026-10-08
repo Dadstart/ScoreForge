@@ -155,6 +155,10 @@ describe('ownerMarkPlacement', () => {
     assert.equal(top.rotate, '180deg');
     assert.equal(left.rotate, '-90deg');
     assert.equal(right.rotate, '90deg');
+    assert.equal(bottom.flipX, false);
+    assert.equal(top.flipX, false);
+    assert.equal(left.flipX, true);
+    assert.equal(right.flipX, true);
     assert.ok(bottom.y + bottom.size < 0);
     assert.ok(top.y > top.height);
     assert.ok(left.x > left.width);

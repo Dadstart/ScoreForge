@@ -206,21 +206,29 @@ export function layoutVisitingTokens(cell: number, count: number): TokenSpot[] {
   return shiftSpots(layoutSharedTokens(width, height, 10, 0, count), gap, y);
 }
 
-export type OwnerMark = { x: number; y: number; size: number; rotate: '0deg' | '90deg' | '-90deg' | '180deg' };
+export type OwnerMark = {
+  x: number;
+  y: number;
+  size: number;
+  rotate: '0deg' | '90deg' | '-90deg' | '180deg';
+  /** Mirror left-right. Used on the side spaces, where rotation alone faces the emoji the wrong way. */
+  flipX: boolean;
+};
 
 /**
  * Owner emoji just inside the board, above the property card.
  * Rotation points the emoji's feet at that side of the board.
+ * Left and right marks are also flipped horizontally.
  */
 export function ownerMarkPlacement(row: number, col: number, width: number, height: number): OwnerMark {
   const along = row === 0 || row === 10 ? width : height;
   const depth = row === 0 || row === 10 ? height : width;
   const size = Math.max(12, Math.min(along - 2, Math.round(along * 0.62)));
   const gap = Math.max(2, Math.round(depth * 0.03));
-  if (row === 10) return { x: (width - size) / 2, y: -(size + gap), size, rotate: '0deg' };
-  if (row === 0) return { x: (width - size) / 2, y: height + gap, size, rotate: '180deg' };
-  if (col === 0) return { x: width + gap, y: (height - size) / 2, size, rotate: '-90deg' };
-  return { x: -(size + gap), y: (height - size) / 2, size, rotate: '90deg' };
+  if (row === 10) return { x: (width - size) / 2, y: -(size + gap), size, rotate: '0deg', flipX: false };
+  if (row === 0) return { x: (width - size) / 2, y: height + gap, size, rotate: '180deg', flipX: false };
+  if (col === 0) return { x: width + gap, y: (height - size) / 2, size, rotate: '-90deg', flipX: true };
+  return { x: -(size + gap), y: (height - size) / 2, size, rotate: '90deg', flipX: true };
 }
 
 export function fractionToIndex(fraction: number): number {
