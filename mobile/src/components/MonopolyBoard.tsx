@@ -267,14 +267,11 @@ function PhoneBoard({ onDragging, diceRoll, roll, startZoom = 1, ...props }: Pro
         {viewport > 0 ? (
           <BoardCanvas
             {...props}
+            diceRoll={props.cardOffer ? null : diceRoll}
+            pinDice
             panHandlers={responder.panHandlers}
             style={{ position: 'absolute', width: boardSize, height: boardSize, left: pan.x, top: pan.y }}
           />
-        ) : null}
-        {diceRoll && !props.cardOffer ? (
-          <View pointerEvents="none" style={styles.diceLayer}>
-            <MonopolyDice roll={diceRoll} />
-          </View>
         ) : null}
         {viewport > 0 && roll ? (
           <View pointerEvents="box-none" style={[styles.rollDock, rollDockBox(pan, zoom, viewport)]}>

@@ -438,6 +438,109 @@ export function deckPileLayout(board: number): DeckPileLayout {
   return best;
 }
 
+export type Point = { x: number; y: number };
+
+/** Die face size for a square board. */
+export function monopolyDieSize(board: number): number {
+  return Math.max(42, Math.min(68, Math.round(board * 0.12)));
+}
+
+type DieBounds = { minX: number; maxX: number; minY: number; maxY: number };
+
+/** Centers that keep a die fully on the green, below the roll and zoom controls. */
+function diceRestBounds(board: number, dieSize: number): DieBounds {
+  const edge = TRACK_DEPTH * board;
+  const half = dieSize / 2;
+  const margin = Math.max(2, Math.round(dieSize * 0.06));
+  const green: DieBounds = {
+    minX: edge + half + margin,
+    maxX: board - edge - half - margin,
+    minY: edge + half + margin,
+    maxY: board - edge - half - margin,
+  };
+  if (green.maxX <= green.minX || green.maxY <= green.minY) {
+    const mid = board / 2;
+    return { minX: mid, maxX: mid, minY: mid, maxY: mid };
+  }
+  const along = (board * (1 - 2 * TRACK_DEPTH)) / 9;
+  const ownerClear = Math.round(along * 0.62 + board * TRACK_DEPTH * 0.04) + 10;
+  const belowControls = edge + ownerClear + 96 + half;
+  const minY = Math.min(belowControls, green.maxY);
+  return { ...green, minY: Math.max(green.minY, minY) };
+}
+
+function clampPoint(point: Point, bounds: DieBounds): Point {
+  return {
+    x: Math.min(bounds.maxX, Math.max(bounds.minX, point.x)),
+    y: Math.min(bounds.maxY, Math.max(bounds.minY, point.y)),
+  };
+}
+
+function placeSecondDie(first: Point, bounds: DieBounds, dieSize: number, sample: () => number): Point {
+  const minDist = dieSize * 1.05;
+  const spanX = bounds.maxX - bounds.minX;
+  const spanY = bounds.maxY - bounds.minY;
+  let best = first;
+  for (let attempt = 0; attempt < 18; attempt += 1) {
+    const next = {
+      x: bounds.minX + sample() * spanX,
+      y: bounds.minY + sample() * spanY,
+    };
+    if (Math.hypot(next.x - first.x, next.y - first.y) >= minDist) return next;
+    best = next;
+  }
+  const pushed = clampPoint(
+    { x: first.x + minDist, y: first.y },
+    bounds,
+  );
+  if (Math.hypot(pushed.x - first.x, pushed.y - first.y) >= minDist * 0.9) return pushed;
+  return clampPoint({ x: first.x, y: Math.min(bounds.maxY, first.y + minDist) }, bounds);
+}
+
+/**
+ * Two tumble paths in board pixels. Every control point stays on the green,
+ * and the last point of each path is where that die lands.
+ */
+export function diceRollCurves(
+  board: number,
+  dieSize: number,
+  sample: () => number = Math.random,
+): [Point, Point, Point, Point][] {
+  const bounds = diceRestBounds(board, dieSize);
+  const spanX = Math.max(0, bounds.maxX - bounds.minX);
+  const spanY = Math.max(0, bounds.maxY - bounds.minY);
+  const pick = () => ({
+    x: bounds.minX + sample() * spanX,
+    y: bounds.minY + sample() * spanY,
+  });
+  const first = pick();
+  const second = placeSecondDie(first, bounds, dieSize, sample);
+  return [0, 1].map((lane) => {
+    const end = lane === 0 ? first : second;
+    const start = {
+      x: bounds.minX + spanX * (lane === 0 ? 0.02 : 0.16),
+      y: bounds.maxY - spanY * (lane === 0 ? 0.06 : 0.2),
+    };
+    return [start, pick(), pick(), end] as [Point, Point, Point, Point];
+  });
+}
+
+/** Points along a die tumble, including the hop above the curve. */
+export function diceHopPoints(curve: readonly [Point, Point, Point, Point], board: number): Point[] {
+  const [a, b, c, d] = curve;
+  const steps = 20;
+  const points: Point[] = [];
+  for (let index = 0; index <= steps; index += 1) {
+    const t = index / steps;
+    const u = 1 - t;
+    const x = u * u * u * a.x + 3 * u * u * t * b.x + 3 * u * t * t * c.x + t * t * t * d.x;
+    const y = u * u * u * a.y + 3 * u * u * t * b.y + 3 * u * t * t * c.y + t * t * t * d.y;
+    const bounce = Math.max(0, Math.sin(t * Math.PI * 4)) * (1 - t) * board * 0.07;
+    points.push({ x, y: y - bounce });
+  }
+  return points;
+}
+
 export function tokenSpacesBetween(from: number, to: number): number[] {
   const start = wrapSpace(from);
   const end = wrapSpace(to);

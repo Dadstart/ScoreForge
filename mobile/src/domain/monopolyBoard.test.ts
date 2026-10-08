@@ -6,12 +6,16 @@ import {
   DECK_TILT,
   deckPileLayout,
   deckVisualBox,
+  diceHopPoints,
+  diceRollCurves,
   jailCell,
   layoutJailedTokens,
   layoutSharedTokens,
   layoutVisitingTokens,
+  monopolyDieSize,
   ownerMarkPlacement,
   spaceToCell,
+  TRACK_DEPTH,
 } from './monopolyBoard';
 
 function boxesClear(a: { x: number; y: number; piece: number }, b: { x: number; y: number; piece: number }) {
@@ -168,4 +172,38 @@ describe('ownerMarkPlacement', () => {
       assert.ok(Math.abs(spot.size / along - 0.62) < 0.05);
     }
   });
+});
+
+function rollSample(seed: number) {
+  let state = seed >>> 0;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+}
+
+describe('dice landing', () => {
+  for (const board of [480, 720, 1100]) {
+    it(`stays on the green and varies the landing on a ${board}px board`, () => {
+      const die = monopolyDieSize(board);
+      const edge = TRACK_DEPTH * board;
+      const sample = rollSample(board);
+      const spots = new Set<string>();
+      for (let roll = 0; roll < 24; roll += 1) {
+        const curves = diceRollCurves(board, die, sample);
+        const landings = curves.map((curve) => curve[3]);
+        spots.add(`${Math.round(landings[0].x)}:${Math.round(landings[0].y)}`);
+        assert.ok(Math.hypot(landings[0].x - landings[1].x, landings[0].y - landings[1].y) >= die * 0.9);
+        for (const curve of curves) {
+          for (const point of diceHopPoints(curve, board)) {
+            assert.ok(point.x - die / 2 >= edge - 0.75);
+            assert.ok(point.x + die / 2 <= board - edge + 0.75);
+            assert.ok(point.y - die / 2 >= edge - 0.75);
+            assert.ok(point.y + die / 2 <= board - edge + 0.75);
+          }
+        }
+      }
+      assert.ok(spots.size > 8);
+    });
+  }
 });
