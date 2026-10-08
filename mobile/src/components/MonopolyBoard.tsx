@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Animated,
   Easing,
@@ -60,6 +60,8 @@ type Props = {
   moneyFlight?: MoneyFlight | null;
   onDragging: (dragging: boolean) => void;
   diceRoll?: DiceRollView | null;
+  /** Roll control, drawn at the top middle of the green center. */
+  roll?: ReactNode;
 };
 
 const VIEW_FRAME = 0;
@@ -76,6 +78,12 @@ const ZOOM_BTN = 44;
 const ZOOM_GAP = 8;
 const ZOOM_INSET = 12;
 
+/** How far owner marks hang into the green from the track. */
+function ownerClearance(board: number) {
+  const along = (board * (1 - 2 * TRACK_DEPTH)) / 9;
+  return Math.round(along * 0.62 + board * TRACK_DEPTH * 0.04) + 10;
+}
+
 /** Keep + and − on the green center, and inside the view when that corner is off screen. */
 function zoomDockSpot(pan: { x: number; y: number }, zoom: number, viewport: number) {
   const board = viewport * zoom;
@@ -90,8 +98,7 @@ function zoomDockSpot(pan: { x: number; y: number }, zoom: number, viewport: num
   const feltBottom = Math.min(1 - edge, viewBottom);
   const stack = ZOOM_BTN * 2 + ZOOM_GAP;
   const onFelt = feltRight > feltLeft && feltBottom > feltTop;
-  const along = (board * (1 - 2 * TRACK_DEPTH)) / 9;
-  const ownerClear = Math.round(along * 0.62 + board * TRACK_DEPTH * 0.04) + 10;
+  const ownerClear = ownerClearance(board);
   let top = onFelt ? pan.y + feltTop * board + ownerClear : ZOOM_INSET;
   let right = onFelt ? viewport - (pan.x + feltRight * board) + ownerClear : ZOOM_INSET;
   top = Math.min(Math.max(ZOOM_INSET, top), Math.max(ZOOM_INSET, viewport - stack - ZOOM_INSET));
@@ -99,7 +106,18 @@ function zoomDockSpot(pan: { x: number; y: number }, zoom: number, viewport: num
   return { top, right };
 }
 
-function PhoneBoard({ onDragging, diceRoll, startZoom = 1, ...props }: Props & { startZoom?: number }) {
+/** Top middle of the green, below the owner marks that hang in from the top row. */
+function rollDockBox(pan: { x: number; y: number }, zoom: number, viewport: number) {
+  const board = viewport * zoom;
+  const inset = TRACK_DEPTH * board;
+  return {
+    left: pan.x + inset,
+    top: pan.y + inset + ownerClearance(board),
+    width: Math.max(0, board - inset * 2),
+  };
+}
+
+function PhoneBoard({ onDragging, diceRoll, roll, startZoom = 1, ...props }: Props & { startZoom?: number }) {
   const viewportRef = useRef<View>(null);
   const [viewport, setViewport] = useState(0);
   const [zoom, setZoom] = useState(startZoom);
@@ -256,6 +274,11 @@ function PhoneBoard({ onDragging, diceRoll, startZoom = 1, ...props }: Props & {
         {diceRoll && !props.cardOffer ? (
           <View pointerEvents="none" style={styles.diceLayer}>
             <MonopolyDice roll={diceRoll} />
+          </View>
+        ) : null}
+        {viewport > 0 && roll ? (
+          <View pointerEvents="box-none" style={[styles.rollDock, rollDockBox(pan, zoom, viewport)]}>
+            {roll}
           </View>
         ) : null}
         <View
@@ -1474,6 +1497,11 @@ const styles = StyleSheet.create({
     position: 'absolute',
     gap: 8,
     zIndex: 40,
+  },
+  rollDock: {
+    position: 'absolute',
+    zIndex: 32,
+    alignItems: 'center',
   },
   diceLayer: {
     position: 'absolute',

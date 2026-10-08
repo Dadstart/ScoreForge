@@ -487,12 +487,6 @@ export function MonopolyScreen({ navigation, route }: Props) {
                     }}
                     disabled={!play.undo && game.events.length === 0}
                   />
-                  <Button
-                    label={rollingDice ? 'Rolling…' : inJail ? 'Roll for doubles' : `Roll for ${turnPlayer ? playerLabel(turnPlayer.name, turnPlayer.token) : 'player'}`}
-                    variant="primary"
-                    disabled={!canBank || rollingDice || play.pending != null || !turnPlayer}
-                    onPress={rollForPlayer}
-                  />
                   {play.pending && pendingProperty ? (
                     <>
                       <Button
@@ -556,6 +550,14 @@ export function MonopolyScreen({ navigation, route }: Props) {
           chestCount={play.chest.length}
           moneyFlight={moneyFlight}
           onDragging={setBoardDragging}
+          roll={
+            <Button
+              label={rollingDice ? 'Rolling…' : inJail ? 'Roll for doubles' : `Roll for ${turnPlayer ? playerLabel(turnPlayer.name, turnPlayer.token) : 'player'}`}
+              variant="primary"
+              disabled={!canBank || rollingDice || play.pending != null || !turnPlayer}
+              onPress={rollForPlayer}
+            />
+          }
           diceRoll={diceRoll}
         />
 
@@ -583,6 +585,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
             const player = game.players.find((entry) => entry.id === standing.playerId);
             const piece = playerToken(player?.token);
             const paying = standing.playerId === resolvedPayer;
+            const holdings = properties.filter((entry) => play.owned[entry.id] === standing.playerId);
             return (
               <Pressable
                 key={standing.playerId}
@@ -656,6 +659,41 @@ export function MonopolyScreen({ navigation, route }: Props) {
                 ) : (
                   <Text style={[styles.cash, broke && { color: colors.danger }]}>{formatMoney(cash)}</Text>
                 )}
+                <View
+                  style={styles.holdings}
+                  accessibilityLabel={
+                    holdings.length === 0
+                      ? `${standing.playerName} owns no properties`
+                      : `${standing.playerName} owns ${holdings.map((entry) => entry.name).join(', ')}`
+                  }
+                >
+                  {holdings.length === 0 ? (
+                    <Text style={styles.holdingEmpty}>No properties</Text>
+                  ) : (
+                    holdings.map((entry) => {
+                      const level = play.houses[entry.id] ?? 0;
+                      const mortgaged = play.mortgaged.includes(entry.id);
+                      const detail = mortgaged
+                        ? 'Mortgaged'
+                        : entry.kind !== 'street'
+                          ? null
+                          : level >= 5
+                            ? 'Hotel'
+                            : level > 0
+                              ? `${level} house${level === 1 ? '' : 's'}`
+                              : null;
+                      return (
+                        <View key={entry.id} style={styles.holding}>
+                          <View style={[styles.holdingSwatch, { backgroundColor: entry.swatch }]} />
+                          <Text style={[styles.holdingName, mortgaged && styles.holdingMortgaged]}>
+                            {entry.name}
+                            {detail ? <Text style={styles.holdingDetail}>{` · ${detail}`}</Text> : null}
+                          </Text>
+                        </View>
+                      );
+                    })
+                  )}
+                </View>
                 {standing.playerId === turnId && !complete ? (
                   <Badge label="Turn" tone="accent" style={styles.tileBadge} />
                 ) : null}
@@ -1017,7 +1055,7 @@ const styles = StyleSheet.create({
   error: { color: colors.danger, textAlign: 'center', alignSelf: 'stretch' },
   wrap: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: 'center' },
   cashCard: {
-    width: 168,
+    width: 240,
     borderWidth: 1.5,
     borderRadius: radii.lg,
     padding: 14,
@@ -1040,6 +1078,41 @@ const styles = StyleSheet.create({
   cash: {
     ...typography.score,
     fontSize: 28,
+  },
+  holdings: {
+    alignSelf: 'stretch',
+    gap: 4,
+  },
+  holding: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+  },
+  holdingSwatch: {
+    width: 8,
+    height: 14,
+    borderRadius: 2,
+    marginTop: 2,
+  },
+  holdingName: {
+    ...typography.label,
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 16,
+    textAlign: 'left',
+  },
+  holdingDetail: {
+    color: colors.textDim,
+    fontWeight: '600',
+  },
+  holdingMortgaged: {
+    color: colors.muted,
+  },
+  holdingEmpty: {
+    ...typography.label,
+    fontSize: 12,
+    color: colors.muted,
+    textAlign: 'center',
   },
   editBtn: {
     position: 'absolute',
