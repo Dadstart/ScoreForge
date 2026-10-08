@@ -53,6 +53,7 @@ import {
   mortgageValue,
   ownsMonopoly,
   payToLeaveJail,
+  payDue,
   rentDue,
   resolveRoll,
   sellBuilding,
@@ -551,12 +552,22 @@ export function MonopolyScreen({ navigation, route }: Props) {
           moneyFlight={moneyFlight}
           onDragging={setBoardDragging}
           roll={
-            <Button
-              label={rollingDice ? 'Rolling…' : inJail ? 'Roll for doubles' : `Roll for ${turnPlayer ? playerLabel(turnPlayer.name, turnPlayer.token) : 'player'}`}
-              variant="primary"
-              disabled={!canBank || rollingDice || play.pending != null || !turnPlayer}
-              onPress={rollForPlayer}
-            />
+            <View pointerEvents="box-none" style={styles.rollStack}>
+              <Button
+                label={rollingDice ? 'Rolling…' : inJail ? 'Roll for doubles' : `Roll for ${turnPlayer ? playerLabel(turnPlayer.name, turnPlayer.token) : 'player'}`}
+                variant="primary"
+                disabled={!canBank || rollingDice || play.pending != null || !turnPlayer}
+                onPress={rollForPlayer}
+              />
+              {play.pending?.kind === 'pay' ? (
+                <Button
+                  label={`Pay ${formatMoney(play.pending.amount)}`}
+                  variant="primary"
+                  disabled={!canBank}
+                  onPress={() => void commitPlay(payDue(play, game.tokenSpaces ?? {}, game.players))}
+                />
+              ) : null}
+            </View>
           }
           diceRoll={diceRoll}
         />
@@ -1050,6 +1061,7 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
   },
   actions: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
+  rollStack: { alignItems: 'center', gap: 8 },
   bannerText: { ...typography.label, fontSize: 15, textAlign: 'center', alignSelf: 'stretch' },
   row: { alignSelf: 'stretch', flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
   error: { color: colors.danger, textAlign: 'center', alignSelf: 'stretch' },

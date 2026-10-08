@@ -11,6 +11,7 @@ import {
   mortgageProperty,
   acceptCard,
   landedPropertyId,
+  payDue,
   rentDue,
   resolveRoll,
   turnPrompt,
@@ -66,10 +67,19 @@ describe('monopoly play', () => {
     assert.equal(rentDue(play, 'reading', 7), 50);
     const landed = resolveRoll(play, { ada: 0 }, players, roll(1, 2));
     assert.equal(landed.tokens.ada, 3);
-    assert.equal(landed.events.find((event) => event.playerId === 'ada')?.points, -8);
-    assert.equal(landed.events.find((event) => event.playerId === 'bea')?.points, 8);
-    assert.equal(landed.play.turn, 'bea');
-    assert.equal(moneyFromSquare(play, landed), 3);
+    assert.equal(landed.events.length, 0);
+    assert.equal(landed.play.turn, 'ada');
+    assert.equal(landed.play.pending?.kind, 'pay');
+    if (landed.play.pending?.kind !== 'pay') return;
+    assert.equal(landed.play.pending.amount, 8);
+    const paid = payDue(landed.play, landed.tokens, players);
+    assert.ok(!('error' in paid));
+    if ('error' in paid) return;
+    assert.equal(paid.events.find((event) => event.playerId === 'ada')?.points, -8);
+    assert.equal(paid.events.find((event) => event.playerId === 'bea')?.points, 8);
+    assert.equal(paid.play.turn, 'bea');
+    assert.equal(paid.play.pending, null);
+    assert.equal(moneyFromSquare(landed.play, paid), 3);
   });
 
   it('sends the player to jail on the third doubles without moving there', () => {
@@ -104,7 +114,13 @@ describe('monopoly play', () => {
     assert.ok(!('error' in accepted));
     if ('error' in accepted) return;
     assert.equal(accepted.tokens.ada, 39);
-    assert.equal(accepted.events.find((event) => event.playerId === 'ada')?.points, -50);
+    assert.equal(accepted.play.pending?.kind, 'pay');
+    if (accepted.play.pending?.kind !== 'pay') return;
+    assert.equal(accepted.play.pending.amount, 50);
+    const paid = payDue(accepted.play, accepted.tokens, players);
+    assert.ok(!('error' in paid));
+    if ('error' in paid) return;
+    assert.equal(paid.events.find((event) => event.playerId === 'ada')?.points, -50);
     assert.match(accepted.note, /Boardwalk/);
     assert.equal(accepted.route?.spaces[0], 7);
     assert.equal(accepted.route?.spaces.at(-1), 39);
@@ -162,9 +178,15 @@ describe('monopoly play', () => {
 
   it('sends bills from a tax square', () => {
     const play = table();
-    const taxed = resolveRoll(play, { ada: 0 }, players, roll(2, 2));
+    const taxed = resolveRoll(play, { ada: 0 }, players, roll(1, 3));
     assert.equal(taxed.tokens.ada, 4);
-    assert.equal(moneyFromSquare(play, taxed), 4);
+    assert.equal(taxed.play.pending?.kind, 'pay');
+    assert.equal(moneyFromSquare(play, taxed), null);
+    const paid = payDue(taxed.play, taxed.tokens, players);
+    assert.ok(!('error' in paid));
+    if ('error' in paid) return;
+    assert.equal(moneyFromSquare(taxed.play, paid), 4);
+    assert.equal(paid.play.turn, 'bea');
   });
 
   it('holds a Chance card until it is accepted', () => {
@@ -179,7 +201,10 @@ describe('monopoly play', () => {
     if ('error' in accepted) return;
     assert.equal(accepted.tokens.ada, 4);
     assert.deepEqual(accepted.route?.spaces, [7, 6, 5, 4]);
-    assert.equal(accepted.play.pending, null);
+    assert.equal(accepted.play.pending?.kind, 'pay');
+    if (accepted.play.pending?.kind !== 'pay') return;
+    assert.equal(accepted.play.pending.amount, 200);
+    assert.equal(accepted.play.pending.label, 'Income Tax');
   });
 
   it('waits to draw the next card until the first one is accepted', () => {

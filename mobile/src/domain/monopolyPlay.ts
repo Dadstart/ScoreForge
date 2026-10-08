@@ -16,7 +16,8 @@ import { fillRandom } from './secureRandom';
 
 export type BuyPending = { kind: 'buy'; propertyId: string };
 export type CardPending = { kind: 'card'; deck: CardDeck; id: string; space: number };
-export type PlayPending = BuyPending | CardPending;
+export type PayPending = { kind: 'pay'; amount: number; payeeId: string; space: number; label: string };
+export type PlayPending = BuyPending | CardPending | PayPending;
 
 export type MonopolyUndo = {
   turn: string;
@@ -276,6 +277,25 @@ export function normalizeMonopolyPlay(value: unknown, playerIds: string[]): Mono
     play.owned[pending.propertyId] == null
   ) {
     play.pending = { kind: 'buy', propertyId: pending.propertyId };
+  } else if (
+    pending &&
+    pending.kind === 'pay' &&
+    typeof pending.amount === 'number' &&
+    pending.amount > 0 &&
+    typeof pending.payeeId === 'string' &&
+    (pending.payeeId === BANK_PARTY_ID || ids.has(pending.payeeId)) &&
+    typeof pending.space === 'number' &&
+    pending.space >= 0 &&
+    pending.space < 40 &&
+    typeof pending.label === 'string'
+  ) {
+    play.pending = {
+      kind: 'pay',
+      amount: Math.trunc(pending.amount),
+      payeeId: pending.payeeId,
+      space: Math.trunc(pending.space),
+      label: pending.label,
+    };
   }
   play.undo = raw.undo && typeof raw.undo === 'object' ? raw.undo : null;
   return play;
@@ -445,11 +465,18 @@ function resolveProperty(ctx: Ctx, playerId: string, propertyId: string) {
     return;
   }
   const amount = rentDue(ctx.play, propertyId, ctx.dice, ctx.rentScale, ctx.utilityDice);
-  charge(ctx, playerId, owner, amount);
-  const ownerName = playerName(ctx.players, owner);
-  ctx.notes.push(`${name} pays ${ownerName} ${formatMoney(amount)} for ${property.name}.`);
   ctx.rentScale = 1;
   ctx.utilityDice = null;
+  if (amount <= 0) return;
+  const ownerName = playerName(ctx.players, owner);
+  ctx.play.pending = {
+    kind: 'pay',
+    amount,
+    payeeId: owner,
+    space: ctx.tokens[playerId] ?? 0,
+    label: property.name,
+  };
+  ctx.notes.push(`${name} owes ${ownerName} ${formatMoney(amount)} for ${property.name}.`);
 }
 
 function resolveSpace(
@@ -480,8 +507,14 @@ function resolveSpace(
     return;
   }
   if (space.tax) {
-    charge(ctx, playerId, BANK_PARTY_ID, space.tax);
-    ctx.notes.push(`${playerName(ctx.players, playerId)} pays ${formatMoney(space.tax)} ${space.name}.`);
+    ctx.play.pending = {
+      kind: 'pay',
+      amount: space.tax,
+      payeeId: BANK_PARTY_ID,
+      space: space.index,
+      label: space.name,
+    };
+    ctx.notes.push(`${playerName(ctx.players, playerId)} owes ${formatMoney(space.tax)} for ${space.name}.`);
     return;
   }
   if (space.name === 'Chance') {
@@ -777,6 +810,26 @@ function afterChoice(
   return commit(original, tokens, ctx);
 }
 
+export function payDue(
+  play: MonopolyPlay,
+  tokens: Record<string, number>,
+  players: PlayPlayer[],
+): PlayOutcome | { error: string } {
+  const pending = play.pending;
+  if (!pending || pending.kind !== 'pay') return { error: 'There is nothing to pay.' };
+  const events = transferEvents(play.turn, pending.payeeId, pending.amount);
+  const name = playerName(players, play.turn);
+  const payee = pending.payeeId === BANK_PARTY_ID ? 'the bank' : playerName(players, pending.payeeId);
+  return afterChoice(
+    play,
+    { ...play, pending: null },
+    tokens,
+    players,
+    [`${name} pays ${payee} ${formatMoney(pending.amount)} for ${pending.label}.`],
+    events,
+  );
+}
+
 export function moneyFromSquare(prior: MonopolyPlay, result: PlayOutcome): number | null {
   const paid = result.events.find((event) => event.points < 0);
   if (!paid) return null;
@@ -1051,7 +1104,10 @@ export function withoutMonopolyPlayer(play: MonopolyPlay, playerId: string, play
   delete chanceFree[playerId];
   delete chestFree[playerId];
   const turn = play.turn === playerId ? nextPlayer(players, playerId) : play.turn;
-  const pending = play.pending && play.turn === playerId ? null : play.pending;
+  const pending =
+    play.turn === playerId || (play.pending?.kind === 'pay' && play.pending.payeeId === playerId)
+      ? null
+      : play.pending;
   return {
     ...play,
     turn,
@@ -1080,6 +1136,9 @@ export function turnPrompt(play: MonopolyPlay, players: PlayPlayer[]): string {
   if (play.pending?.kind === 'card') {
     const label = play.pending.deck === 'chance' ? 'Chance' : 'Community Chest';
     return `${name} drew a ${label} card.`;
+  }
+  if (play.pending?.kind === 'pay') {
+    return `${name} owes ${formatMoney(play.pending.amount)} for ${play.pending.label}.`;
   }
   if (play.jail[play.turn] != null) {
     const spent = play.jail[play.turn] ?? 0;
