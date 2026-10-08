@@ -152,7 +152,7 @@ function fromStored(shareCode: string, data: StoredGame, events: ScoreEvent[]): 
     spider: unpackSpider(data.spider),
     tripeaks: unpackTriPeaks(data.tripeaks),
     yahtzee: data.yahtzee ?? null,
-    monopoly: unpackMonopoly(data.monopoly, Array.isArray(data.players) ? data.players.map((player) => player.id) : []),
+    monopoly: data.monopoly ?? null,
     revision: revisionOf(data),
     createdAt: typeof data.createdAt === 'string' ? data.createdAt : new Date().toISOString(),
     updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : new Date().toISOString(),
