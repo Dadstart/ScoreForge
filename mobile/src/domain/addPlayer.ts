@@ -27,7 +27,7 @@ export function withAddedPlayer(game: Game, rawName: string, maxPlayers: number)
       ensureSorryState(
         ensureBackgammonState({
           ...game,
-          players: [...game.players, seatedPlayer(game, name)],
+          players: [...game.players, seatedPlayer(game.templateId, game.players, name)],
           updatedAt: new Date().toISOString(),
         }),
       ),
@@ -35,12 +35,17 @@ export function withAddedPlayer(game: Game, rawName: string, maxPlayers: number)
   );
 }
 
+/** The player who starts a game. A Monopoly host takes the first piece. */
+export function openingPlayer(templateId: string, name: string): Player {
+  return seatedPlayer(templateId, [], name);
+}
+
 /** A new Monopoly player gets the first unused piece. Other games stay nameless of tokens. */
-function seatedPlayer(game: Game, name: string): Player {
+function seatedPlayer(templateId: string, existing: Player[], name: string): Player {
   const player = createPlayer(name);
-  if (game.templateId !== 'monopoly') return player;
+  if (templateId !== 'monopoly') return player;
   const taken = new Set(
-    game.players.map((entry) => playerToken(entry.token)?.emoji).filter((emoji) => emoji),
+    existing.map((entry) => playerToken(entry.token)?.emoji).filter((emoji) => emoji),
   );
   const free = PLAYER_TOKENS.find((token) => !taken.has(token.emoji));
   return free ? { ...player, token: free.id } : player;

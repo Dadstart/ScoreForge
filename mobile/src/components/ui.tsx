@@ -11,6 +11,7 @@ import {
   TextInput,
   useWindowDimensions,
   View,
+  type DimensionValue,
   type StyleProp,
   type TextInputProps,
   type ViewStyle,
@@ -260,7 +261,7 @@ const styles = StyleSheet.create({
     flexGrow: 0,
     flexShrink: 0,
     flexBasis: 'auto',
-    minHeight: '100vh',
+    minHeight: '100vh' as DimensionValue,
   },
   screenScroll: {
     flex: 1,

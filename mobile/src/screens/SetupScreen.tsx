@@ -10,7 +10,7 @@ import { Button, Field, Screen } from '../components/ui';
 import { setupDetail, setupSummary, type ChineseMode, type PlayerCount, type SetCount, type TwoSetGoals } from '../domain/chineseCheckers';
 import type { DrawCount } from '../domain/klondike';
 import type { SuitCount } from '../domain/spider';
-import { createPlayer } from '../domain/models';
+import { openingPlayer } from '../domain/addPlayer';
 import { getTemplate, templates } from '../domain/templates';
 import { loadDisplayName, saveDisplayName } from '../storage/displayNameStore';
 import { createAndSaveGame } from '../storage/gameStore';
@@ -77,7 +77,7 @@ export function SetupScreen({ navigation }: Props) {
       const game = await createAndSaveGame({
         name: name.trim() || template.name,
         templateId: template.id,
-        players: [createPlayer(host)],
+        players: [openingPlayer(template.id, host)],
         targetScore: showTarget && targetScore ? Number(targetScore) : null,
         maxRounds: showMaxRounds && maxRounds ? Number(maxRounds) : null,
         requireJumps: template.id === 'checkers' ? requireJumps : undefined,

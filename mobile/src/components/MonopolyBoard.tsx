@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import type { Player } from '../domain/models';
-import { boardSpaces, spaceToCell, tokenSpace, tokenSpacesBetween, TRACK_DEPTH, cellBox } from '../domain/monopolyBoard';
+import { boardSpaces, spaceToCell, tokenSpace, tokenSpacesBetween, TRACK_DEPTH, cellBox, layoutSharedTokens } from '../domain/monopolyBoard';
 import { getProperty, playerToken } from '../domain/monopoly';
 import { fitBoardLabel, fitSize } from '../domain/monopolyLabel';
 import { clampPan, clampZoom, panForZoom, stepZoom } from '../domain/monopolyZoom';
@@ -570,6 +570,7 @@ function BoardCanvas({
               (other) => tokenSpace(tokenSpaces, other.id) === spaceIndex,
             );
             const slot = sharing.findIndex((other) => other.id === player.id);
+            const crowd = sharing.length;
             const route =
               tokenRoute &&
               tokenRoute.playerId === player.id &&
@@ -585,6 +586,7 @@ function BoardCanvas({
                 color={TOKEN_COLORS[index % TOKEN_COLORS.length]}
                 spaceIndex={spaceIndex}
                 slot={slot}
+                crowd={crowd}
                 size={size}
                 routeId={route?.id ?? 0}
                 routeSpaces={route?.spaces ?? null}
@@ -1122,11 +1124,16 @@ function clampInside(value: number, span: number, piece: number) {
   return Math.min(Math.max(0, span - piece), Math.max(0, value));
 }
 
-function piecePlace(index: number, size: number, slot: number) {
+function piecePlace(index: number, size: number, slot: number, count = 1) {
   const { row, col } = spaceToCell(index);
   const frame = cellBox(row, col);
   const width = frame.w * size;
   const height = frame.h * size;
+  if (count > 1) {
+    const spots = layoutSharedTokens(width, height, row, col, count);
+    const spot = spots[Math.max(0, Math.min(slot, spots.length - 1))];
+    return { left: frame.x * size + spot.x, top: frame.y * size + spot.y, piece: spot.piece };
+  }
   const piece = fittedPiece(width, height);
   const offset = pieceOffset(row, col, width, height, piece, slot);
   return { left: frame.x * size + offset.x, top: frame.y * size + offset.y, piece };
@@ -1165,6 +1172,7 @@ function Piece({
   color,
   spaceIndex,
   slot,
+  crowd,
   size,
   routeId,
   routeSpaces,
@@ -1178,6 +1186,7 @@ function Piece({
   color: string;
   spaceIndex: number;
   slot: number;
+  crowd: number;
   size: number;
   routeId: number;
   routeSpaces: number[] | null;
@@ -1186,7 +1195,7 @@ function Piece({
   onSettled: (playerId: string) => void;
 }) {
   const [flying, setFlying] = useState(false);
-  const resting = piecePlace(spaceIndex, size, slot);
+  const resting = piecePlace(spaceIndex, size, slot, crowd);
   const left = useRef(new Animated.Value(resting.left)).current;
   const top = useRef(new Animated.Value(resting.top)).current;
   const liftX = useRef(new Animated.Value(0)).current;
@@ -1197,8 +1206,10 @@ function Piece({
   const flyingRef = useRef(false);
   const sizeRef = useRef(size);
   const slotRef = useRef(slot);
+  const countRef = useRef(crowd);
   sizeRef.current = size;
   slotRef.current = slot;
+  countRef.current = crowd;
   const routeRef = useRef(routeSpaces);
   routeRef.current = routeSpaces;
   const settledNotice = useRef(onSettled);
@@ -1210,21 +1221,22 @@ function Piece({
 
   useEffect(() => {
     if (flyingRef.current || settled.current !== spaceIndex) return;
-    const place = piecePlace(spaceIndex, size, slot);
+    const place = piecePlace(spaceIndex, size, slot, crowd);
     left.setValue(place.left);
     top.setValue(place.top);
-  }, [left, size, slot, spaceIndex, top]);
+  }, [crowd, left, size, slot, spaceIndex, top]);
 
   useEffect(() => {
     if (spaceIndex === settled.current) return;
     const from = settled.current;
-    const placeAt = (index: number, atSlot: number) => piecePlace(index, sizeRef.current, atSlot);
+    const placeAt = (index: number, atSlot: number, atCount = 1) =>
+      piecePlace(index, sizeRef.current, atSlot, atCount);
     if (diceMotionMs() === 0) {
       settled.current = spaceIndex;
       lastPath.current = null;
       flyingRef.current = false;
       setFlying(false);
-      const place = placeAt(spaceIndex, slotRef.current);
+      const place = placeAt(spaceIndex, slotRef.current, countRef.current);
       left.setValue(place.left);
       top.setValue(place.top);
       const holds = holdRef.current;
@@ -1235,7 +1247,7 @@ function Piece({
     const spaces = travelSpaces(from, spaceIndex, routeRef.current, lastPath.current);
     if (spaces.length < 2) {
       settled.current = spaceIndex;
-      const place = placeAt(spaceIndex, slotRef.current);
+      const place = placeAt(spaceIndex, slotRef.current, countRef.current);
       left.setValue(place.left);
       top.setValue(place.top);
       return;
@@ -1268,7 +1280,11 @@ function Piece({
       const holds = [...holdRef.current];
       for (let step = 1; step < spaces.length; step += 1) {
         const index = spaces[step];
-        const place = placeAt(index, step === spaces.length - 1 ? slotRef.current : 0);
+        const place = placeAt(
+          index,
+          step === spaces.length - 1 ? slotRef.current : 0,
+          step === spaces.length - 1 ? countRef.current : 1,
+        );
         const along = adjacentSpaces(spaces[step - 1], index);
         const dir = along ? inwardHop(spaces[step - 1]) : { x: 0, y: 0 };
         const duration = along ? pace : Math.round(pace * 2.4);
@@ -1305,7 +1321,7 @@ function Piece({
       finished = true;
       flyingRef.current = false;
       setFlying(false);
-      const place = placeAt(settled.current, slotRef.current);
+      const place = placeAt(settled.current, slotRef.current, countRef.current);
       left.setValue(place.left);
       top.setValue(place.top);
       liftX.setValue(0);
@@ -1323,7 +1339,7 @@ function Piece({
         flyingRef.current = false;
         settled.current = from;
         setFlying(false);
-        const place = placeAt(from, slotRef.current);
+        const place = placeAt(from, slotRef.current, countRef.current);
         left.setValue(place.left);
         top.setValue(place.top);
         liftX.setValue(0);

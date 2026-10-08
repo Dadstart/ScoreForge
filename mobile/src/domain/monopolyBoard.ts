@@ -92,6 +92,86 @@ export function cellBox(row: number, col: number) {
   return { x: x.start, y: y.start, w: x.size, h: y.size };
 }
 
+export type TokenSpot = { x: number; y: number; piece: number };
+
+/**
+ * Pack every token on one square into that square without their boxes touching.
+ * Side spaces keep a strip on the outer edge for the color bar.
+ */
+export function layoutSharedTokens(
+  width: number,
+  height: number,
+  row: number,
+  col: number,
+  count: number,
+): TokenSpot[] {
+  const n = Math.max(1, Math.floor(count));
+  const edge = Math.max(2, Math.round(Math.min(width, height) * 0.04));
+  const corner = (row === 0 || row === 10) && (col === 0 || col === 10);
+  let x0 = edge;
+  let y0 = edge;
+  let x1 = Math.max(x0 + 1, width - edge);
+  let y1 = Math.max(y0 + 1, height - edge);
+  if (!corner) {
+    const inward = row === 0 || row === 10 ? height : width;
+    const reserve = Math.round(inward * 0.38);
+    if (row === 10) y1 = Math.max(y0 + 1, y1 - reserve);
+    else if (row === 0) y0 = Math.min(y1 - 1, y0 + reserve);
+    else if (col === 0) x0 = Math.min(x1 - 1, x0 + reserve);
+    else x1 = Math.max(x0 + 1, x1 - reserve);
+  }
+  const bw = x1 - x0;
+  const bh = y1 - y0;
+  let gap = n === 1 ? 0 : Math.max(2, Math.round(Math.min(bw, bh) * 0.08));
+
+  const pack = (spacing: number) => {
+    let cols = 1;
+    let piece = 0;
+    for (let nextCols = 1; nextCols <= n; nextCols += 1) {
+      const rows = Math.ceil(n / nextCols);
+      const fitted = Math.min(
+        (bw - spacing * (nextCols - 1)) / nextCols,
+        (bh - spacing * (rows - 1)) / rows,
+      );
+      if (fitted > piece) {
+        piece = fitted;
+        cols = nextCols;
+      }
+    }
+    return { cols, piece, rows: Math.ceil(n / cols) };
+  };
+
+  let packed = pack(gap);
+  while (packed.piece < 8 && gap > 1) {
+    gap -= 1;
+    const tighter = pack(gap);
+    if (tighter.piece <= packed.piece) {
+      gap += 1;
+      break;
+    }
+    packed = tighter;
+  }
+  const { cols, rows } = packed;
+  const piece = Math.min(packed.piece, (bw - gap * (cols - 1)) / cols, (bh - gap * (rows - 1)) / rows);
+  const usedW = cols * piece + (cols - 1) * gap;
+  const usedH = rows * piece + (rows - 1) * gap;
+  const originX = x0 + Math.max(0, (bw - usedW) / 2);
+  const originY = y0 + Math.max(0, (bh - usedH) / 2);
+
+  return Array.from({ length: n }, (_, index) => {
+    const line = Math.floor(index / cols);
+    const column = index % cols;
+    const inRow = line === rows - 1 ? n - line * cols : cols;
+    const rowWidth = inRow * piece + (inRow - 1) * gap;
+    const rowX = originX + (usedW - rowWidth) / 2;
+    return {
+      x: rowX + column * (piece + gap),
+      y: originY + line * (piece + gap),
+      piece,
+    };
+  });
+}
+
 export function fractionToIndex(fraction: number): number {
   if (fraction <= TRACK_DEPTH) return 0;
   if (fraction >= 1 - TRACK_DEPTH) return 10;

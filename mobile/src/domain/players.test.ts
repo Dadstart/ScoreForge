@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { withAddedPlayer, withoutPlayer } from './addPlayer';
+import { openingPlayer, withAddedPlayer, withoutPlayer } from './addPlayer';
 import { findLocalPlayerId, nextRoundForPlayer } from './localPlayer';
 import { createGame, createPlayer, createScoreEvent, normalizeShareCode } from './models';
 import { gameScreenForTemplate } from '../navigation/types';
@@ -23,6 +23,11 @@ describe('players', () => {
     assert.throws(() => withAddedPlayer(added, '  ', 4), /player name/);
     const full = withAddedPlayer(withAddedPlayer(added, 'Cy', 4), 'Di', 4);
     assert.throws(() => withAddedPlayer(full, 'Ed', 4), /maximum of 4/);
+  });
+
+  it('gives the Monopoly host the first piece', () => {
+    assert.equal(openingPlayer('monopoly', 'Ada').token, 'car');
+    assert.equal(openingPlayer('rounds', 'Ada').token, undefined);
   });
 
   it('gives a new Monopoly player the first free token', () => {
