@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   cellBox,
+  centerTitleBounds,
+  DECK_TILT,
+  deckPileLayout,
+  deckVisualBox,
   jailCell,
   layoutJailedTokens,
   layoutSharedTokens,
@@ -103,6 +107,31 @@ describe('jail tokens', () => {
           assert.ok(spot.y + spot.piece <= cell + 0.01);
           assert.equal(overlaps(spot, box), false);
         }
+      }
+    });
+  }
+});
+
+function boxesMiss(a: { left: number; right: number; top: number; bottom: number }, b: { left: number; right: number; top: number; bottom: number }, gap: number) {
+  return a.right + gap <= b.left || b.right + gap <= a.left || a.bottom + gap <= b.top || b.bottom + gap <= a.top;
+}
+
+describe('deckPileLayout', () => {
+  for (const board of [280, 360, 480, 720, 851, 1100, 1277, 1702, 2200]) {
+    it(`keeps both decks off the title on a ${board}px board`, () => {
+      const piles = deckPileLayout(board);
+      const title = centerTitleBounds(board);
+      assert.ok(piles.width > (board < 400 ? 12 : 36), `deck width ${piles.width}`);
+      for (const pile of [
+        { left: piles.chestLeft, top: piles.chestTop, tilt: -DECK_TILT },
+        { left: piles.chanceLeft, top: piles.chanceTop, tilt: DECK_TILT },
+      ]) {
+        const box = deckVisualBox(pile.left, pile.top, piles.width, piles.height, pile.tilt);
+        assert.ok(box.left >= -0.5, 'left of the green');
+        assert.ok(box.top >= -0.5, 'above the green');
+        assert.ok(box.right <= title.felt + 0.5, 'right of the green');
+        assert.ok(box.bottom <= title.felt + 0.5, 'below the green');
+        assert.ok(boxesMiss(box, title, 4), `covers MONOPOLY (${JSON.stringify(box)})`);
       }
     });
   }

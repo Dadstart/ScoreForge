@@ -16,6 +16,7 @@ import type { Player } from '../domain/models';
 import {
   boardSpaces,
   cellBox,
+  centerTitleFont,
   jailCell,
   layoutJailedTokens,
   layoutSharedTokens,
@@ -577,7 +578,7 @@ function BoardCanvas({
         <Text
           style={[
             styles.centerTitle,
-            { fontSize: Math.min(96, Math.max(18, Math.round(cell * 0.62))), letterSpacing: 1 },
+            { fontSize: centerTitleFont(cell), letterSpacing: 1 },
           ]}
         >
           MONOPOLY

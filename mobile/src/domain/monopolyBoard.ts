@@ -275,6 +275,161 @@ export function backwardSpaces(from: number, to: number): number[] {
  * Path for a move whose direction was not recorded.
  * Short trips follow the track. A long jump, such as being sent to jail, slides straight across.
  */
+/** MONOPOLY word size. `corner` is the board's corner cell, `board * TRACK_DEPTH`. */
+export function centerTitleFont(corner: number): number {
+  return Math.min(96, Math.max(18, Math.round(corner * 0.62)));
+}
+
+/** Fraunces 700 "MONOPOLY" at letter-spacing 1, measured on the board. */
+const TITLE_EM = 5.8;
+const TITLE_LINE = 1.25;
+export const DECK_TILT = 34;
+const DECK_ASPECT = 0.68;
+const STACK_X = 9;
+const STACK_Y = 12;
+
+export type Box = { left: number; right: number; top: number; bottom: number };
+
+/** The gold word and the rule under it, in center-square coordinates. */
+export function centerTitleBounds(board: number): Box & { felt: number } {
+  const felt = board * (1 - 2 * TRACK_DEPTH);
+  const font = centerTitleFont(board * TRACK_DEPTH);
+  const textW = font * TITLE_EM + 8;
+  const textH = font * TITLE_LINE;
+  const blockH = textH + 8;
+  const blockTop = (felt - blockH) / 2;
+  return {
+    felt,
+    left: (felt - textW) / 2,
+    right: (felt + textW) / 2,
+    top: blockTop,
+    bottom: blockTop + blockH,
+  };
+}
+
+function deckExtents(width: number, height: number, degrees: number) {
+  const rad = (degrees * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const ox of [0, STACK_X]) {
+    for (const oy of [0, STACK_Y]) {
+      for (const px of [0, width]) {
+        for (const py of [0, height]) {
+          const x = px + ox - width / 2;
+          const y = py + oy - height / 2;
+          const rx = x * cos - y * sin;
+          const ry = x * sin + y * cos;
+          if (rx < minX) minX = rx;
+          if (rx > maxX) maxX = rx;
+          if (ry < minY) minY = ry;
+          if (ry > maxY) maxY = ry;
+        }
+      }
+    }
+  }
+  return { minX, maxX, minY, maxY };
+}
+
+/** Axis-aligned bounds of a tilted deck, including the stacked layers. */
+export function deckVisualBox(left: number, top: number, width: number, height: number, degrees: number): Box {
+  const ext = deckExtents(width, height, degrees);
+  const cx = left + width / 2;
+  const cy = top + height / 2;
+  return {
+    left: cx + ext.minX,
+    right: cx + ext.maxX,
+    top: cy + ext.minY,
+    bottom: cy + ext.maxY,
+  };
+}
+
+export type DeckPileLayout = {
+  width: number;
+  height: number;
+  chestLeft: number;
+  chanceLeft: number;
+  chestTop: number;
+  chanceTop: number;
+};
+
+function placeDeck(
+  width: number,
+  height: number,
+  degrees: number,
+  laneLeft: number,
+  laneRight: number,
+  bandTop: number,
+  bandBottom: number,
+) {
+  const ext = deckExtents(width, height, degrees);
+  const visualW = ext.maxX - ext.minX;
+  const visualH = ext.maxY - ext.minY;
+  if (visualW > laneRight - laneLeft + 0.01) return null;
+  if (visualH > bandBottom - bandTop + 0.01) return null;
+  const visualLeft = laneLeft + (laneRight - laneLeft - visualW) / 2;
+  const visualTop = bandTop + (bandBottom - bandTop - visualH) / 2;
+  const centerX = visualLeft - ext.minX;
+  const centerY = visualTop - ext.minY;
+  return { left: centerX - width / 2, top: centerY - height / 2 };
+}
+
+/**
+ * Community Chest and Chance sit under the title, inside the green,
+ * clear of the word at every board size.
+ */
+export function deckPileLayout(board: number): DeckPileLayout {
+  const empty = { width: 0, height: 0, chestLeft: 0, chanceLeft: 0, chestTop: 0, chanceTop: 0 };
+  if (board <= 0) return empty;
+  const title = centerTitleBounds(board);
+  const felt = title.felt;
+  const font = centerTitleFont(board * TRACK_DEPTH);
+  const pad = Math.max(6, font * 0.08);
+  const inset = Math.max(10, felt * 0.072 + 4);
+  const bandTop = title.bottom + pad;
+  const bandBottom = felt - inset;
+  const bandLeft = inset;
+  const bandRight = felt - inset;
+  const gutter = Math.max(16, felt * 0.03);
+  if (bandBottom <= bandTop || bandRight <= bandLeft + gutter) return empty;
+  const mid = (bandLeft + bandRight) / 2;
+  const leftLane = [bandLeft, mid - gutter / 2] as const;
+  const rightLane = [mid + gutter / 2, bandRight] as const;
+
+  const fits = (width: number) => {
+    const height = width / DECK_ASPECT;
+    const chest = placeDeck(width, height, -DECK_TILT, leftLane[0], leftLane[1], bandTop, bandBottom);
+    const chance = placeDeck(width, height, DECK_TILT, rightLane[0], rightLane[1], bandTop, bandBottom);
+    if (!chest || !chance) return null;
+    return {
+      width,
+      height,
+      chestLeft: chest.left,
+      chanceLeft: chance.left,
+      chestTop: chest.top,
+      chanceTop: chance.top,
+    };
+  };
+
+  let lo = 0;
+  let hi = Math.min(200, felt * 0.22);
+  let best = fits(1) ?? empty;
+  for (let i = 0; i < 28; i += 1) {
+    const width = (lo + hi) / 2;
+    const placed = fits(width);
+    if (placed) {
+      best = placed;
+      lo = width;
+    } else {
+      hi = width;
+    }
+  }
+  return best;
+}
+
 export function tokenSpacesBetween(from: number, to: number): number[] {
   const start = wrapSpace(from);
   const end = wrapSpace(to);

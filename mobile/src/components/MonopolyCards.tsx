@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path, Rect } from 'react-native-svg';
 import { cardCopy, type CardDeck } from '../domain/monopolyCards';
-import { TRACK_DEPTH } from '../domain/monopolyBoard';
+import { DECK_TILT, TRACK_DEPTH, deckPileLayout } from '../domain/monopolyBoard';
 import { fonts } from '../theme';
 import { diceMotionMs } from './MonopolyDice';
 
@@ -10,7 +10,6 @@ import { diceMotionMs } from './MonopolyDice';
 export const CARD_REVEAL_MS = 1900;
 
 const FLIP_MS = 720;
-const PILE_ANGLE = 34;
 const LAYERS = 4;
 
 type FaceCard = { deck: CardDeck; id: string; nonce: number | string };
@@ -26,25 +25,32 @@ type Props = {
 export function MonopolyCardTable({ boardSize, chanceCount, chestCount, face, onAccept }: Props) {
   const center = boardSize * (1 - 2 * TRACK_DEPTH);
   const origin = boardSize * TRACK_DEPTH;
-  const pileWidth = Math.max(72, center * 0.16);
-  const pileHeight = pileWidth / 0.68;
-  const inset = center * 0.075;
-  const pileTop = (center - pileHeight) / 2;
+  const piles = deckPileLayout(boardSize);
+  const faceLeft = face?.deck === 'chance' ? piles.chanceLeft : piles.chestLeft;
+  const faceTop = face?.deck === 'chance' ? piles.chanceTop : piles.chestTop;
 
   return (
     <View
       pointerEvents="box-none"
       style={[styles.table, { left: origin, top: origin, width: center, height: center }]}
     >
-      <CardPile deck="chest" count={chestCount} width={pileWidth} height={pileHeight} left={inset} top={pileTop} angle={-PILE_ANGLE} />
+      <CardPile
+        deck="chest"
+        count={chestCount}
+        width={piles.width}
+        height={piles.height}
+        left={piles.chestLeft}
+        top={piles.chestTop}
+        angle={-DECK_TILT}
+      />
       <CardPile
         deck="chance"
         count={chanceCount}
-        width={pileWidth}
-        height={pileHeight}
-        left={center - inset - pileWidth}
-        top={pileTop}
-        angle={PILE_ANGLE}
+        width={piles.width}
+        height={piles.height}
+        left={piles.chanceLeft}
+        top={piles.chanceTop}
+        angle={DECK_TILT}
       />
       {face ? (
         <FlippedCard
@@ -52,11 +58,11 @@ export function MonopolyCardTable({ boardSize, chanceCount, chestCount, face, on
           deck={face.deck}
           id={face.id}
           center={center}
-          pileWidth={pileWidth}
-          pileHeight={pileHeight}
-          pileLeft={face.deck === 'chance' ? center - inset - pileWidth : inset}
-          pileTop={pileTop}
-          angle={face.deck === 'chance' ? PILE_ANGLE : -PILE_ANGLE}
+          pileWidth={piles.width}
+          pileHeight={piles.height}
+          pileLeft={faceLeft}
+          pileTop={faceTop}
+          angle={face.deck === 'chance' ? DECK_TILT : -DECK_TILT}
           onAccept={onAccept}
         />
       ) : null}
