@@ -34,6 +34,11 @@ export function usePageScroll(enabled: boolean) {
   }, [enabled, setEnabled]);
 }
 
+/** Turn page scrolling on or off immediately. Safe to call from a touch handler. */
+export function useSetPageScroll() {
+  return useContext(PageScrollContext);
+}
+
 /** Mouse-wheel and trackpad ticks move this many times farther than the browser default. */
 const PAGE_SCROLL_SPEED = 3;
 
@@ -96,7 +101,7 @@ export function Screen({
 }: {
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
-  /** When set, the page does not scroll. Used while the Monopoly board is zoomed in. */
+  /** When false, the page does not scroll. Omit it to leave scrolling on. */
   scrollEnabled?: boolean;
 }) {
   const insets = useSafeAreaInsets();
@@ -104,6 +109,7 @@ export function Screen({
   const headerHeight = useHeaderHeight();
   const window = useWindowDimensions();
   const shellRef = useRef<View>(null);
+  const scrollRef = useRef<ScrollView>(null);
   const [scrollEnabledState, setScrollEnabled] = useState(true);
   const scrollEnabled = scrollEnabledProp ?? scrollEnabledState;
   const topInset = headerHeight > 0 ? 0 : insets.top;
@@ -111,9 +117,8 @@ export function Screen({
   const web = Platform.OS === 'web';
   const setEnabled = useCallback((enabled: boolean) => {
     setScrollEnabled(enabled);
-    if (Platform.OS === 'web' && typeof document !== 'undefined') {
-      document.body.style.setProperty('overflow-y', enabled ? 'auto' : 'hidden', 'important');
-    }
+    const node = scrollRef.current as unknown as { setNativeProps?: (props: { scrollEnabled: boolean }) => void } | null;
+    node?.setNativeProps?.({ scrollEnabled: enabled });
   }, []);
 
   useEffect(() => {
@@ -123,9 +128,9 @@ export function Screen({
 
   useEffect(() => {
     if (!web || typeof document === 'undefined') return;
-    document.body.style.setProperty('overflow-y', scrollEnabled ? 'auto' : 'hidden', 'important');
+    document.body.style.setProperty('overflow-y', scrollEnabledProp === false ? 'hidden' : 'auto', 'important');
     return () => document.body.style.setProperty('overflow-y', 'auto', 'important');
-  }, [scrollEnabled, web]);
+  }, [scrollEnabledProp, web]);
 
   useEffect(() => {
     const view = globalThis.window;
@@ -171,6 +176,7 @@ export function Screen({
           <View style={[styles.page, { paddingTop: topInset }]}>{page}</View>
         ) : (
           <ScrollView
+            ref={scrollRef}
             style={styles.screenScroll}
             contentContainerStyle={[styles.page, { paddingTop: topInset }]}
             keyboardShouldPersistTaps="handled"

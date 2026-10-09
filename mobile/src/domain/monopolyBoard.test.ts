@@ -16,6 +16,7 @@ import {
   ownerMarkPlacement,
   spaceToCell,
   TRACK_DEPTH,
+  visibleBoardRect,
 } from './monopolyBoard';
 
 function boxesClear(a: { x: number; y: number; piece: number }, b: { x: number; y: number; piece: number }) {
@@ -206,4 +207,105 @@ describe('dice landing', () => {
       assert.ok(spots.size > 8);
     });
   }
+
+  it('lands in the visible window when the board is zoomed in', () => {
+    const board = 1100;
+    const die = monopolyDieSize(board);
+    const view = { x: 620, y: 640, width: 300, height: 280 };
+    const sample = rollSample(11);
+    const spots = new Set<string>();
+    for (let roll = 0; roll < 16; roll += 1) {
+      const curves = diceRollCurves(board, die, sample, view);
+      const landings = curves.map((curve) => curve[3]);
+      spots.add(`${Math.round(landings[0].x)}:${Math.round(landings[0].y)}`);
+      for (const curve of curves) {
+        for (const point of diceHopPoints(curve, board, view)) {
+          assert.ok(point.x - die / 2 >= view.x - 0.75, `x ${point.x} left of the view`);
+          assert.ok(point.y - die / 2 >= view.y - 0.75, `y ${point.y} above the view`);
+          assert.ok(point.x + die / 2 <= view.x + view.width + 0.75, `x ${point.x} right of the view`);
+          assert.ok(point.y + die / 2 <= view.y + view.height + 0.75, `y ${point.y} below the view`);
+        }
+      }
+    }
+    assert.ok(spots.size > 4);
+  });
+
+  it('stays on screen when the green is panned away', () => {
+    const board = 900;
+    const die = monopolyDieSize(board);
+    const view = { x: 0, y: 0, width: 150, height: 150 };
+    const curves = diceRollCurves(board, die, rollSample(3), view);
+    for (const curve of curves) {
+      const end = curve[3];
+      assert.ok(end.x - die / 2 >= view.x - 0.75);
+      assert.ok(end.y - die / 2 >= view.y - 0.75);
+      assert.ok(end.x + die / 2 <= view.x + view.width + 0.75);
+      assert.ok(end.y + die / 2 <= view.y + view.height + 0.75);
+    }
+  });
+
+  it('keeps a zoomed phone window on screen instead of the far edge of the board', () => {
+    const viewport = 390;
+    const board = Math.round(viewport * 2.45);
+    const die = monopolyDieSize(board);
+    const top = { x: 0, y: 0, width: viewport, height: viewport };
+    const corner = {
+      x: board - viewport,
+      y: board - viewport,
+      width: viewport,
+      height: viewport,
+    };
+    for (const view of [top, corner]) {
+      const sample = rollSample(view.x + view.y + 1);
+      const lands: number[] = [];
+      for (let roll = 0; roll < 12; roll += 1) {
+        const curves = diceRollCurves(board, die, sample, view);
+        for (const curve of curves) {
+          const end = curve[3];
+          lands.push(end.y);
+          for (const point of diceHopPoints(curve, board, view)) {
+            assert.ok(point.x - die / 2 >= view.x - 0.75, `x ${point.x} left of the view`);
+            assert.ok(point.y - die / 2 >= view.y - 0.75, `y ${point.y} above the view`);
+            assert.ok(point.x + die / 2 <= view.x + view.width + 0.75, `x ${point.x} right of the view`);
+            assert.ok(point.y + die / 2 <= view.y + view.height + 0.75, `y ${point.y} below the view`);
+          }
+        }
+      }
+      const mean = lands.reduce((sum, y) => sum + y, 0) / lands.length;
+      assert.ok(mean < view.y + view.height - die, `dice hugged the bottom edge at ${mean}`);
+    }
+  });
+
+  it('stays in a window smaller than the die instead of the far green', () => {
+    const board = 900;
+    const die = monopolyDieSize(board);
+    const view = { x: 820, y: 830, width: 40, height: 36 };
+    const curves = diceRollCurves(board, die, rollSample(9), view);
+    for (const curve of curves) {
+      const end = curve[3];
+      assert.ok(end.x >= view.x - 0.75 && end.x <= view.x + view.width + 0.75);
+      assert.ok(end.y >= view.y - 0.75 && end.y <= view.y + view.height + 0.75);
+      assert.ok(end.x > board * 0.7 && end.y > board * 0.7);
+    }
+  });
+});
+
+describe('visible board rect', () => {
+  it('maps a fully on-screen viewport through the pan', () => {
+    const view = visibleBoardRect({
+      pan: { x: -240, y: -180 },
+      viewport: { width: 390, height: 390 },
+    });
+    assert.deepEqual(view, { x: 240, y: 180, width: 390, height: 390 });
+  });
+
+  it('drops the part of the board that is off the phone', () => {
+    const view = visibleBoardRect({
+      pan: { x: -200, y: -80 },
+      viewport: { width: 390, height: 390 },
+      windowOrigin: { x: 0, y: -120 },
+      windowSize: { width: 390, height: 800 },
+    });
+    assert.deepEqual(view, { x: 200, y: 200, width: 390, height: 270 });
+  });
 });

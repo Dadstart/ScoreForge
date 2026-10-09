@@ -116,7 +116,6 @@ export function MonopolyScreen({ navigation, route }: Props) {
   const billSerial = useRef(0);
   const [rollingDice, setRollingDice] = useState(false);
   const rollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [boardDragging, setBoardDragging] = useState(false);
   const [boardZoomed, setBoardZoomed] = useState(false);
   useEffect(() => {
     navigation.setOptions({
@@ -444,7 +443,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
   const quoteRentAmount = quoteOwner ? rentDue(play, property.id, quoteDice) : null;
 
   return (
-    <Screen scrollEnabled={!boardDragging && !boardZoomed}>
+    <Screen>
       <View
         style={[
           styles.content,
@@ -544,7 +543,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
           chanceCount={play.chance.length}
           chestCount={play.chest.length}
           moneyFlight={moneyFlight}
-          onDragging={setBoardDragging}
+          onDragging={() => {}}
           onZoomed={setBoardZoomed}
           roll={
             <View pointerEvents="box-none" style={styles.rollStack}>

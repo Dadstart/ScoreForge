@@ -447,11 +447,18 @@ export function monopolyDieSize(board: number): number {
 
 type DieBounds = { minX: number; maxX: number; minY: number; maxY: number };
 
-/** Centers that keep a die fully on the green, below the roll and zoom controls. */
-function diceRestBounds(board: number, dieSize: number): DieBounds {
+/** A rectangle of the board, in board pixels. The origin is the board's top-left. */
+export type BoardView = { x: number; y: number; width: number; height: number };
+
+function dieMargin(dieSize: number) {
+  return Math.max(2, Math.round(dieSize * 0.06));
+}
+
+/** Centers that keep a die fully on the green. */
+function greenDieBounds(board: number, dieSize: number): DieBounds {
   const edge = TRACK_DEPTH * board;
   const half = dieSize / 2;
-  const margin = Math.max(2, Math.round(dieSize * 0.06));
+  const margin = dieMargin(dieSize);
   const green: DieBounds = {
     minX: edge + half + margin,
     maxX: board - edge - half - margin,
@@ -462,11 +469,108 @@ function diceRestBounds(board: number, dieSize: number): DieBounds {
     const mid = board / 2;
     return { minX: mid, maxX: mid, minY: mid, maxY: mid };
   }
+  return green;
+}
+
+/** Board Y below the roll controls that hang in from the top of the felt. */
+function controlFloor(board: number, dieSize: number): number {
+  const edge = TRACK_DEPTH * board;
+  const half = dieSize / 2;
   const along = (board * (1 - 2 * TRACK_DEPTH)) / 9;
   const ownerClear = Math.round(along * 0.62 + board * TRACK_DEPTH * 0.04) + 10;
-  const belowControls = edge + ownerClear + 96 + half;
-  const minY = Math.min(belowControls, green.maxY);
+  return edge + ownerClear + 96 + half;
+}
+
+/** Centers that keep a die fully on the green, below the roll and zoom controls. */
+function diceRestBounds(board: number, dieSize: number): DieBounds {
+  const green = greenDieBounds(board, dieSize);
+  const minY = Math.min(controlFloor(board, dieSize), green.maxY);
   return { ...green, minY: Math.max(green.minY, minY) };
+}
+
+/**
+ * The slice of the board that is on screen.
+ * `pan` places the board inside the viewport. When the viewport itself is
+ * partly off the window, pass the viewport's window origin and the window size
+ * so the rect is only the overlap.
+ */
+export function visibleBoardRect(args: {
+  pan: { x: number; y: number };
+  viewport: { width: number; height: number };
+  windowOrigin?: { x: number; y: number };
+  windowSize?: { width: number; height: number };
+}): BoardView {
+  const { pan, viewport } = args;
+  let localX = 0;
+  let localY = 0;
+  let width = Math.max(0, viewport.width);
+  let height = Math.max(0, viewport.height);
+  if (args.windowOrigin && args.windowSize) {
+    const { x, y } = args.windowOrigin;
+    const left = Math.max(0, x);
+    const top = Math.max(0, y);
+    const right = Math.min(args.windowSize.width, x + viewport.width);
+    const bottom = Math.min(args.windowSize.height, y + viewport.height);
+    localX = left - x;
+    localY = top - y;
+    width = Math.max(0, right - left);
+    height = Math.max(0, bottom - top);
+  }
+  return {
+    x: localX - pan.x,
+    y: localY - pan.y,
+    width,
+    height,
+  };
+}
+
+function intersectBounds(a: DieBounds, b: DieBounds): DieBounds | null {
+  const next = {
+    minX: Math.max(a.minX, b.minX),
+    maxX: Math.min(a.maxX, b.maxX),
+    minY: Math.max(a.minY, b.minY),
+    maxY: Math.min(a.maxY, b.maxY),
+  };
+  if (next.maxX < next.minX || next.maxY < next.minY) return null;
+  return next;
+}
+
+function clampAxis(viewStart: number, viewSpan: number, limit: number, half: number, margin: number) {
+  let min = Math.max(half + margin, viewStart + half + margin);
+  let max = Math.min(limit - half - margin, viewStart + viewSpan - half - margin);
+  if (max >= min) return { min, max };
+  const sliceStart = Math.max(0, viewStart);
+  const sliceEnd = Math.min(limit, viewStart + Math.max(0, viewSpan));
+  const mid = Math.min(limit - half, Math.max(half, (sliceStart + sliceEnd) / 2));
+  return { min: mid, max: mid };
+}
+
+/** Die centers that stay inside the visible rectangle and on the board. */
+function viewDieBounds(board: number, dieSize: number, view: BoardView): DieBounds {
+  const half = dieSize / 2;
+  const margin = dieMargin(dieSize);
+  const x = clampAxis(view.x, view.width, board, half, margin);
+  const y = clampAxis(view.y, view.height, board, half, margin);
+  return { minX: x.min, maxX: x.max, minY: y.min, maxY: y.max };
+}
+
+/**
+ * Where a die may land. Prefer the green that is on screen, below the roll
+ * controls when that still leaves a real patch. A zoomed view must win over
+ * the full-board green, or the dice settle off screen.
+ */
+function landingBounds(board: number, dieSize: number, view?: BoardView): DieBounds {
+  if (!view || view.width <= 0 || view.height <= 0) return diceRestBounds(board, dieSize);
+  const seen = viewDieBounds(board, dieSize, view);
+  const onScreen = intersectBounds(greenDieBounds(board, dieSize), seen) ?? seen;
+  const cleared = {
+    ...onScreen,
+    minY: Math.max(onScreen.minY, Math.min(controlFloor(board, dieSize), onScreen.maxY)),
+  };
+  const openSpan = onScreen.maxY - onScreen.minY;
+  const clearedSpan = cleared.maxY - cleared.minY;
+  if (clearedSpan >= dieSize * 0.75 || clearedSpan >= openSpan - 0.5) return cleared;
+  return onScreen;
 }
 
 function clampPoint(point: Point, bounds: DieBounds): Point {
@@ -505,8 +609,9 @@ export function diceRollCurves(
   board: number,
   dieSize: number,
   sample: () => number = Math.random,
+  view?: BoardView,
 ): [Point, Point, Point, Point][] {
-  const bounds = diceRestBounds(board, dieSize);
+  const bounds = landingBounds(board, dieSize, view);
   const spanX = Math.max(0, bounds.maxX - bounds.minX);
   const spanY = Math.max(0, bounds.maxY - bounds.minY);
   const pick = () => ({
@@ -526,17 +631,29 @@ export function diceRollCurves(
 }
 
 /** Points along a die tumble, including the hop above the curve. */
-export function diceHopPoints(curve: readonly [Point, Point, Point, Point], board: number): Point[] {
+export function diceHopPoints(
+  curve: readonly [Point, Point, Point, Point],
+  board: number,
+  view?: BoardView,
+): Point[] {
   const [a, b, c, d] = curve;
   const steps = 20;
   const points: Point[] = [];
+  const seen = view && view.width > 0 && view.height > 0
+    ? viewDieBounds(board, monopolyDieSize(board), view)
+    : null;
   for (let index = 0; index <= steps; index += 1) {
     const t = index / steps;
     const u = 1 - t;
-    const x = u * u * u * a.x + 3 * u * u * t * b.x + 3 * u * t * t * c.x + t * t * t * d.x;
-    const y = u * u * u * a.y + 3 * u * u * t * b.y + 3 * u * t * t * c.y + t * t * t * d.y;
+    let x = u * u * u * a.x + 3 * u * u * t * b.x + 3 * u * t * t * c.x + t * t * t * d.x;
+    let y = u * u * u * a.y + 3 * u * u * t * b.y + 3 * u * t * t * c.y + t * t * t * d.y;
     const bounce = Math.max(0, Math.sin(t * Math.PI * 4)) * (1 - t) * board * 0.07;
-    points.push({ x, y: y - bounce });
+    y -= bounce;
+    if (seen) {
+      x = Math.min(seen.maxX, Math.max(seen.minX, x));
+      y = Math.min(seen.maxY, Math.max(seen.minY, y));
+    }
+    points.push({ x, y });
   }
   return points;
 }

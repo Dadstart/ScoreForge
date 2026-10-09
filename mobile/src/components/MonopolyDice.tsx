@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, Platform, StyleSheet, View } from 'react-native';
-import { diceHopPoints, diceRollCurves, monopolyDieSize, type Point } from '../domain/monopolyBoard';
+import { diceHopPoints, diceRollCurves, monopolyDieSize, type BoardView, type Point } from '../domain/monopolyBoard';
 
 const ROLL_MS = 1700;
 
@@ -34,14 +34,38 @@ export function diceMotionMs(): number {
 
 type Roll = { id: number; faces: [number, number] };
 
-export function MonopolyDice({ roll }: { roll: Roll }) {
+export function MonopolyDice({
+  roll,
+  view,
+  boardSize = 0,
+}: {
+  roll: Roll;
+  /** Null until the on-screen board rect for this roll is known. */
+  view?: BoardView | null;
+  /** Board canvas size. The visible rect uses this same coordinate space. */
+  boardSize?: number;
+}) {
   const [box, setBox] = useState({ width: 0, height: 0 });
-  const flight = useRef<{ id: number; curves: [Point, Point, Point, Point][] } | null>(null);
-  const board = Math.min(box.width, box.height);
-  if (board > 0 && flight.current?.id !== roll.id) {
-    flight.current = { id: roll.id, curves: diceRollCurves(board, monopolyDieSize(board)) };
+  const flight = useRef<{
+    id: number;
+    board: number;
+    curves: [Point, Point, Point, Point][];
+    view?: BoardView;
+  } | null>(null);
+  const measured = Math.min(box.width, box.height);
+  const board = boardSize > 0 ? boardSize : measured;
+  if (board > 0 && view && flight.current?.id !== roll.id) {
+    flight.current = {
+      id: roll.id,
+      board,
+      curves: diceRollCurves(board, monopolyDieSize(board), Math.random, view),
+      view,
+    };
   }
-  const curves = flight.current?.id === roll.id ? flight.current.curves : null;
+  const ready = flight.current?.id === roll.id ? flight.current : null;
+  const curves = ready?.curves ?? null;
+  const landedView = ready?.view;
+  const flightBoard = ready?.board ?? board;
   return (
     <View
       pointerEvents="none"
@@ -54,8 +78,8 @@ export function MonopolyDice({ roll }: { roll: Roll }) {
     >
       {curves ? (
         <>
-          <TravelDie face={roll.faces[0]} rollId={roll.id} board={board} curve={curves[0]} lane={0} delay={0} />
-          <TravelDie face={roll.faces[1]} rollId={roll.id} board={board} curve={curves[1]} lane={1} delay={160} />
+          <TravelDie face={roll.faces[0]} rollId={roll.id} board={flightBoard} curve={curves[0]} lane={0} delay={0} view={landedView} />
+          <TravelDie face={roll.faces[1]} rollId={roll.id} board={flightBoard} curve={curves[1]} lane={1} delay={160} view={landedView} />
         </>
       ) : null}
     </View>
@@ -69,6 +93,7 @@ function TravelDie({
   curve,
   lane,
   delay,
+  view,
 }: {
   face: number;
   rollId: number;
@@ -76,11 +101,12 @@ function TravelDie({
   curve: [Point, Point, Point, Point];
   lane: number;
   delay: number;
+  view?: BoardView;
 }) {
   const progress = useRef(new Animated.Value(diceMotionMs() === 0 ? 1 : 0)).current;
   const [shown, setShown] = useState(face);
   const size = monopolyDieSize(board);
-  const points = diceHopPoints(curve, board);
+  const points = diceHopPoints(curve, board, view);
   const input = points.map((_, index) => index / (points.length - 1));
   const travelX = progress.interpolate({
     inputRange: input,
@@ -119,7 +145,7 @@ function TravelDie({
       delay,
       easing: Easing.out(Easing.cubic),
       isInteraction: false,
-      useNativeDriver: Platform.OS !== 'web',
+      useNativeDriver: false,
     });
     animation.start();
     return () => {
@@ -133,6 +159,8 @@ function TravelDie({
     <Animated.View
       style={{
         position: 'absolute',
+        left: 0,
+        top: 0,
         width: size,
         height: size,
         transform: [{ translateX: travelX }, { translateY: travelY }, { rotate: spin }],

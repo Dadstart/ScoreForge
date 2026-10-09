@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Animated,
+  Dimensions,
   Easing,
   PanResponder,
   Platform,
@@ -27,6 +28,8 @@ import {
   tokenSpace,
   tokenSpacesBetween,
   TRACK_DEPTH,
+  visibleBoardRect,
+  type BoardView,
 } from '../domain/monopolyBoard';
 import { getProperty, playerLabel, playerToken } from '../domain/monopoly';
 import { compactPropertyLabel, fitBoardLabel, fitSize } from '../domain/monopolyLabel';
@@ -35,6 +38,7 @@ import { diceMotionMs, MonopolyDice } from './MonopolyDice';
 import { CARD_REVEAL_MS, MonopolyCardTable } from './MonopolyCards';
 import { MoneyBills, type MoneyFlight } from './MoneyBills';
 import { colors, fonts, radii } from '../theme';
+import { useSetPageScroll } from './ui';
 import type { DrawnCard } from '../domain/monopolyPlay';
 
 const TOKEN_COLORS = ['#e86a5c', '#6fbf8a', '#7eb6ff', '#d4a84b', '#d93a96', '#f7941d', '#c5d0c9', '#f2e3a0'];
@@ -141,11 +145,14 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, ...props }: Props) {
   const viewportRefSize = useRef(0);
   const onDraggingRef = useRef(onDragging);
   const onZoomedRef = useRef(onZoomed);
+  const setPageScroll = useSetPageScroll();
+  const setPageScrollRef = useRef(setPageScroll);
   zoomRef.current = zoom;
   panRef.current = pan;
   viewportRefSize.current = viewport;
   onDraggingRef.current = onDragging;
   onZoomedRef.current = onZoomed;
+  setPageScrollRef.current = setPageScroll;
 
   const gesture = useRef({
     pan: { x: 0, y: 0 },
@@ -286,6 +293,49 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, ...props }: Props) {
   };
 
   const boardSize = viewport * zoom;
+  const [diceWindow, setDiceWindow] = useState<{ id: number; view: BoardView } | null>(null);
+  const diceView = diceRoll && diceWindow?.id === diceRoll.id ? diceWindow.view : null;
+
+  useLayoutEffect(() => {
+    const id = diceRoll?.id;
+    if (!id) return;
+    const viewportNow = viewportRefSize.current;
+    if (viewportNow <= 0) return;
+    const panNow = panRef.current;
+    const zoomNow = zoomRef.current;
+    const boardNow = viewportNow * zoomNow;
+    const viewportBox = {
+      width: viewportNow,
+      height: zoomNow < 1 ? boardNow : viewportNow,
+    };
+    const fallback = visibleBoardRect({ pan: panNow, viewport: viewportBox });
+    const node = viewportRef.current;
+    if (!node || typeof node.measureInWindow !== 'function') {
+      setDiceWindow({ id, view: fallback });
+      return;
+    }
+    let cancelled = false;
+    node.measureInWindow((x, y, width, height) => {
+      if (cancelled) return;
+      const frame = Dimensions.get('window');
+      const measured = visibleBoardRect({
+        pan: panNow,
+        viewport: {
+          width: width > 0 ? width : viewportBox.width,
+          height: height > 0 ? height : viewportBox.height,
+        },
+        windowOrigin: { x, y },
+        windowSize: { width: frame.width, height: frame.height },
+      });
+      setDiceWindow({
+        id,
+        view: measured.width > 1 && measured.height > 1 ? measured : fallback,
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [diceRoll?.id, viewport > 0]);
 
   return (
     <View style={styles.frame}>
@@ -303,10 +353,10 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, ...props }: Props) {
           setViewport(width);
         }}
         onTouchStart={() => {
-          if (zoomRef.current > 1) onDraggingRef.current(true);
+          if (zoomRef.current > 1) setPageScrollRef.current(false);
         }}
-        onTouchEnd={() => onDraggingRef.current(false)}
-        onTouchCancel={() => onDraggingRef.current(false)}
+        onTouchEnd={() => setPageScrollRef.current(true)}
+        onTouchCancel={() => setPageScrollRef.current(true)}
         {...responder.panHandlers}
       >
         {viewport > 0 ? (
@@ -314,6 +364,8 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, ...props }: Props) {
             {...props}
             diceRoll={props.cardOffer ? null : diceRoll}
             pinDice
+            diceBoard={boardSize}
+            diceView={diceView}
             style={{ position: 'absolute', width: boardSize, height: boardSize, left: pan.x, top: pan.y }}
           />
         ) : null}
@@ -366,9 +418,13 @@ function BoardCanvas({
   style,
   diceRoll = null,
   pinDice = false,
+  diceView = null,
+  diceBoard = 0,
 }: Omit<Props, 'onDragging' | 'onZoomed'> & {
   style?: StyleProp<ViewStyle>;
   pinDice?: boolean;
+  diceView?: BoardView | null;
+  diceBoard?: number;
 }) {
   const flightRef = useRef(moneyFlight);
   flightRef.current = moneyFlight;
@@ -799,7 +855,7 @@ function BoardCanvas({
       <MoneyBills flight={burst} boardSize={size} />
       {pinDice && diceRoll ? (
         <View pointerEvents="none" style={styles.diceLayer}>
-          <MonopolyDice roll={diceRoll} />
+          <MonopolyDice roll={diceRoll} view={diceView} boardSize={diceBoard > 0 ? diceBoard : size} />
         </View>
       ) : null}
     </View>
