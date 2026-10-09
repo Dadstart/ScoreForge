@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { fitBoardLabel, textWidth } from './monopolyLabel';
+import { compactPropertyLabel, fitBoardLabel, textWidth } from './monopolyLabel';
 
 function fits(name: string, shortName: string, width: number, height: number, start = 28) {
   const fitted = fitBoardLabel(name, shortName, { width, height }, start);
@@ -24,6 +24,29 @@ describe('monopoly property labels', () => {
   it('wraps on words when one line does not fit', () => {
     const fitted = fits('North Carolina Avenue', 'N. Car', 100, 80, 18);
     assert.deepEqual(fitted.lines, ['North Carolina', 'Ave.']);
+  });
+
+  it('turns a name sideways when a zoomed-out property is too narrow', () => {
+    // A phone-width top property: about 25px across and 42px of name along the depth.
+    const boardwalk = compactPropertyLabel('Boardwalk', 'Boardwalk', 25, 42);
+    assert.ok(boardwalk);
+    if (!boardwalk) return;
+    assert.equal(boardwalk.text, 'Boardwalk');
+    assert.equal(boardwalk.vertical, true);
+    assert.ok(boardwalk.fontSize >= 7);
+    assert.ok(textWidth(boardwalk.text, boardwalk.fontSize) <= 42);
+
+    const penn = compactPropertyLabel('Pennsylvania Avenue', 'Penn Av', 25, 42);
+    assert.ok(penn);
+    if (!penn) return;
+    assert.equal(penn.vertical, true);
+    assert.ok(penn.fontSize >= 8);
+
+    const side = compactPropertyLabel('Illinois Avenue', 'Illinois', 48, 26);
+    assert.ok(side);
+    if (!side) return;
+    assert.equal(side.vertical, false);
+    assert.ok(textWidth(side.text, side.fontSize) <= 48);
   });
 
   it('abbreviates instead of breaking a word', () => {

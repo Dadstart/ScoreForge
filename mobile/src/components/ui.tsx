@@ -92,16 +92,20 @@ function releaseDocumentScroll(host: HTMLElement | null) {
 export function Screen({
   children,
   style,
+  scrollEnabled: scrollEnabledProp,
 }: {
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
+  /** When set, the page does not scroll. Used while the Monopoly board is zoomed in. */
+  scrollEnabled?: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<Nav>();
   const headerHeight = useHeaderHeight();
   const window = useWindowDimensions();
   const shellRef = useRef<View>(null);
-  const [scrollEnabled, setScrollEnabled] = useState(true);
+  const [scrollEnabledState, setScrollEnabled] = useState(true);
+  const scrollEnabled = scrollEnabledProp ?? scrollEnabledState;
   const topInset = headerHeight > 0 ? 0 : insets.top;
   const compact = window.height < 520;
   const web = Platform.OS === 'web';
@@ -116,6 +120,12 @@ export function Screen({
     if (!web) return;
     releaseDocumentScroll(shellRef.current as unknown as HTMLElement | null);
   }, [web]);
+
+  useEffect(() => {
+    if (!web || typeof document === 'undefined') return;
+    document.body.style.setProperty('overflow-y', scrollEnabled ? 'auto' : 'hidden', 'important');
+    return () => document.body.style.setProperty('overflow-y', 'auto', 'important');
+  }, [scrollEnabled, web]);
 
   useEffect(() => {
     const view = globalThis.window;

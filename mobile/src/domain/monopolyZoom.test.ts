@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { panForWheel, panForZoom, stepZoom } from './monopolyZoom';
+import { panForWheel, panForZoom, readingZoom, stepZoom } from './monopolyZoom';
 
 const viewport = 100;
 const track = 10 / 11;
@@ -84,5 +84,20 @@ describe('monopoly zoom', () => {
     assert.equal(stepZoom(0.5, -1), 0.5);
     assert.equal(stepZoom(0.5, 1), 0.75);
     assert.equal(stepZoom(0.75, 1), 1);
+  });
+
+  it('opens a phone-width board close enough to read property names', () => {
+    const phone = 390;
+    const zoom = readingZoom(phone);
+    assert.ok(zoom > 2);
+    const board = phone * zoom;
+    const corner = board * 0.16;
+    const side = (board * (1 - 2 * 0.16)) / 9;
+    assert.ok(corner >= 96);
+    assert.ok(side >= 70);
+    assert.equal(stepZoom(1, 1, phone), zoom);
+    assert.equal(stepZoom(zoom, -1, phone), 1);
+    assert.equal(stepZoom(zoom, 1, phone), zoom);
+    assert.equal(readingZoom(1100), 1);
   });
 });

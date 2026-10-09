@@ -70,6 +70,51 @@ export function fitSize(text: string, maxWidth: number, start: number) {
   return size;
 }
 
+export type CompactLabel = {
+  text: string;
+  fontSize: number;
+  /** Runs along the longer side of a short property, so top and bottom spaces turn sideways. */
+  vertical: boolean;
+};
+
+/**
+ * A name for a property that is only a few dozen pixels on its short side.
+ * Horizontal when the words fit across the space; otherwise turned along its length.
+ */
+export function compactPropertyLabel(
+  name: string,
+  shortName: string,
+  width: number,
+  height: number,
+): CompactLabel | null {
+  if (width < 8 || height < 8) return null;
+  const choices = labelChoices(name, shortName);
+  const horizontal = fitInBox(choices, width, height);
+  const vertical = fitInBox(choices, height, width);
+  // Keep the larger type. A sideways name wins when it is clearly bigger than a tiny horizontal one.
+  if (horizontal && (!vertical || horizontal.fontSize >= vertical.fontSize - 1)) {
+    return { ...horizontal, vertical: false };
+  }
+  if (vertical) return { ...vertical, vertical: true };
+  const text = choices.at(-1) ?? name;
+  return { text, fontSize: 6, vertical: height >= width };
+}
+
+function fitInBox(choices: string[], width: number, height: number): { text: string; fontSize: number } | null {
+  let best: { text: string; fontSize: number } | null = null;
+  const start = Math.min(16, Math.floor(height));
+  for (const text of choices) {
+    for (let size = start; size >= 6; size -= 1) {
+      if (size + 1 > height) continue;
+      if (textWidth(text, size) <= width) {
+        if (!best || size > best.fontSize) best = { text, fontSize: size };
+        break;
+      }
+    }
+  }
+  return best;
+}
+
 function fitSingleLine(
   text: string,
   bounds: { width: number; height: number },

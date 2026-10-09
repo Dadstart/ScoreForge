@@ -1,22 +1,46 @@
 import { TRACK_DEPTH } from './monopolyBoard';
 
 export const MIN_ZOOM = 0.5;
-export const MAX_ZOOM = 1;
+/** Far enough in that a phone can show property names, without an unbounded pinch. */
+export const MAX_ZOOM = 3;
 
-/** Page width, then two smaller boards. */
-const ZOOM_STOPS = [0.5, 0.75, 1];
+/** Corner cell at which the board draws property names. */
+const NAME_CELL = 96;
+const NAME_BOARD = NAME_CELL / TRACK_DEPTH;
+/** Along-edge of a side property when its name is comfortable to read. */
+const READABLE_EDGE = 72;
+const READABLE_BOARD = READABLE_EDGE / ((1 - 2 * TRACK_DEPTH) / 9);
 
+/** Page width, then two smaller boards. A phone adds a closer stop. */
+const PAGE_STOPS = [0.5, 0.75, 1];
 const TRACK = TRACK_DEPTH;
 
 export function clampZoom(zoom: number) {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
 }
 
-export function stepZoom(zoom: number, direction: -1 | 1) {
+/**
+ * Closer stop for a phone. The full board stays at zoom 1 and draws compact
+ * names; this is how far + goes when those names should be read up close.
+ */
+export function readingZoom(viewport: number) {
+  if (viewport <= 0 || viewport >= NAME_BOARD) return 1;
+  const zoom = Math.round((READABLE_BOARD / viewport) * 20) / 20;
+  return Math.min(MAX_ZOOM, Math.max(1, zoom));
+}
+
+function zoomStops(viewport: number) {
+  const reading = readingZoom(viewport);
+  if (reading <= 1) return PAGE_STOPS;
+  return [...PAGE_STOPS, reading];
+}
+
+export function stepZoom(zoom: number, direction: -1 | 1, viewport = 0) {
+  const stops = zoomStops(viewport);
   if (direction > 0) {
-    return ZOOM_STOPS.find((stop) => stop > zoom + 1e-6) ?? MAX_ZOOM;
+    return stops.find((stop) => stop > zoom + 1e-6) ?? stops[stops.length - 1];
   }
-  return [...ZOOM_STOPS].reverse().find((stop) => stop < zoom - 1e-6) ?? MIN_ZOOM;
+  return [...stops].reverse().find((stop) => stop < zoom - 1e-6) ?? stops[0];
 }
 
 export function clampPan(pan: { x: number; y: number }, zoom: number, viewport: number) {

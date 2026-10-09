@@ -13,7 +13,7 @@ import { TokenPicker } from '../components/TokenPicker';
 import { GameHelp } from '../components/GameHelp';
 import { HomeButton } from '../components/HomeButton';
 import { ShareCodePanel } from '../components/ShareCodePanel';
-import { Badge, Button, Card, Field, Screen, usePageScroll } from '../components/ui';
+import { Badge, Button, Card, Field, Screen } from '../components/ui';
 import { withoutPlayer } from '../domain/addPlayer';
 import { findLocalPlayerId } from '../domain/localPlayer';
 import { type Game, createScoreEvent } from '../domain/models';
@@ -117,7 +117,16 @@ export function MonopolyScreen({ navigation, route }: Props) {
   const [rollingDice, setRollingDice] = useState(false);
   const rollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [boardDragging, setBoardDragging] = useState(false);
-  usePageScroll(!boardDragging);
+  const [boardZoomed, setBoardZoomed] = useState(false);
+  useEffect(() => {
+    navigation.setOptions({
+      gestureEnabled: !boardZoomed,
+      fullScreenGestureEnabled: false,
+    });
+  }, [boardZoomed, navigation]);
+  useEffect(() => {
+    return () => navigation.setOptions({ gestureEnabled: true });
+  }, [navigation]);
   const [landNote, setLandNote] = useState<string | null>(null);
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
   const [confirmingRemoveId, setConfirmingRemoveId] = useState<string | null>(null);
@@ -435,7 +444,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
   const quoteRentAmount = quoteOwner ? rentDue(play, property.id, quoteDice) : null;
 
   return (
-    <Screen>
+    <Screen scrollEnabled={!boardDragging && !boardZoomed}>
       <View
         style={[
           styles.content,
@@ -536,6 +545,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
           chestCount={play.chest.length}
           moneyFlight={moneyFlight}
           onDragging={setBoardDragging}
+          onZoomed={setBoardZoomed}
           roll={
             <View pointerEvents="box-none" style={styles.rollStack}>
               <Button

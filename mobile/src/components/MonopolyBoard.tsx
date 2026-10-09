@@ -3,6 +3,7 @@ import {
   Animated,
   Easing,
   PanResponder,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -28,7 +29,7 @@ import {
   TRACK_DEPTH,
 } from '../domain/monopolyBoard';
 import { getProperty, playerLabel, playerToken } from '../domain/monopoly';
-import { fitBoardLabel, fitSize } from '../domain/monopolyLabel';
+import { compactPropertyLabel, fitBoardLabel, fitSize } from '../domain/monopolyLabel';
 import { clampPan, clampZoom, panForZoom, stepZoom } from '../domain/monopolyZoom';
 import { diceMotionMs, MonopolyDice } from './MonopolyDice';
 import { CARD_REVEAL_MS, MonopolyCardTable } from './MonopolyCards';
@@ -59,6 +60,8 @@ type Props = {
   chestCount?: number;
   moneyFlight?: MoneyFlight | null;
   onDragging: (dragging: boolean) => void;
+  /** True while the board is enlarged and a drag should pan it instead of the page. */
+  onZoomed?: (zoomed: boolean) => void;
   diceRoll?: DiceRollView | null;
   /** Roll control, drawn at the top middle of the green center. */
   roll?: ReactNode;
@@ -70,8 +73,19 @@ function touchDistance(a: { pageX: number; pageY: number }, b: { pageX: number; 
   return Math.hypot(a.pageX - b.pageX, a.pageY - b.pageY);
 }
 
+/** A zoomed-in drag pans the board. A pinch does too, so the page and the back swipe do not take it. */
+function claimsBoardGesture(
+  zoom: number,
+  evt: GestureResponderEvent,
+  dx: number,
+  dy: number,
+) {
+  if ((evt.nativeEvent.touches?.length ?? 0) >= 2) return true;
+  return zoom > 1 && (Math.abs(dx) > 6 || Math.abs(dy) > 6);
+}
+
 export function MonopolyBoard(props: Props) {
-  return <PhoneBoard {...props} startZoom={1} />;
+  return <PhoneBoard {...props} />;
 }
 
 const ZOOM_BTN = 44;
@@ -117,19 +131,21 @@ function rollDockBox(pan: { x: number; y: number }, zoom: number, viewport: numb
   };
 }
 
-function PhoneBoard({ onDragging, diceRoll, roll, startZoom = 1, ...props }: Props & { startZoom?: number }) {
+function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, ...props }: Props) {
   const viewportRef = useRef<View>(null);
   const [viewport, setViewport] = useState(0);
-  const [zoom, setZoom] = useState(startZoom);
+  const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const zoomRef = useRef(zoom);
   const panRef = useRef(pan);
   const viewportRefSize = useRef(0);
   const onDraggingRef = useRef(onDragging);
+  const onZoomedRef = useRef(onZoomed);
   zoomRef.current = zoom;
   panRef.current = pan;
   viewportRefSize.current = viewport;
   onDraggingRef.current = onDragging;
+  onZoomedRef.current = onZoomed;
 
   const gesture = useRef({
     pan: { x: 0, y: 0 },
@@ -141,11 +157,10 @@ function PhoneBoard({ onDragging, diceRoll, roll, startZoom = 1, ...props }: Pro
 
   const responder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (evt, g) => {
-        return (evt.nativeEvent.touches?.length ?? 0) >= 2 || Math.abs(g.dx) > 6 || Math.abs(g.dy) > 6;
-      },
-      onPanResponderTerminationRequest: () => false,
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (evt, g) => claimsBoardGesture(zoomRef.current, evt, g.dx, g.dy),
+      onMoveShouldSetPanResponderCapture: (evt, g) => claimsBoardGesture(zoomRef.current, evt, g.dx, g.dy),
+      onPanResponderTerminationRequest: () => zoomRef.current <= 1,
       onPanResponderGrant: (evt) => {
         onDraggingRef.current(true);
         gesture.current.pan = panRef.current;
@@ -193,6 +208,36 @@ function PhoneBoard({ onDragging, diceRoll, roll, startZoom = 1, ...props }: Pro
     }),
   ).current;
 
+  useEffect(() => {
+    onZoomedRef.current?.(zoom > 1);
+  }, [zoom]);
+
+  useEffect(() => {
+    return () => onZoomedRef.current?.(false);
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const node = viewportRef.current as unknown as HTMLElement | null;
+    if (!node || typeof node.addEventListener !== 'function') return;
+    const blockMove = (event: TouchEvent) => {
+      const zoomed = zoomRef.current > 1;
+      const pinch = event.touches.length >= 2;
+      if ((zoomed || pinch) && event.cancelable) event.preventDefault();
+    };
+    const blockEdge = (event: TouchEvent) => {
+      const touch = event.touches[0];
+      if (zoomRef.current <= 1 || !touch || event.touches.length !== 1) return;
+      if (touch.clientX <= 28 && event.cancelable) event.preventDefault();
+    };
+    node.addEventListener('touchmove', blockMove, { passive: false });
+    node.addEventListener('touchstart', blockEdge, { passive: false });
+    return () => {
+      node.removeEventListener('touchmove', blockMove);
+      node.removeEventListener('touchstart', blockEdge);
+    };
+  }, []);
+
   const beginPinch = (evt: GestureResponderEvent) => {
     const touches = evt.nativeEvent.touches ?? [];
     if (touches.length < 2) return;
@@ -232,7 +277,7 @@ function PhoneBoard({ onDragging, diceRoll, roll, startZoom = 1, ...props }: Pro
 
   const changeZoom = (direction: -1 | 1) => {
     const prev = zoomRef.current;
-    const next = stepZoom(prev, direction);
+    const next = stepZoom(prev, direction, viewportRefSize.current);
     const nextPan = panForZoom(panRef.current, prev, next, viewportRefSize.current);
     zoomRef.current = next;
     panRef.current = nextPan;
@@ -246,30 +291,29 @@ function PhoneBoard({ onDragging, diceRoll, roll, startZoom = 1, ...props }: Pro
     <View style={styles.frame}>
       <View
         ref={viewportRef}
-        style={[styles.viewport, zoom < 1 && viewport > 0 ? { height: boardSize } : styles.viewportSquare]}
+        style={[
+          styles.viewport,
+          zoom < 1 && viewport > 0 ? { height: boardSize } : styles.viewportSquare,
+          zoom > 1 && styles.viewportHold,
+        ]}
         onLayout={(event) => {
           const width = Math.max(0, event.nativeEvent.layout.width - VIEW_FRAME * 2);
           if (width <= 0 || width === viewportRefSize.current) return;
-          const first = viewportRefSize.current === 0;
           viewportRefSize.current = width;
           setViewport(width);
-          if (first) {
-            const origin = width - width * startZoom;
-            const next = { x: origin, y: origin };
-            panRef.current = next;
-            setPan(next);
-          }
         }}
-        onTouchStart={() => onDraggingRef.current(true)}
+        onTouchStart={() => {
+          if (zoomRef.current > 1) onDraggingRef.current(true);
+        }}
         onTouchEnd={() => onDraggingRef.current(false)}
         onTouchCancel={() => onDraggingRef.current(false)}
+        {...responder.panHandlers}
       >
         {viewport > 0 ? (
           <BoardCanvas
             {...props}
             diceRoll={props.cardOffer ? null : diceRoll}
             pinDice
-            panHandlers={responder.panHandlers}
             style={{ position: 'absolute', width: boardSize, height: boardSize, left: pan.x, top: pan.y }}
           />
         ) : null}
@@ -300,7 +344,7 @@ function PhoneBoard({ onDragging, diceRoll, roll, startZoom = 1, ...props }: Pro
           </Pressable>
         </View>
       </View>
-      {startZoom > 1 ? (
+      {zoom > 1 ? (
         <Text style={styles.phoneHint}>Drag the board to look around. Pinch, or use + and −, to zoom.</Text>
       ) : null}
     </View>
@@ -320,12 +364,10 @@ function BoardCanvas({
   chestCount = 16,
   moneyFlight = null,
   style,
-  panHandlers,
   diceRoll = null,
   pinDice = false,
-}: Omit<Props, 'onDragging'> & {
+}: Omit<Props, 'onDragging' | 'onZoomed'> & {
   style?: StyleProp<ViewStyle>;
-  panHandlers?: ReturnType<typeof PanResponder.create>['panHandlers'];
   pinDice?: boolean;
 }) {
   const flightRef = useRef(moneyFlight);
@@ -378,7 +420,6 @@ function BoardCanvas({
       }}
       style={[styles.board, style]}
       accessibilityLabel="Monopoly board"
-      {...panHandlers}
     >
       {boardSpaces.map((space) => {
         const { row, col } = spaceToCell(space.index);
@@ -396,10 +437,12 @@ function BoardCanvas({
         const bar = swatch
           ? detail
             ? Math.max(12, Math.round(cell * 0.18))
-            : Math.max(8, Math.round(cell * 0.36))
+            : Math.max(6, Math.round(Math.min(pxW, pxH) * 0.2))
           : 0;
         const label = detail ? Math.max(12, Math.round(cell * 0.13)) : Math.max(10, Math.round(cell * 0.2));
         const lane = !isCorner && (col === 0 || col === 10) ? sideLane(cell) : tokenLane(cell);
+        const tokenReserve = !detail && !isCorner ? fittedPiece(pxW, pxH) : 0;
+        const nameBox = !detail && !isCorner ? compactNameBox(row, col, pxW, pxH, bar, tokenReserve) : null;
         const mark = space.name === 'Chance' ? 'chance' : space.name === 'Community Chest' ? 'chest' : null;
         const priceLine = detail && (property || space.tax) ? Math.max(12, Math.round(cell * 0.11)) : 0;
         const nameReserve = priceLine + 40;
@@ -416,12 +459,20 @@ function BoardCanvas({
         const padLane = farRail ? Math.min(lane, Math.max(8, cell - railCaption - 18)) : lane;
         const bounds = labelBounds(row, col, pxW, pxH, bar, lane, trainHeight, priceLine, utility, trainInset);
         const fullName = property?.name ?? space.name;
-        const nameText = mark || farRail ? null : !detail && space.tax ? `$${space.tax}` : fullName;
+        const compact = nameBox
+          ? compactPropertyLabel(
+              space.tax ? `$${space.tax}` : fullName,
+              space.tax ? `$${space.tax}` : space.short,
+              Math.max(8, nameBox.width - 2),
+              Math.max(8, nameBox.height - 2),
+            )
+          : null;
+        const nameText = compact || mark || farRail ? null : !detail && space.tax ? `$${space.tax}` : fullName;
         const fitted =
           nameText && bounds.width >= 22 && bounds.height >= 12
             ? fitBoardLabel(nameText, !detail && space.tax ? nameText : space.short, bounds, label)
             : null;
-        const barFit = !detail && swatch && !fitted
+        const barFit = !detail && swatch && !fitted && !compact
           ? fitBoardLabel(fullName, space.short, { width: Math.max(8, along - 8), height: Math.max(8, bar - 2) }, Math.max(8, bar - 4), 1)
           : null;
         const barLabel = barFit?.lines[0] ?? null;
@@ -435,6 +486,7 @@ function BoardCanvas({
               styles.cell,
               { backgroundColor: spaceTint(space.name, property?.kind) },
               isCorner ? null : spacePadding(row, col, padLane, swatch ? bar : 0, inward, railCaption, trainInset),
+              compact?.vertical ? { overflow: 'visible' as const } : null,
               {
                 left: `${frame.x * 100}%`,
                 top: `${frame.y * 100}%`,
@@ -507,7 +559,7 @@ function BoardCanvas({
                     ) : null}
                   </View>
                 ) : null}
-                {train ? (
+                {train && !compact ? (
                   <TrainMark
                     row={row}
                     col={col}
@@ -517,7 +569,7 @@ function BoardCanvas({
                     beside={sidewaysRail ? { width: train.width, height: train.height, span: pxH } : undefined}
                   />
                 ) : null}
-                {railCaption > 0 ? (
+                {railCaption > 0 && !compact ? (
                   <Text
                     pointerEvents="none"
                     style={[styles.cellText, railName(row, cell, railCaption, space.short)]}
@@ -526,11 +578,55 @@ function BoardCanvas({
                     {space.short}
                   </Text>
                 ) : null}
-                {isUtility ? (
+                {isUtility && !compact ? (
                   <UtilityMark kind={property?.id === 'water' ? 'water' : 'electric'} size={utility} />
                 ) : null}
-                {mark === 'chance' ? <ChanceMark row={row} col={col} cell={cell} detail={detail} /> : null}
-                {mark === 'chest' ? <ChestMark row={row} col={col} cell={cell} detail={detail} /> : null}
+                {mark === 'chance' && !compact ? <ChanceMark row={row} col={col} cell={cell} detail={detail} /> : null}
+                {mark === 'chest' && !compact ? <ChestMark row={row} col={col} cell={cell} detail={detail} /> : null}
+                {compact && nameBox ? (
+                  <View
+                    pointerEvents="none"
+                    style={
+                      compact.vertical
+                        ? {
+                            position: 'absolute',
+                            width: nameBox.height,
+                            height: nameBox.width,
+                            left: nameBox.left + (nameBox.width - nameBox.height) / 2,
+                            top: nameBox.top + (nameBox.height - nameBox.width) / 2,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            zIndex: 2,
+                            transform: [{ rotate: row === 0 ? '-90deg' : '90deg' }],
+                          }
+                        : {
+                            position: 'absolute',
+                            left: nameBox.left,
+                            top: nameBox.top,
+                            width: nameBox.width,
+                            height: nameBox.height,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            zIndex: 2,
+                          }
+                    }
+                  >
+                    <Text
+                      style={[
+                        styles.cellText,
+                        {
+                          fontSize: compact.fontSize,
+                          lineHeight: compact.fontSize + 1,
+                          width: compact.vertical ? nameBox.height : nameBox.width,
+                          textAlign: 'center',
+                        },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {compact.text}
+                    </Text>
+                  </View>
+                ) : null}
                 {fitted ? (
                   <View style={styles.nameBlock}>
                     {fitted.lines.map((line, index) => (
@@ -913,6 +1009,24 @@ function utilityExtent(cell: number, detail: boolean) {
   return detail ? Math.max(22, Math.round(cell * 0.28)) : Math.max(16, Math.round(cell * 0.38));
 }
 
+function compactNameBox(row: number, col: number, pxW: number, pxH: number, bar: number, token: number) {
+  const pad = 1;
+  if (row === 0 || row === 10) {
+    return {
+      width: Math.max(8, pxW - pad * 2),
+      height: Math.max(8, pxH - bar - token - pad),
+      left: pad,
+      top: row === 0 ? bar : token,
+    };
+  }
+  return {
+    width: Math.max(8, pxW - bar - token - pad),
+    height: Math.max(8, pxH - pad * 2),
+    left: col === 0 ? bar : token,
+    top: pad,
+  };
+}
+
 function labelBounds(
   row: number,
   col: number,
@@ -1178,6 +1292,7 @@ function spacePadding(row: number, col: number, lane: number, bar: number, cell:
 }
 
 function pieceSize(cell: number) {
+  if (cell < CLOSE_CELL) return Math.max(8, Math.round(cell * 0.2));
   return Math.max(28, Math.round(cell * 0.34));
 }
 
@@ -1497,6 +1612,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
   },
+  viewportHold: Platform.OS === 'web'
+    ? ({ touchAction: 'none', userSelect: 'none' } as ViewStyle)
+    : {},
   viewportSquare: {
     aspectRatio: 1,
   },
