@@ -82,6 +82,26 @@ const MAX_NAME_FONT = 14;
 const MIN_NAME_FONT = 8;
 
 /**
+ * Property name on one line, in the reading direction for its side.
+ * The board rotates this so the baseline faces that side.
+ */
+export function facingPropertyLabel(
+  name: string,
+  shortName: string,
+  width: number,
+  height: number,
+): { text: string; fontSize: number } | null {
+  if (width < 8 || height < 8) return null;
+  const choices = labelChoices(name, shortName);
+  for (const text of choices) {
+    const fontSize = fontThatFits(text, width, height);
+    if (fontSize != null) return { text, fontSize };
+  }
+  const text = choices.at(-1) ?? name;
+  return { text, fontSize: MIN_NAME_FONT };
+}
+
+/**
  * A property name that stays readable as the board shrinks.
  * The fullest name that fits wins, at a size no larger than the cell can hold.
  * Top and bottom spaces turn the name along the property when that is what fits.

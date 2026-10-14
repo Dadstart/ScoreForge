@@ -25,8 +25,9 @@ import {
   layoutJailedTokens,
   layoutSharedTokens,
   layoutVisitingTokens,
-  ownerMarkPlacement,
+  nameFacing,
   nearestBoardTurn,
+  ownerMarkPlacement,
   spaceToCell,
   tokenSpace,
   tokenSpacesBetween,
@@ -35,7 +36,7 @@ import {
   type BoardView,
 } from '../domain/opolyBoard';
 import { getProperty, playerLabel, playerToken } from '../domain/opoly';
-import { compactPropertyLabel, fitBoardLabel, fitSize } from '../domain/opolyLabel';
+import { facingPropertyLabel, fitBoardLabel, fitSize } from '../domain/opolyLabel';
 import { clampPan, clampZoom, panForZoom, stepZoom } from '../domain/opolyZoom';
 import { diceMotionMs, OpolyDice } from './OpolyDice';
 import { CARD_REVEAL_MS, OpolyCardTable } from './OpolyCards';
@@ -691,12 +692,16 @@ function BoardCanvas({
         const padLane = farRail ? Math.min(lane, Math.max(8, cell - railCaption - 18)) : lane;
         const bounds = labelBounds(row, col, pxW, pxH, bar, lane, trainHeight, priceLine, utility, trainInset);
         const fullName = property?.name ?? space.name;
+        const facing = nameFacing(row, col);
+        const quarter = col === 0 || col === 10;
+        const readingWidth = nameBox ? (quarter ? nameBox.height : nameBox.width) : 0;
+        const readingHeight = nameBox ? (quarter ? nameBox.width : nameBox.height) : 0;
         const compact = nameBox
-          ? compactPropertyLabel(
+          ? facingPropertyLabel(
               fullName,
               space.short,
-              Math.max(8, nameBox.width - 2),
-              Math.max(8, nameBox.height - 2),
+              Math.max(8, readingWidth - 2),
+              Math.max(8, readingHeight - 2),
             )
           : null;
         const nameText = compact || mark || farRail ? null : !detail && space.tax ? `$${space.tax}` : fullName;
@@ -708,7 +713,7 @@ function BoardCanvas({
           ? fitBoardLabel(fullName, space.short, { width: Math.max(8, along - 8), height: Math.max(8, bar - 2) }, Math.max(8, bar - 4), 1)
           : null;
         const barLabel = barFit?.lines[0] ?? null;
-        const barTurn = col === 0 ? '-90deg' : col === 10 ? '90deg' : null;
+        const barTurn = quarter ? facing : null;
         const amount = priceLine > 0 && (compact || fitted) ? (property?.price ?? space.tax) : undefined;
         return (
           <View
@@ -718,7 +723,7 @@ function BoardCanvas({
               styles.cell,
               { backgroundColor: spaceTint(space.name, property?.kind) },
               isCorner ? null : spacePadding(row, col, padLane, swatch ? bar : 0, inward, railCaption, trainInset),
-              compact?.vertical ? { overflow: 'visible' as const } : null,
+              quarter && compact ? { overflow: 'visible' as const } : null,
               {
                 left: `${frame.x * 100}%`,
                 top: `${frame.y * 100}%`,
@@ -783,6 +788,7 @@ function BoardCanvas({
                           fontSize: fitSize(barLabel, along - 6, Math.max(8, bar - 4)),
                           lineHeight: Math.max(10, bar - 2),
                           textAlign: 'center',
+                          transform: row === 0 ? [{ rotate: '180deg' as const }] : undefined,
                         }}
                         numberOfLines={1}
                       >
@@ -803,7 +809,11 @@ function BoardCanvas({
                 ) : null}
                 {railCaption > 0 && !compact ? (
                   <Text
-                    style={[styles.cellText, railName(row, cell, railCaption, space.short), { pointerEvents: 'none' }]}
+                    style={[
+                      styles.cellText,
+                      railName(row, cell, railCaption, space.short),
+                      { pointerEvents: 'none', transform: [{ rotate: facing }] },
+                    ]}
                     numberOfLines={1}
                   >
                     {space.short}
@@ -817,17 +827,13 @@ function BoardCanvas({
                 {compact && nameBox ? (
                   <View
                     style={[
-                      compact.vertical
+                      quarter
                         ? {
                             position: 'absolute',
                             width: nameBox.height,
                             height: nameBox.width,
                             left: nameBox.left + (nameBox.width - nameBox.height) / 2,
                             top: nameBox.top + (nameBox.height - nameBox.width) / 2,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            zIndex: 2,
-                            transform: [{ rotate: row === 0 ? '-90deg' : '90deg' }],
                           }
                         : {
                             position: 'absolute',
@@ -835,11 +841,14 @@ function BoardCanvas({
                             top: nameBox.top,
                             width: nameBox.width,
                             height: nameBox.height,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            zIndex: 2,
                           },
-                      { pointerEvents: 'none' },
+                      {
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 2,
+                        transform: [{ rotate: facing }],
+                        pointerEvents: 'none',
+                      },
                     ]}
                   >
                     <Text
@@ -848,7 +857,7 @@ function BoardCanvas({
                         {
                           fontSize: compact.fontSize,
                           lineHeight: compact.fontSize + 1,
-                          width: compact.vertical ? nameBox.height : nameBox.width,
+                          width: quarter ? nameBox.height : nameBox.width,
                           textAlign: 'center',
                         },
                       ]}
@@ -859,7 +868,7 @@ function BoardCanvas({
                   </View>
                 ) : null}
                 {fitted ? (
-                  <View style={styles.nameBlock}>
+                  <View style={[styles.nameBlock, { transform: [{ rotate: facing }] }]}>
                     {fitted.lines.map((line, index) => (
                       <Text
                         key={`${line}-${index}`}

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { compactPropertyLabel, fitBoardLabel, textWidth } from './opolyLabel';
+import { compactPropertyLabel, facingPropertyLabel, fitBoardLabel, textWidth } from './opolyLabel';
 
 function fits(name: string, shortName: string, width: number, height: number, start = 28) {
   const fitted = fitBoardLabel(name, shortName, { width, height }, start);
@@ -56,6 +56,21 @@ describe('monopoly property labels', () => {
     assert.equal(wide.text, 'Mediterranean Ave.');
     assert.ok(wide.fontSize <= 14);
     assert.ok(textWidth(wide.text, wide.fontSize) <= 120);
+  });
+
+  it('fits a property letter in the reading direction', () => {
+    const letter = facingPropertyLabel('A', 'A', 24, 40);
+    assert.ok(letter);
+    if (!letter) return;
+    assert.equal(letter.text, 'A');
+    assert.ok(letter.fontSize <= 14);
+    assert.ok(textWidth(letter.text, letter.fontSize) <= 24);
+
+    const railroad = facingPropertyLabel('🚂 W', '🚂 W', 24, 40);
+    assert.ok(railroad);
+    if (!railroad) return;
+    assert.equal(railroad.text, '🚂 W');
+    assert.ok(textWidth(railroad.text, railroad.fontSize) <= 24);
   });
 
   it('abbreviates instead of breaking a word', () => {

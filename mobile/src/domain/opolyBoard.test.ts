@@ -15,6 +15,7 @@ import {
   monopolyDieSize,
   ownerMarkPlacement,
   boardTurnForSpace,
+  nameFacing,
   boardViewForTurn,
   nearestBoardTurn,
   spaceToCell,
@@ -145,6 +146,20 @@ describe('deckPileLayout', () => {
       }
     });
   }
+});
+
+describe('nameFacing', () => {
+  function facing(index: number) {
+    const { row, col } = spaceToCell(index);
+    return nameFacing(row, col);
+  }
+
+  it('points the bottom of a property name at that side of the board', () => {
+    assert.equal(facing(1), '0deg');
+    assert.equal(facing(21), '180deg');
+    assert.equal(facing(11), '90deg');
+    assert.equal(facing(31), '-90deg');
+  });
 });
 
 describe('ownerMarkPlacement', () => {

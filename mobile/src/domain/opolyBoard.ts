@@ -275,6 +275,18 @@ export type OwnerMark = {
 };
 
 /**
+ * Turn a property name so the bottom of the letters faces that side of the board.
+ * Positive rotation is clockwise, which swings a baseline from down toward the left.
+ * Letters are not mirrored, so they still read from that side.
+ */
+export function nameFacing(row: number, col: number): '0deg' | '90deg' | '-90deg' | '180deg' {
+  if (row === 10) return '0deg';
+  if (row === 0) return '180deg';
+  if (col === 0) return '90deg';
+  return '-90deg';
+}
+
+/**
  * Owner emoji just inside the board, above the property card.
  * Rotation points the emoji's feet at that side of the board.
  * Left and right marks are also flipped horizontally.
