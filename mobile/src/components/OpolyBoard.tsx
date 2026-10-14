@@ -1187,29 +1187,43 @@ function FreeParkingCorner({ cell, detail }: { cell: number; detail: boolean }) 
   );
 }
 
+/** Officer drawing, cropped to the hat, badge, and pointing arm. */
+const OFFICER_BOX = { x: 2, y: 12, width: 32, height: 22 };
+
+function OfficerSvg({ width, height }: { width: number; height: number }) {
+  return (
+    <Svg width={width} height={height} viewBox={`${OFFICER_BOX.x} ${OFFICER_BOX.y} ${OFFICER_BOX.width} ${OFFICER_BOX.height}`}>
+      <Path d="M10 12h20l-2 4H12z" fill="#1d4e89" />
+      <Rect x="6" y="15" width="28" height="3" rx="1" fill="#1d4e89" />
+      <Circle cx="20" cy="22" r="4.5" fill="#f0c9a0" />
+      <Path d="M11 30c1-5 4-7 9-7s8 2 9 7v4H11z" fill="#1d4e89" />
+      <Path d="M13 31 L2 27h11z" fill="#1d4e89" />
+      <Circle cx="24" cy="31" r="1.5" fill="#f2d36b" />
+    </Svg>
+  );
+}
+
 function GoToJailCorner({ cell, detail }: { cell: number; detail: boolean }) {
-  const pad = Math.round(cell * 0.04);
-  const width = cell - pad * 2;
-  const kicker = fitSize('Go to', width, Math.round(cell * 0.18));
-  const title = displaySize('Jail', width, Math.round(cell * (detail ? 0.26 : 0.32)));
-  const fine = fitSize('Do not collect $200', width, Math.round(cell * 0.09));
-  const icon = Math.round(cell * (detail ? 0.26 : 0.3));
+  const pad = Math.max(1, Math.round(cell * 0.03));
+  const inner = Math.max(8, cell - pad * 2);
+  const fine = detail ? fitSize('Do not collect $200', inner, Math.max(7, Math.round(inner * 0.075))) : 0;
+  const fineH = detail ? (fine + 1) * 2 : 0;
+  // "Go to" takes half a share. "Jail" and the officer split the rest, one share each.
+  const share = Math.max(8, Math.floor(Math.max(16, inner - fineH) / 2.5));
+  const kicker = fitSize('Go to', inner, Math.max(8, Math.round(share * 0.5)));
+  const widthCap = Math.floor((inner * OFFICER_BOX.height) / OFFICER_BOX.width);
+  const title = fitSize('Jail', inner, Math.min(share, widthCap));
+  const iconH = title;
+  const iconW = Math.max(8, Math.round((OFFICER_BOX.width / OFFICER_BOX.height) * iconH));
   return (
     <View style={[styles.corner, { padding: pad }]}>
-      <Text style={[styles.cornerTitle, { fontSize: kicker, lineHeight: kicker, maxWidth: width }]} numberOfLines={1}>
+      <Text style={[styles.cornerTitle, { fontSize: kicker, lineHeight: kicker, maxWidth: inner }]} numberOfLines={1}>
         Go to
       </Text>
-      <Text style={[styles.cornerGo, { fontSize: title, lineHeight: title, maxWidth: width }]} numberOfLines={1}>
+      <Text style={[styles.cornerGo, { fontSize: title, lineHeight: title, maxWidth: inner }]} numberOfLines={1}>
         Jail
       </Text>
-      <Svg width={icon} height={Math.round(icon * 0.9)} viewBox="0 0 40 36">
-        <Path d="M10 12h20l-2 4H12z" fill="#1d4e89" />
-        <Rect x="6" y="15" width="28" height="3" rx="1" fill="#1d4e89" />
-        <Circle cx="20" cy="22" r="4.5" fill="#f0c9a0" />
-        <Path d="M11 30c1-5 4-7 9-7s8 2 9 7v4H11z" fill="#1d4e89" />
-        <Path d="M13 31 L2 27h11z" fill="#1d4e89" />
-        <Circle cx="24" cy="31" r="1.5" fill="#f2d36b" />
-      </Svg>
+      <OfficerSvg width={iconW} height={iconH} />
       {detail ? (
         <>
           <Text style={[styles.cornerFine, { fontSize: fine, lineHeight: fine + 1 }]} numberOfLines={1}>
