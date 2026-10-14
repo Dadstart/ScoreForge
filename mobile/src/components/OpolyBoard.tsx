@@ -20,6 +20,7 @@ import {
   boardSpaces,
   boardViewForTurn,
   cellBox,
+  colorBarThickness,
   centerTitleFont,
   jailCell,
   layoutJailedTokens,
@@ -661,11 +662,10 @@ function BoardCanvas({
         const isUtility = property?.kind === 'utility';
         const isCorner = space.index % 10 === 0;
         const swatch = property && !isRailroad && !isUtility ? property.swatch : undefined;
-        const bar = swatch
-          ? detail
-            ? Math.max(12, Math.round(cell * 0.18))
-            : Math.max(6, Math.round(Math.min(pxW, pxH) * 0.2))
-          : 0;
+        const barColor = swatch ?? (isRailroad ? property?.swatch : undefined);
+        const letterBand = barColor ? colorBarThickness(inward) : 0;
+        const trainBlock = isRailroad ? Math.max(12, Math.round(letterBand * 0.72)) : 0;
+        const bar = Math.min(Math.round(inward * 0.78), letterBand + trainBlock);
         const label = Math.max(8, Math.round(cell * (detail ? 0.08 : 0.14)));
         const lane = !isCorner && (col === 0 || col === 10) ? sideLane(cell) : tokenLane(cell);
         const mark = space.name === 'Chance' ? 'chance' : space.name === 'Community Chest' ? 'chest' : null;
@@ -675,8 +675,8 @@ function BoardCanvas({
           : priceLine > 0
             ? 56
             : 0;
-        const nameBox = !isCorner && !mark
-          ? compactNameBox(row, col, pxW, pxH, swatch ? bar : 0, priceBand)
+        const nameBox = !isCorner && !mark && !barColor
+          ? compactNameBox(row, col, pxW, pxH, 0, priceBand)
           : null;
         const nameReserve = priceLine + 40;
         const utility = isUtility ? Math.min(utilityExtent(cell, detail), Math.max(18, pxH - nameReserve)) : 0;
@@ -704,17 +704,26 @@ function BoardCanvas({
               Math.max(8, readingHeight - 2),
             )
           : null;
-        const nameText = compact || mark || farRail ? null : !detail && space.tax ? `$${space.tax}` : fullName;
+        const nameText = barColor || compact || mark || farRail ? null : !detail && space.tax ? `$${space.tax}` : fullName;
         const fitted =
           nameText && bounds.width >= 22 && bounds.height >= 12
             ? fitBoardLabel(nameText, !detail && space.tax ? nameText : space.short, bounds, label)
             : null;
-        const barFit = !detail && swatch && !fitted && !compact
-          ? fitBoardLabel(fullName, space.short, { width: Math.max(8, along - 8), height: Math.max(8, bar - 2) }, Math.max(8, bar - 4), 1)
-          : null;
-        const barLabel = barFit?.lines[0] ?? null;
-        const barTurn = quarter ? facing : null;
-        const amount = priceLine > 0 && (compact || fitted) ? (property?.price ?? space.tax) : undefined;
+        const shownName = isRailroad ? fullName.replace('🚂', '').trim() : fullName;
+        const barNameSize = letterBand
+          ? Math.max(8, Math.min(letterBand - 4, fitSize(shownName, Math.max(8, along - 4), Math.max(8, letterBand - 4))))
+          : 0;
+        let trainH = 0;
+        let trainW = 0;
+        if (isRailroad && bar > letterBand) {
+          trainH = Math.max(8, bar - letterBand - 2);
+          trainW = Math.round(trainH * (64 / 36));
+          if (trainW > along - 4) {
+            trainW = Math.max(8, along - 4);
+            trainH = Math.max(8, Math.round(trainW * (36 / 64)));
+          }
+        }
+        const amount = priceLine > 0 && (barColor || compact || fitted) ? (property?.price ?? space.tax) : undefined;
         return (
           <View
             key={space.index}
@@ -722,7 +731,7 @@ function BoardCanvas({
             style={[
               styles.cell,
               { backgroundColor: spaceTint(space.name, property?.kind) },
-              isCorner ? null : spacePadding(row, col, padLane, swatch ? bar : 0, inward, railCaption, trainInset),
+              isCorner ? null : spacePadding(row, col, padLane, barColor ? bar : 0, inward, isRailroad ? 0 : railCaption, isRailroad ? 0 : trainInset),
               quarter && compact ? { overflow: 'visible' as const } : null,
               {
                 left: `${frame.x * 100}%`,
@@ -738,66 +747,69 @@ function BoardCanvas({
               </View>
             ) : (
               <>
-                {swatch ? (
+                {barColor ? (
                   <View
                     style={[
                       styles.swatch,
                       barEdge(row, col, bar),
                       {
-                        backgroundColor: swatch,
+                        backgroundColor: barColor,
                         alignItems: 'center',
                         justifyContent: 'center',
                         overflow: 'hidden',
                       },
                     ]}
                   >
-                    {barLabel && barTurn ? (
+                    <View
+                      style={
+                        quarter
+                          ? {
+                              position: 'absolute',
+                              width: along,
+                              height: bar,
+                              left: (bar - along) / 2,
+                              top: (along - bar) / 2,
+                              alignItems: 'center',
+                              justifyContent: 'flex-start',
+                              transform: [{ rotate: facing }],
+                            }
+                          : {
+                              width: '100%',
+                              height: '100%',
+                              alignItems: 'center',
+                              justifyContent: 'flex-start',
+                              transform: [{ rotate: facing }],
+                            }
+                      }
+                    >
                       <View
                         style={{
-                          position: 'absolute',
-                          width: along - 4,
-                          height: bar,
-                          left: (bar - (along - 4)) / 2,
-                          top: (along - bar) / 2,
+                          width: '100%',
+                          height: letterBand,
                           alignItems: 'center',
                           justifyContent: 'center',
-                          transform: [{ rotate: barTurn }],
                         }}
                       >
                         <Text
                           style={{
-                            color: inkOn(swatch),
+                            color: inkOn(barColor),
                             fontFamily: fonts.body,
                             fontWeight: '800',
-                            fontSize: fitSize(barLabel, along - 8, Math.max(8, bar - 4)),
-                            lineHeight: Math.max(10, bar - 2),
-                            width: along - 8,
+                            fontSize: barNameSize,
+                            lineHeight: barNameSize,
+                            width: along - 2,
                             textAlign: 'center',
                           }}
                           numberOfLines={1}
                         >
-                          {barLabel}
+                          {shownName}
                         </Text>
                       </View>
-                    ) : barLabel ? (
-                      <Text
-                        style={{
-                          color: inkOn(swatch),
-                          fontFamily: fonts.body,
-                          fontWeight: '800',
-                          fontSize: fitSize(barLabel, along - 6, Math.max(8, bar - 4)),
-                          lineHeight: Math.max(10, bar - 2),
-                          textAlign: 'center',
-                          transform: row === 0 ? [{ rotate: '180deg' as const }] : undefined,
-                        }}
-                        numberOfLines={1}
-                      >
-                        {barLabel}
-                      </Text>
-                    ) : null}
+                      {isRailroad && trainW > 0 ? <TrainSvg width={trainW} height={trainH} /> : null}
+                    </View>
                   </View>
                 ) : null}
-                {train && !compact ? (
+                {train && !compact && !isRailroad ? (
                   <TrainMark
                     row={row}
                     col={col}
@@ -807,7 +819,7 @@ function BoardCanvas({
                     beside={sidewaysRail ? { width: train.width, height: train.height, span: pxH } : undefined}
                   />
                 ) : null}
-                {railCaption > 0 && !compact ? (
+                {railCaption > 0 && !compact && !isRailroad ? (
                   <Text
                     style={[
                       styles.cellText,
@@ -905,7 +917,7 @@ function BoardCanvas({
                   <Text
                     style={[
                       styles.cellPrice,
-                      priceEdge(row, col, priceLine, priceBand),
+                      priceEdge(row, col, priceLine, priceBand, bar),
                       {
                         fontSize: fitSize(`$${amount}`, Math.max(24, priceBand - 6), Math.max(8, priceLine - 1)),
                         lineHeight: priceLine,
@@ -1252,11 +1264,11 @@ function utilityExtent(cell: number, detail: boolean) {
   return detail ? Math.max(22, Math.round(cell * 0.28)) : Math.max(16, Math.round(cell * 0.38));
 }
 
-function priceEdge(row: number, col: number, priceLine: number, band: number) {
-  if (row === 0) return { position: 'absolute' as const, left: 0, right: 0, bottom: 0, height: priceLine };
-  if (row === 10) return { position: 'absolute' as const, left: 0, right: 0, top: 0, height: priceLine };
-  if (col === 0) return { position: 'absolute' as const, right: 2, width: band - 4, top: '38%' as const };
-  return { position: 'absolute' as const, left: 2, width: band - 4, top: '38%' as const };
+function priceEdge(row: number, col: number, priceLine: number, band: number, bar: number) {
+  if (row === 10) return { position: 'absolute' as const, left: 0, right: 0, top: bar, height: priceLine };
+  if (row === 0) return { position: 'absolute' as const, left: 0, right: 0, bottom: bar, height: priceLine };
+  if (col === 0) return { position: 'absolute' as const, right: bar + 2, width: band - 4, top: '38%' as const };
+  return { position: 'absolute' as const, left: bar + 2, width: band - 4, top: '38%' as const };
 }
 
 function compactNameBox(row: number, col: number, pxW: number, pxH: number, bar: number, price: number) {
@@ -1486,10 +1498,10 @@ function TrainSvg({ width, height }: { width: number; height: number }) {
 }
 
 function barEdge(row: number, col: number, bar: number) {
-  if (row === 10) return { bottom: 0, left: 0, right: 0, height: bar };
-  if (row === 0) return { top: 0, left: 0, right: 0, height: bar };
-  if (col === 0) return { left: 0, top: 0, bottom: 0, width: bar };
-  return { right: 0, top: 0, bottom: 0, width: bar };
+  if (row === 10) return { top: 0, left: 0, right: 0, height: bar };
+  if (row === 0) return { bottom: 0, left: 0, right: 0, height: bar };
+  if (col === 0) return { right: 0, top: 0, bottom: 0, width: bar };
+  return { left: 0, top: 0, bottom: 0, width: bar };
 }
 
 function tokenLane(cell: number) {
@@ -1516,15 +1528,15 @@ function spacePadding(row: number, col: number, lane: number, bar: number, cell:
   const edge = Math.min(bar + caption + art, inner);
   const room = Math.min(lane, Math.max(0, inner - edge));
   if (row === 10) {
-    return { paddingTop: room, paddingBottom: edge, paddingLeft: 2, paddingRight: 2, justifyContent: 'flex-end' as const };
+    return { paddingTop: edge, paddingBottom: room, paddingLeft: 2, paddingRight: 2, justifyContent: 'flex-end' as const };
   }
   if (row === 0) {
-    return { paddingBottom: room, paddingTop: edge, paddingLeft: 2, paddingRight: 2, justifyContent: 'flex-start' as const };
+    return { paddingBottom: edge, paddingTop: room, paddingLeft: 2, paddingRight: 2, justifyContent: 'flex-start' as const };
   }
   if (col === 0) {
     return {
-      paddingRight: room,
-      paddingLeft: edge,
+      paddingRight: edge,
+      paddingLeft: room,
       paddingTop: 2,
       paddingBottom: 2,
       alignItems: 'flex-start' as const,
@@ -1532,8 +1544,8 @@ function spacePadding(row: number, col: number, lane: number, bar: number, cell:
     };
   }
   return {
-    paddingLeft: room,
-    paddingRight: edge,
+    paddingLeft: edge,
+    paddingRight: room,
     paddingTop: 2,
     paddingBottom: 2,
     alignItems: 'flex-end' as const,
@@ -1572,16 +1584,16 @@ function pieceOffset(row: number, col: number, width: number, height: number, pi
       y = row === 0 ? height - piece - gap : gap;
     }
   } else if (row === 10) {
-    y = gap;
-    x += shift;
-  } else if (row === 0) {
     y = height - piece - gap;
     x += shift;
+  } else if (row === 0) {
+    y = gap;
+    x += shift;
   } else if (col === 0) {
-    x = width - piece - gap;
+    x = gap;
     y += shift;
   } else {
-    x = gap;
+    x = width - piece - gap;
     y += shift;
   }
   return {

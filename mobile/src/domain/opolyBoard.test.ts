@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   cellBox,
+  colorBarThickness,
   centerTitleBounds,
   DECK_TILT,
   deckPileLayout,
@@ -41,12 +42,12 @@ function staysOffColorBar(
 ) {
   const corner = (row === 0 || row === 10) && (col === 0 || col === 10);
   if (corner) return true;
-  // Phone squares are only a few dozen pixels across. The emoji needs that whole square.
-  if (Math.min(width, height) < 40) return true;
-  if (row === 10) return spot.y + spot.piece <= height * 0.65;
-  if (row === 0) return spot.y >= height * 0.35;
-  if (col === 0) return spot.x >= width * 0.35;
-  return spot.x + spot.piece <= width * 0.65;
+  const inward = row === 0 || row === 10 ? height : width;
+  const band = colorBarThickness(inward);
+  if (row === 10) return spot.y + 0.5 >= band;
+  if (row === 0) return spot.y + spot.piece <= height - band + 0.5;
+  if (col === 0) return spot.x + spot.piece <= width - band + 0.5;
+  return spot.x + 0.5 >= band;
 }
 
 describe('layoutSharedTokens', () => {

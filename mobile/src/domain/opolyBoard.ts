@@ -151,9 +151,14 @@ export function cellBox(row: number, col: number) {
 
 export type TokenSpot = { x: number; y: number; piece: number };
 
+/** Thickness of the color bar on the inner edge of a property. */
+export function colorBarThickness(inward: number) {
+  return Math.max(18, Math.round(Math.max(0, inward) * 0.4));
+}
+
 /**
  * Pack every token on one square into that square without their boxes touching.
- * Side spaces keep a strip on the outer edge for the color bar.
+ * Side spaces keep the inner strip clear for the color bar and its name.
  */
 export function layoutSharedTokens(
   width: number,
@@ -171,13 +176,11 @@ export function layoutSharedTokens(
   let y1 = Math.max(y0 + 1, height - edge);
   if (!corner) {
     const inward = row === 0 || row === 10 ? height : width;
-    const along = Math.min(width, height);
-    // A phone property cannot spare a color-bar strip and still show an emoji.
-    const reserve = Math.round(inward * (along < 40 ? 0.08 : 0.38));
-    if (row === 10) y1 = Math.max(y0 + 1, y1 - reserve);
-    else if (row === 0) y0 = Math.min(y1 - 1, y0 + reserve);
-    else if (col === 0) x0 = Math.min(x1 - 1, x0 + reserve);
-    else x1 = Math.max(x0 + 1, x1 - reserve);
+    const reserve = Math.min(colorBarThickness(inward), Math.round(inward * 0.45));
+    if (row === 10) y0 = Math.min(y1 - 1, y0 + reserve);
+    else if (row === 0) y1 = Math.max(y0 + 1, y1 - reserve);
+    else if (col === 0) x1 = Math.max(x0 + 1, x1 - reserve);
+    else x0 = Math.min(x1 - 1, x0 + reserve);
   }
   const bw = x1 - x0;
   const bh = y1 - y0;
