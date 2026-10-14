@@ -27,6 +27,9 @@ import {
   layoutSharedTokens,
   layoutVisitingTokens,
   nameFacing,
+  cornerFacing,
+  CORNER_FIT,
+  placeCornerToken,
   nearestBoardTurn,
   ownerMarkPlacement,
   spaceToCell,
@@ -742,8 +745,18 @@ function BoardCanvas({
             ]}
           >
             {isCorner ? (
-              <View style={[styles.cornerFill, { pointerEvents: 'none' }]}>
-                <CornerArt index={space.index} cell={Math.max(48, cell)} detail={detail} />
+              <View style={[styles.cornerFill, { alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }]}>
+                <View
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transform: [{ rotate: cornerFacing(space.index) }, { scale: CORNER_FIT }],
+                  }}
+                >
+                  <CornerArt index={space.index} cell={Math.max(48, cell)} detail={detail} />
+                </View>
               </View>
             ) : (
               <>
@@ -1186,19 +1199,17 @@ function FreeParkingCorner({ cell, detail }: { cell: number; detail: boolean }) 
 function GoToJailCorner({ cell, detail }: { cell: number; detail: boolean }) {
   const pad = Math.round(cell * 0.04);
   const width = cell - pad * 2;
-  const kicker = fitSize('GO TO', width, Math.round(cell * 0.13));
-  const title = displaySize('JAIL', width, Math.round(cell * (detail ? 0.28 : 0.4)));
+  const kicker = fitSize('Go to', width, Math.round(cell * 0.18));
+  const title = displaySize('Jail', width, Math.round(cell * (detail ? 0.26 : 0.32)));
   const fine = fitSize('Do not collect $200', width, Math.round(cell * 0.09));
-  const icon = Math.round(cell * (detail ? 0.32 : 0.4));
+  const icon = Math.round(cell * (detail ? 0.26 : 0.3));
   return (
     <View style={[styles.corner, { padding: pad }]}>
-      {detail ? (
-        <Text style={[styles.cornerFine, { fontSize: kicker, lineHeight: kicker }]} numberOfLines={1}>
-          GO TO
-        </Text>
-      ) : null}
-      <Text style={[styles.cornerGo, { fontSize: title, lineHeight: title }]} numberOfLines={1}>
-        JAIL
+      <Text style={[styles.cornerTitle, { fontSize: kicker, lineHeight: kicker, maxWidth: width }]} numberOfLines={1}>
+        Go to
+      </Text>
+      <Text style={[styles.cornerGo, { fontSize: title, lineHeight: title, maxWidth: width }]} numberOfLines={1}>
+        Jail
       </Text>
       <Svg width={icon} height={Math.round(icon * 0.9)} viewBox="0 0 40 36">
         <Path d="M10 12h20l-2 4H12z" fill="#1d4e89" />
@@ -1618,7 +1629,8 @@ function piecePlace(index: number, size: number, slot: number, count = 1, inJail
   if (index === 10) {
     const cell = Math.min(width, height);
     const spots = inJail ? layoutJailedTokens(cell, count) : layoutVisitingTokens(cell, count);
-    const spot = spots[Math.max(0, Math.min(slot, spots.length - 1))];
+    const raw = spots[Math.max(0, Math.min(slot, spots.length - 1))];
+    const spot = placeCornerToken(cell, raw, cornerFacing(10));
     return { left: frame.x * size + spot.x, top: frame.y * size + spot.y, piece: spot.piece };
   }
   if (count > 1) {

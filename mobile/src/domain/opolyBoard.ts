@@ -289,6 +289,38 @@ export function nameFacing(row: number, col: number): '0deg' | '90deg' | '-90deg
   return '-90deg';
 }
 
+/** Turn a corner so the bottom of its art faces the outer corner of the board. */
+export function cornerFacing(index: number): '-45deg' | '45deg' | '135deg' | '-135deg' {
+  const space = ((index % 40) + 40) % 40;
+  if (space === 0) return '-45deg';
+  if (space === 10) return '45deg';
+  if (space === 20) return '135deg';
+  return '-135deg';
+}
+
+/** Shrink a corner so a 45° turn stays inside the square. */
+export const CORNER_FIT = Math.SQRT1_2;
+
+/** Move a token with the corner art: scale about the cell center, then rotate clockwise. */
+export function placeCornerToken(
+  cell: number,
+  spot: TokenSpot,
+  facing: ReturnType<typeof cornerFacing>,
+): TokenSpot {
+  const turn = facing === '45deg' ? 45 : facing === '-45deg' ? -45 : facing === '135deg' ? 135 : -135;
+  const rad = (turn * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const piece = spot.piece * CORNER_FIT;
+  const dx = (spot.x + spot.piece / 2 - cell / 2) * CORNER_FIT;
+  const dy = (spot.y + spot.piece / 2 - cell / 2) * CORNER_FIT;
+  return {
+    x: cell / 2 + dx * cos - dy * sin - piece / 2,
+    y: cell / 2 + dx * sin + dy * cos - piece / 2,
+    piece,
+  };
+}
+
 /**
  * Owner emoji just inside the board, above the property card.
  * Rotation points the emoji's feet at that side of the board.

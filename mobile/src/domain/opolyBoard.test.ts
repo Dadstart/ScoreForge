@@ -17,6 +17,8 @@ import {
   ownerMarkPlacement,
   boardTurnForSpace,
   nameFacing,
+  cornerFacing,
+  placeCornerToken,
   boardViewForTurn,
   nearestBoardTurn,
   spaceToCell,
@@ -160,6 +162,31 @@ describe('nameFacing', () => {
     assert.equal(facing(21), '180deg');
     assert.equal(facing(11), '90deg');
     assert.equal(facing(31), '-90deg');
+  });
+});
+
+describe('cornerFacing', () => {
+  it('points the bottom of each corner at the outer corner of the board', () => {
+    assert.equal(cornerFacing(0), '-45deg');
+    assert.equal(cornerFacing(10), '45deg');
+    assert.equal(cornerFacing(20), '135deg');
+    assert.equal(cornerFacing(30), '-135deg');
+  });
+
+  it('keeps jailed tokens inside the bars after the corner turns', () => {
+    const cell = 100;
+    const box = jailCell(cell);
+    for (const spot of layoutJailedTokens(cell, 4).map((raw) => placeCornerToken(cell, raw, cornerFacing(10)))) {
+      const cx = spot.x + spot.piece / 2;
+      const cy = spot.y + spot.piece / 2;
+      const dx = cx - cell / 2;
+      const dy = cy - cell / 2;
+      const backX = cell / 2 + (dx + dy);
+      const backY = cell / 2 + (dy - dx);
+      assert.ok(backX >= box.x && backX <= box.x + box.width, 'across the jail');
+      assert.ok(backY >= box.y + box.height * 0.36 && backY <= box.y + box.height, 'under the label');
+      assert.ok(spot.x >= -0.01 && spot.y >= -0.01 && spot.x + spot.piece <= cell + 0.01 && spot.y + spot.piece <= cell + 0.01);
+    }
   });
 });
 
