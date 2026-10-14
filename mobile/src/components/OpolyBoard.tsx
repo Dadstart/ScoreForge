@@ -805,7 +805,11 @@ function BoardCanvas({
                           {shownName}
                         </Text>
                       </View>
-                      {isRailroad && trainW > 0 ? <TrainSvg width={trainW} height={trainH} /> : null}
+                      {isRailroad && trainW > 0 ? (
+                        <View style={{ width: trainW, height: trainH, transform: [{ scaleX: -1 }] }}>
+                          <TrainSvg width={trainW} height={trainH} />
+                        </View>
+                      ) : null}
                     </View>
                   </View>
                 ) : null}
