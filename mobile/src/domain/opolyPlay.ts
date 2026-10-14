@@ -575,22 +575,22 @@ function applyCard(ctx: Ctx, playerId: string, deck: 'chance' | 'chest', id: str
     return;
   }
   if (id === 'boardwalk') {
-    ctx.notes.push(`${label}: Advance to Boardwalk.`);
+    ctx.notes.push(`${label}: Advance to V.`);
     resolveSpace(ctx, playerId, from, advance(from, 39));
     return;
   }
   if (id === 'illinois') {
-    ctx.notes.push(`${label}: Advance to Illinois Avenue.`);
+    ctx.notes.push(`${label}: Advance to N.`);
     resolveSpace(ctx, playerId, from, advance(from, 24));
     return;
   }
   if (id === 'st-charles') {
-    ctx.notes.push(`${label}: Advance to St. Charles Place.`);
+    ctx.notes.push(`${label}: Advance to F.`);
     resolveSpace(ctx, playerId, from, advance(from, 11));
     return;
   }
   if (id === 'reading') {
-    ctx.notes.push(`${label}: Take a ride on the Reading Railroad.`);
+    ctx.notes.push(`${label}: Take a ride on 🚂 W.`);
     resolveSpace(ctx, playerId, from, advance(from, 5));
     return;
   }

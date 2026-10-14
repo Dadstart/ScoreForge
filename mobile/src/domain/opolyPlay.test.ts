@@ -47,7 +47,7 @@ describe('monopoly play', () => {
     assert.equal(offeredProperty(moved.play), 'mediterranean');
     assert.equal(moved.events.reduce((sum, event) => sum + event.points, 0), 200);
     assert.match(moved.note, /passing GO/);
-    assert.match(moved.note, /Mediterranean Avenue/);
+    assert.match(moved.note, /can buy A for/);
     assert.deepEqual(moved.route?.spaces, [39, 0, 1]);
 
     const bought = buyProperty(moved.play, moved.tokens, players, 1700);
@@ -148,7 +148,7 @@ describe('monopoly play', () => {
     assert.ok(!('error' in paid));
     if ('error' in paid) return;
     assert.equal(paid.events.find((event) => event.playerId === 'ada')?.points, -50);
-    assert.match(accepted.note, /Boardwalk/);
+    assert.match(accepted.note, /Advance to V/);
     assert.equal(accepted.route?.spaces[0], 7);
     assert.equal(accepted.route?.spaces.at(-1), 39);
     assert.ok((accepted.route?.spaces.length ?? 0) > 12);
