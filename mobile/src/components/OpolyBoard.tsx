@@ -1439,20 +1439,22 @@ function ChanceMark({
 }) {
   const size = cardMarkSize(row, col, cell, detail);
   return (
-    <Text
-      style={{
-        fontFamily: fonts.display,
-        fontSize: size,
-        lineHeight: size,
-        fontWeight: '700',
-        color: '#c2410c',
-        textAlign: 'center',
-        width: '100%',
-        pointerEvents: 'none',
-      }}
-    >
-      ?
-    </Text>
+    <View style={[squareTop(row, col), { pointerEvents: 'none' }]}>
+      <Text
+        style={{
+          fontFamily: fonts.display,
+          fontSize: size,
+          lineHeight: size,
+          fontWeight: '700',
+          color: '#c2410c',
+          textAlign: 'center',
+          width: size,
+          transform: [{ rotate: nameFacing(row, col) }],
+        }}
+      >
+        ?
+      </Text>
+    </View>
   );
 }
 
@@ -1469,7 +1471,7 @@ function ChestMark({
 }) {
   const size = cardMarkSize(row, col, cell, detail);
   return (
-    <View style={[chestTop(row, col), { pointerEvents: 'none' }]}>
+    <View style={[squareTop(row, col), { pointerEvents: 'none' }]}>
       <View style={{ width: size, height: size, transform: [{ rotate: nameFacing(row, col) }] }}>
         <ChestSvg size={size} />
       </View>
@@ -1477,8 +1479,8 @@ function ChestMark({
   );
 }
 
-/** The top of a chest square is the inner edge, opposite the outside the icon faces. */
-function chestTop(row: number, col: number) {
+/** The top of a square is the inner edge, opposite the outside its mark faces. */
+function squareTop(row: number, col: number) {
   const gap = 2;
   if (row === 10) return { position: 'absolute' as const, top: gap, left: 0, right: 0, alignItems: 'center' as const };
   if (row === 0) return { position: 'absolute' as const, bottom: gap, left: 0, right: 0, alignItems: 'center' as const };
