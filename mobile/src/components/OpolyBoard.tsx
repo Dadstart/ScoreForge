@@ -1469,17 +1469,21 @@ function ChestMark({
 }) {
   const size = cardMarkSize(row, col, cell, detail);
   return (
-    <View
-      style={{
-        width: size,
-        height: size,
-        pointerEvents: 'none',
-        transform: [{ rotate: nameFacing(row, col) }],
-      }}
-    >
-      <ChestSvg size={size} />
+    <View style={[chestTop(row, col), { pointerEvents: 'none' }]}>
+      <View style={{ width: size, height: size, transform: [{ rotate: nameFacing(row, col) }] }}>
+        <ChestSvg size={size} />
+      </View>
     </View>
   );
+}
+
+/** The top of a chest square is the inner edge, opposite the outside the icon faces. */
+function chestTop(row: number, col: number) {
+  const gap = 2;
+  if (row === 10) return { position: 'absolute' as const, top: gap, left: 0, right: 0, alignItems: 'center' as const };
+  if (row === 0) return { position: 'absolute' as const, bottom: gap, left: 0, right: 0, alignItems: 'center' as const };
+  if (col === 0) return { position: 'absolute' as const, right: gap, top: 0, bottom: 0, justifyContent: 'center' as const };
+  return { position: 'absolute' as const, left: gap, top: 0, bottom: 0, justifyContent: 'center' as const };
 }
 
 function ChestSvg({ size }: { size: number }) {
