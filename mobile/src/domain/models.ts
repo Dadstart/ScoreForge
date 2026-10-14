@@ -6,7 +6,7 @@ import type { PyramidState } from './pyramid';
 import type { SpiderState } from './spider';
 import type { TriPeaksState } from './tripeaks';
 import type { SorryState } from './sorry';
-import type { MonopolyPlay } from './monopolyPlay';
+import type { OpolyPlay } from './monopolyPlay';
 import type { YahtzeeState } from './yahtzee';
 import { fillRandom, randomId } from './secureRandom';
 
@@ -15,7 +15,7 @@ export type GameStatus = 'InProgress' | 'Completed';
 export interface Player {
   id: string;
   name: string;
-  /** Monopoly piece id, or a custom emoji. Absent means the initial circle. */
+  /** Opoly piece id, or a custom emoji. Absent means the initial circle. */
   token?: string | null;
 }
 
@@ -61,10 +61,10 @@ export interface Game {
   /** Yahtzee dice, holds, and whose turn it is. */
   yahtzee?: YahtzeeState | null;
   /**
-   * Monopoly turn, ownership, deeds, and decks. Saved on every game because
+   * Opoly turn, ownership, deeds, and decks. Saved on every game because
    * deployed rules require the key.
    */
-  monopoly?: MonopolyPlay | null;
+  monopoly?: OpolyPlay | null;
   /**
    * Increments on every successful save. A write is stored only when it was
    * based on this revision, so two devices cannot overwrite each other.

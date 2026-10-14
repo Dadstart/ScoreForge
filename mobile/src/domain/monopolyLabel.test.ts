@@ -26,27 +26,36 @@ describe('monopoly property labels', () => {
     assert.deepEqual(fitted.lines, ['North Carolina', 'Ave.']);
   });
 
-  it('turns a name sideways when a zoomed-out property is too narrow', () => {
+  it('keeps a readable name instead of the largest abbreviation', () => {
     // A phone-width top property: about 25px across and 42px of name along the depth.
     const boardwalk = compactPropertyLabel('Boardwalk', 'Boardwalk', 25, 42);
     assert.ok(boardwalk);
     if (!boardwalk) return;
     assert.equal(boardwalk.text, 'Boardwalk');
     assert.equal(boardwalk.vertical, true);
-    assert.ok(boardwalk.fontSize >= 7);
+    assert.ok(boardwalk.fontSize <= 14);
     assert.ok(textWidth(boardwalk.text, boardwalk.fontSize) <= 42);
 
     const penn = compactPropertyLabel('Pennsylvania Avenue', 'Penn Av', 25, 42);
     assert.ok(penn);
     if (!penn) return;
     assert.equal(penn.vertical, true);
-    assert.ok(penn.fontSize >= 8);
+    assert.ok(penn.fontSize <= 14);
+    assert.notEqual(penn.text, 'Penn Av');
 
     const side = compactPropertyLabel('Illinois Avenue', 'Illinois', 48, 26);
     assert.ok(side);
     if (!side) return;
     assert.equal(side.vertical, false);
+    assert.ok(side.fontSize <= 14);
     assert.ok(textWidth(side.text, side.fontSize) <= 48);
+
+    const wide = compactPropertyLabel('Mediterranean Avenue', 'Med', 78, 120);
+    assert.ok(wide);
+    if (!wide) return;
+    assert.equal(wide.text, 'Mediterranean Ave.');
+    assert.ok(wide.fontSize <= 14);
+    assert.ok(textWidth(wide.text, wide.fontSize) <= 120);
   });
 
   it('abbreviates instead of breaking a word', () => {

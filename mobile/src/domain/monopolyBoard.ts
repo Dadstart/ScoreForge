@@ -76,6 +76,63 @@ export function spaceToCell(index: number): { row: number; col: number } {
   return { row: i - 30, col: 10 };
 }
 
+/**
+ * Degrees to rotate the board so this space's side is the near edge.
+ * 0 is the Go row. Each next side is a quarter turn counter-clockwise.
+ */
+export function boardTurnForSpace(space: number): number {
+  const s = ((space % 40) + 40) % 40;
+  if (s < 10) return 0;
+  if (s < 20) return -90;
+  if (s < 30) return -180;
+  return -270;
+}
+
+/** Same facing as `boardTurnForSpace`, choosing the turn closest to `current`. */
+export function nearestBoardTurn(current: number, space: number): number {
+  const base = boardTurnForSpace(space);
+  let best = base;
+  let bestDist = Infinity;
+  for (let lap = -2; lap <= 2; lap += 1) {
+    const next = base + lap * 360;
+    const dist = Math.abs(next - current);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = next;
+    }
+  }
+  return best;
+}
+
+/** Board-space rect shown in `view` after the board has rotated `turn` degrees around its center. */
+export function boardViewForTurn(view: BoardView, turn: number, board: number): BoardView {
+  const quarter = ((Math.round(-turn / 90) % 4) + 4) % 4;
+  if (quarter === 0 || board <= 0) return view;
+  const cx = board / 2;
+  const cy = board / 2;
+  const corners = [
+    { x: view.x, y: view.y },
+    { x: view.x + view.width, y: view.y },
+    { x: view.x, y: view.y + view.height },
+    { x: view.x + view.width, y: view.y + view.height },
+  ];
+  const mapped = corners.map((point) => {
+    let x = point.x - cx;
+    let y = point.y - cy;
+    for (let step = 0; step < quarter; step += 1) {
+      const nextX = -y;
+      y = x;
+      x = nextX;
+    }
+    return { x: x + cx, y: y + cy };
+  });
+  const xs = mapped.map((point) => point.x);
+  const ys = mapped.map((point) => point.y);
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  return { x: minX, y: minY, width: Math.max(...xs) - minX, height: Math.max(...ys) - minY };
+}
+
 /** How far each property runs in from the edge. Larger than a square cell, so the spaces are long rectangles. */
 export const TRACK_DEPTH = 0.16;
 
@@ -114,7 +171,9 @@ export function layoutSharedTokens(
   let y1 = Math.max(y0 + 1, height - edge);
   if (!corner) {
     const inward = row === 0 || row === 10 ? height : width;
-    const reserve = Math.round(inward * 0.38);
+    const along = Math.min(width, height);
+    // A phone property cannot spare a color-bar strip and still show an emoji.
+    const reserve = Math.round(inward * (along < 40 ? 0.08 : 0.38));
     if (row === 10) y1 = Math.max(y0 + 1, y1 - reserve);
     else if (row === 0) y0 = Math.min(y1 - 1, y0 + reserve);
     else if (col === 0) x0 = Math.min(x1 - 1, x0 + reserve);
@@ -223,7 +282,9 @@ export type OwnerMark = {
 export function ownerMarkPlacement(row: number, col: number, width: number, height: number): OwnerMark {
   const along = row === 0 || row === 10 ? width : height;
   const depth = row === 0 || row === 10 ? height : width;
-  const size = Math.max(12, Math.min(along - 2, Math.round(along * 0.62)));
+  const fitted = Math.min(Math.max(8, along - 2), Math.round(along * 0.62));
+  // On a phone the property is only a few dozen pixels wide. Use that whole width so the emoji reads.
+  const size = along < 40 ? Math.max(fitted, Math.min(28, along)) : fitted;
   const gap = Math.max(2, Math.round(depth * 0.03));
   if (row === 10) return { x: (width - size) / 2, y: -(size + gap), size, rotate: '0deg', flipX: false };
   if (row === 0) return { x: (width - size) / 2, y: height + gap, size, rotate: '180deg', flipX: false };
@@ -283,12 +344,12 @@ export function backwardSpaces(from: number, to: number): number[] {
  * Path for a move whose direction was not recorded.
  * Short trips follow the track. A long jump, such as being sent to jail, slides straight across.
  */
-/** MONOPOLY word size. `corner` is the board's corner cell, `board * TRACK_DEPTH`. */
+/** OPOLY word size. `corner` is the board's corner cell, `board * TRACK_DEPTH`. */
 export function centerTitleFont(corner: number): number {
   return Math.min(96, Math.max(18, Math.round(corner * 0.62)));
 }
 
-/** Fraunces 700 "MONOPOLY" at letter-spacing 1, measured on the board. */
+/** Fraunces 700 "OPOLY" at letter-spacing 1, measured on the board. */
 const TITLE_EM = 5.8;
 const TITLE_LINE = 1.25;
 export const DECK_TILT = 34;

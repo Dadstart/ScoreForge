@@ -19,7 +19,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
       Setup: 'setup',
       Board: 'board/:gameId',
       Cribbage: 'cribbage/:gameId',
-      Monopoly: 'monopoly/:gameId',
+      Opoly: 'monopoly/:gameId',
       Yahtzee: 'yahtzee/:gameId',
       Sorry: 'sorry/:gameId',
       Backgammon: 'backgammon/:gameId',

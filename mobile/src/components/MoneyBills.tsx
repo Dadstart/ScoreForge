@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native';
 import { cellBox, spaceToCell } from '../domain/monopolyBoard';
-import { diceMotionMs } from './MonopolyDice';
+import { diceMotionMs } from './OpolyDice';
 import { fonts } from '../theme';
 
 export type MoneyFlight = {

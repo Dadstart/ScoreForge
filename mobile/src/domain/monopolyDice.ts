@@ -27,7 +27,7 @@ function face(sample: number): number {
 }
 
 /** Two dice, 1 through 6. */
-export function rollMonopolyDice(sample: () => number = unit): DiceRoll {
+export function rollOpolyDice(sample: () => number = unit): DiceRoll {
   const first = face(sample());
   const second = face(sample());
   return {

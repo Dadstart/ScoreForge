@@ -8,7 +8,7 @@ export type RootStackParamList = {
   Join: { code?: string } | undefined;
   Board: { gameId: string };
   Cribbage: { gameId: string };
-  Monopoly: { gameId: string };
+  Opoly: { gameId: string };
   Yahtzee: { gameId: string };
   Sorry: { gameId: string };
   Backgammon: { gameId: string };
@@ -23,9 +23,9 @@ export type RootStackParamList = {
 
 export function gameScreenForTemplate(
   templateId: string,
-): 'Board' | 'Cribbage' | 'Monopoly' | 'Yahtzee' | 'Sorry' | 'Backgammon' | 'Checkers' | 'ChineseCheckers' | 'Klondike' | 'Pyramid' | 'TriPeaks' | 'Spider' {
+): 'Board' | 'Cribbage' | 'Opoly' | 'Yahtzee' | 'Sorry' | 'Backgammon' | 'Checkers' | 'ChineseCheckers' | 'Klondike' | 'Pyramid' | 'TriPeaks' | 'Spider' {
   if (templateId === 'cribbage') return 'Cribbage';
-  if (templateId === 'monopoly') return 'Monopoly';
+  if (templateId === 'monopoly') return 'Opoly';
   if (templateId === 'yahtzee') return 'Yahtzee';
   if (templateId === 'sorry') return 'Sorry';
   if (templateId === 'backgammon') return 'Backgammon';

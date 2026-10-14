@@ -131,7 +131,7 @@ export type RentQuote = {
 
 export const PURCHASE_OPTION = 'purchase';
 
-/** Classic Monopoly pieces first, then the later set. Each one has a clear emoji. */
+/** Classic Opoly pieces first, then the later set. Each one has a clear emoji. */
 export const PLAYER_TOKENS = [
   { id: 'car', emoji: '🚗', label: 'Race car' },
   { id: 'dog', emoji: '🐶', label: 'Scottie dog' },

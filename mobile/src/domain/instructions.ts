@@ -51,7 +51,7 @@ const INSTRUCTIONS: Record<string, GameInstructions> = {
     ],
   },
   monopoly: {
-    title: 'Monopoly',
+    title: 'Opoly',
     lines: [
       'Everyone starts with $1,500. The first player rolls. The dice move that token.',
       'Passing GO collects $200. Doubles means roll again. Three doubles in a row sends you to jail.',

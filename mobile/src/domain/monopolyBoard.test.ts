@@ -14,6 +14,9 @@ import {
   layoutVisitingTokens,
   monopolyDieSize,
   ownerMarkPlacement,
+  boardTurnForSpace,
+  boardViewForTurn,
+  nearestBoardTurn,
   spaceToCell,
   TRACK_DEPTH,
   visibleBoardRect,
@@ -37,6 +40,8 @@ function staysOffColorBar(
 ) {
   const corner = (row === 0 || row === 10) && (col === 0 || col === 10);
   if (corner) return true;
+  // Phone squares are only a few dozen pixels across. The emoji needs that whole square.
+  if (Math.min(width, height) < 40) return true;
   if (row === 10) return spot.y + spot.piece <= height * 0.65;
   if (row === 0) return spot.y >= height * 0.35;
   if (col === 0) return spot.x >= width * 0.35;
@@ -136,7 +141,7 @@ describe('deckPileLayout', () => {
         assert.ok(box.top >= -0.5, 'above the green');
         assert.ok(box.right <= title.felt + 0.5, 'right of the green');
         assert.ok(box.bottom <= title.felt + 0.5, 'below the green');
-        assert.ok(boxesMiss(box, title, 4), `covers MONOPOLY (${JSON.stringify(box)})`);
+        assert.ok(boxesMiss(box, title, 4), `covers OPOLY (${JSON.stringify(box)})`);
       }
     });
   }
@@ -287,6 +292,33 @@ describe('dice landing', () => {
       assert.ok(end.y >= view.y - 0.75 && end.y <= view.y + view.height + 0.75);
       assert.ok(end.x > board * 0.7 && end.y > board * 0.7);
     }
+  });
+});
+
+describe('board facing', () => {
+  it('puts the side the piece is on at the near edge', () => {
+    assert.equal(boardTurnForSpace(0), 0);
+    assert.equal(boardTurnForSpace(9), 0);
+    assert.equal(boardTurnForSpace(10), -90);
+    assert.equal(boardTurnForSpace(19), -90);
+    assert.equal(boardTurnForSpace(20), -180);
+    assert.equal(boardTurnForSpace(30), -270);
+    assert.equal(boardTurnForSpace(39), -270);
+  });
+
+  it('takes the short way around', () => {
+    assert.equal(nearestBoardTurn(-270, 0), -360);
+    assert.equal(nearestBoardTurn(0, 30), 90);
+    assert.equal(nearestBoardTurn(-90, 15), -90);
+  });
+
+  it('maps the on-screen window back through a quarter turn', () => {
+    const board = 400;
+    const full = { x: 0, y: 0, width: board, height: board };
+    assert.deepEqual(boardViewForTurn(full, -90, board), full);
+    assert.deepEqual(boardViewForTurn(full, 90, board), full);
+    const near = { x: 100, y: 300, width: 200, height: 100 };
+    assert.deepEqual(boardViewForTurn(near, -90, board), { x: 0, y: 100, width: 100, height: 200 });
   });
 });
 

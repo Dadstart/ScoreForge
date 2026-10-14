@@ -4,7 +4,7 @@ import Svg, { Path, Rect } from 'react-native-svg';
 import { cardCopy, type CardDeck } from '../domain/monopolyCards';
 import { DECK_TILT, TRACK_DEPTH, deckPileLayout } from '../domain/monopolyBoard';
 import { fonts } from '../theme';
-import { diceMotionMs } from './MonopolyDice';
+import { diceMotionMs } from './OpolyDice';
 
 /** How long the token waits on the card square before following the instruction. */
 export const CARD_REVEAL_MS = 1900;
@@ -22,7 +22,7 @@ type Props = {
   onAccept?: () => void;
 };
 
-export function MonopolyCardTable({ boardSize, chanceCount, chestCount, face, onAccept }: Props) {
+export function OpolyCardTable({ boardSize, chanceCount, chestCount, face, onAccept }: Props) {
   const center = boardSize * (1 - 2 * TRACK_DEPTH);
   const origin = boardSize * TRACK_DEPTH;
   const piles = deckPileLayout(boardSize);

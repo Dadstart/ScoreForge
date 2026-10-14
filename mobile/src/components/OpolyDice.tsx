@@ -34,7 +34,7 @@ export function diceMotionMs(): number {
 
 type Roll = { id: number; faces: [number, number] };
 
-export function MonopolyDice({
+export function OpolyDice({
   roll,
   view,
   boardSize = 0,
