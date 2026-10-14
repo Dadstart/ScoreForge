@@ -71,7 +71,7 @@ export const templates: GameTemplate[] = [
     id: 'monopoly',
     name: 'Opoly',
     description:
-      'Roll, buy properties, pay rent, and follow Chance and Community Chest. Everyone starts with $1,500. The richest player wins.',
+      'Roll, buy properties, pay rent, and follow Chance and Chest. Everyone starts with $1,500. The richest player wins.',
     scoringMode: 'Instant',
     winCondition: 'HighestTotal',
     minPlayers: 1,

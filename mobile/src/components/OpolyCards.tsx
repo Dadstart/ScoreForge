@@ -89,7 +89,7 @@ function CardPile({
   const layers = Math.max(1, Math.min(LAYERS, count));
   return (
     <View
-      accessibilityLabel={deck === 'chance' ? 'Chance deck' : 'Community Chest deck'}
+      accessibilityLabel={deck === 'chance' ? 'Chance deck' : 'Chest deck'}
       style={[styles.pile, { left, top, width, height, transform: [{ rotate: `${angle}deg` }] }, { pointerEvents: 'none' }]}
     >
       {Array.from({ length: layers }, (_, layer) => {
@@ -99,7 +99,7 @@ function CardPile({
             key={depth}
             style={[styles.layer, { transform: [{ translateX: depth * 3 }, { translateY: depth * 4 }] }]}
           >
-            <CardBack deck={deck} width={width} height={height} />
+            <CardBack deck={deck} width={width} height={height} angle={angle} />
           </View>
         );
       })}
@@ -208,13 +208,13 @@ function FlippedCard({
           onAccept={onAccept}
         />
       ) : (
-        <CardBack deck={deck} width={faceWidth} height={faceHeight} />
+        <CardBack deck={deck} width={faceWidth} height={faceHeight} angle={angle} />
       )}
     </Animated.View>
   );
 }
 
-function CardBack({ deck, width, height }: { deck: CardDeck; width: number; height: number }) {
+function CardBack({ deck, width, height, angle = 0 }: { deck: CardDeck; width: number; height: number; angle?: number }) {
   const chance = deck === 'chance';
   const radius = Math.round(width * 0.07);
   return (
@@ -233,10 +233,10 @@ function CardBack({ deck, width, height }: { deck: CardDeck; width: number; heig
         {chance ? (
           <Text style={[styles.mark, { fontSize: width * 0.52, lineHeight: width * 0.56 }]}>?</Text>
         ) : (
-          <ChestGlyph size={width * 0.42} />
+          <ChestGlyph size={width * 0.42} rotate={`${90 - angle}deg`} />
         )}
         <Text style={[styles.backName, { fontSize: Math.max(8, width * 0.09), lineHeight: Math.max(10, width * 0.11) }]}>
-          {chance ? 'CHANCE' : 'COMMUNITY\nCHEST'}
+          {chance ? 'CHANCE' : 'CHEST'}
         </Text>
       </View>
     </View>
@@ -281,14 +281,17 @@ function CardFront({
   );
 }
 
-function ChestGlyph({ size }: { size: number }) {
+function ChestGlyph({ size, rotate = '0deg' }: { size: number; rotate?: string }) {
+  const height = size * 0.82;
   return (
-    <Svg width={size} height={size * 0.82} viewBox="0 0 64 52">
+    <View style={{ width: size, height, transform: [{ rotate }] }}>
+    <Svg width={size} height={height} viewBox="0 0 64 52">
       <Path d="M8 20h48v24a6 6 0 0 1-6 6H14a6 6 0 0 1-6-6V20z" fill="#f6e7c1" />
       <Path d="M6 20c0-8 10-14 26-14s26 6 26 14v4H6v-4z" fill="#f3d48a" />
       <Rect x="28" y="24" width="8" height="10" rx="1.5" fill="#8a5a22" />
       <Path d="M6 30h52" stroke="#c4a46a" strokeWidth="3" />
     </Svg>
+    </View>
   );
 }
 

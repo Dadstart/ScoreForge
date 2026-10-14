@@ -671,7 +671,7 @@ function BoardCanvas({
         const bar = Math.min(Math.round(inward * 0.78), letterBand + trainBlock);
         const label = Math.max(8, Math.round(cell * (detail ? 0.08 : 0.14)));
         const lane = !isCorner && (col === 0 || col === 10) ? sideLane(cell) : tokenLane(cell);
-        const mark = space.name === 'Chance' ? 'chance' : space.name === 'Community Chest' ? 'chest' : null;
+        const mark = space.name === 'Chance' ? 'chance' : space.name === 'Chest' ? 'chest' : null;
         const priceLine = detail && (property || space.tax) ? Math.max(9, Math.round(cell * 0.07)) : 0;
         const priceBand = priceLine > 0 && (row === 0 || row === 10)
           ? priceLine + 2
@@ -1080,7 +1080,7 @@ function BoardCanvas({
 
 function spaceTint(name: string, kind?: string) {
   if (name === 'Chance') return '#f6e2cf';
-  if (name === 'Community Chest') return '#f3ead0';
+  if (name === 'Chest') return '#f3ead0';
   if (name === 'Income Tax' || name === 'Luxury Tax') return '#f6e0dc';
   if (kind === 'railroad') return '#e3ebf1';
   if (kind === 'utility') return '#f6f0d2';
@@ -1469,7 +1469,14 @@ function ChestMark({
 }) {
   const size = cardMarkSize(row, col, cell, detail);
   return (
-    <View style={{ width: size, height: size, pointerEvents: 'none' }}>
+    <View
+      style={{
+        width: size,
+        height: size,
+        pointerEvents: 'none',
+        transform: [{ rotate: nameFacing(row, col) }],
+      }}
+    >
       <ChestSvg size={size} />
     </View>
   );

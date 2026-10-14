@@ -23,7 +23,7 @@ const space = (
 export const boardSpaces: BoardSpace[] = [
   space(0, 'Go', 'GO'),
   space(1, 'A', 'A', { propertyId: 'mediterranean' }),
-  space(2, 'Community Chest', 'Chest'),
+  space(2, 'Chest', 'Chest'),
   space(3, 'B', 'B', { propertyId: 'baltic' }),
   space(4, 'Income Tax', 'Tax', { tax: INCOME_TAX }),
   space(5, '🚂 W', '🚂 W', { propertyId: 'reading' }),
@@ -38,7 +38,7 @@ export const boardSpaces: BoardSpace[] = [
   space(14, 'H', 'H', { propertyId: 'virginia' }),
   space(15, '🚂 X', '🚂 X', { propertyId: 'pennsylvania-rr' }),
   space(16, 'I', 'I', { propertyId: 'st-james' }),
-  space(17, 'Community Chest', 'Chest'),
+  space(17, 'Chest', 'Chest'),
   space(18, 'J', 'J', { propertyId: 'tennessee' }),
   space(19, 'K', 'K', { propertyId: 'new-york' }),
   space(20, 'Free Parking', 'Free'),
@@ -54,7 +54,7 @@ export const boardSpaces: BoardSpace[] = [
   space(30, 'Go to Jail', 'To Jail'),
   space(31, 'R', 'R', { propertyId: 'pacific' }),
   space(32, 'S', 'S', { propertyId: 'north-carolina' }),
-  space(33, 'Community Chest', 'Chest'),
+  space(33, 'Chest', 'Chest'),
   space(34, 'T', 'T', { propertyId: 'pennsylvania-ave' }),
   space(35, '🚂 Z', '🚂 Z', { propertyId: 'short-line' }),
   space(36, 'Chance', 'Chance'),
@@ -494,7 +494,7 @@ function placeDeck(
 }
 
 /**
- * Community Chest and Chance sit under the title, inside the green,
+ * Chest and Chance sit under the title, inside the green,
  * clear of the word at every board size.
  */
 export function deckPileLayout(board: number): DeckPileLayout {

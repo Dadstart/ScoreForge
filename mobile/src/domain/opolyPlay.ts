@@ -521,7 +521,7 @@ function resolveSpace(
     drawCard(ctx, playerId, 'chance', step.index);
     return;
   }
-  if (space.name === 'Community Chest') {
+  if (space.name === 'Chest') {
     drawCard(ctx, playerId, 'chest', step.index);
     return;
   }
@@ -550,14 +550,14 @@ function drawCard(ctx: Ctx, playerId: string, deck: 'chance' | 'chest', from: nu
   if (deck === 'chance') ctx.play.chance = next;
   else ctx.play.chest = next;
   ctx.drawn.push({ deck, id, space: from });
-  const label = deck === 'chance' ? 'Chance' : 'Community Chest';
+  const label = deck === 'chance' ? 'Chance' : 'Chest';
   ctx.play.pending = { kind: 'card', deck, id, space: from };
   ctx.notes.push(`${label} card. Accept it to play.`);
 }
 
 function applyCard(ctx: Ctx, playerId: string, deck: 'chance' | 'chest', id: string, from: number) {
   const name = playerName(ctx.players, playerId);
-  const label = deck === 'chance' ? 'Chance' : 'Community Chest';
+  const label = deck === 'chance' ? 'Chance' : 'Chest';
   if (id === 'jail-free') {
     if (deck === 'chance') ctx.play.chanceFree[playerId] = countOf(ctx.play.chanceFree, playerId) + 1;
     else ctx.play.chestFree[playerId] = countOf(ctx.play.chestFree, playerId) + 1;
@@ -1147,7 +1147,7 @@ export function turnPrompt(play: OpolyPlay, players: PlayPlayer[]): string {
       : `${name}'s turn.`;
   }
   if (play.pending?.kind === 'card') {
-    const label = play.pending.deck === 'chance' ? 'Chance' : 'Community Chest';
+    const label = play.pending.deck === 'chance' ? 'Chance' : 'Chest';
     return `${name} drew a ${label} card.`;
   }
   if (play.pending?.kind === 'pay') {
