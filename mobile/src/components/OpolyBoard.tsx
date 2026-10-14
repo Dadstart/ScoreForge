@@ -31,8 +31,10 @@ import {
   CORNER_FIT,
   placeCornerToken,
   nearestBoardTurn,
+  nearestTokenFacing,
   ownerMarkPlacement,
   spaceToCell,
+  tokenFacingDegrees,
   tokenSpace,
   tokenSpacesBetween,
   TRACK_DEPTH,
@@ -219,13 +221,6 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
     () => boardTurn.interpolate({
       inputRange: [-1440, 1440],
       outputRange: ['-1440deg', '1440deg'],
-    }),
-    [boardTurn],
-  );
-  const pieceUpright = useMemo(
-    () => boardTurn.interpolate({
-      inputRange: [-1440, 1440],
-      outputRange: ['1440deg', '-1440deg'],
     }),
     [boardTurn],
   );
@@ -534,7 +529,6 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
             <BoardCanvas
               {...props}
               tokenRoute={tokenRoute}
-              upright={pieceUpright}
               onArrive={(space, duration) => faceSpaceRef.current(space, duration)}
               onWalkEnd={onWalkEnd}
               diceRoll={props.cardOffer ? null : diceRoll}
@@ -588,7 +582,6 @@ function BoardCanvas({
   pinDice = false,
   diceView = null,
   diceBoard = 0,
-  upright,
   onArrive,
   onWalkEnd,
 }: Omit<Props, 'onDragging' | 'onZoomed' | 'focusSpace'> & {
@@ -596,7 +589,6 @@ function BoardCanvas({
   pinDice?: boolean;
   diceView?: BoardView | null;
   diceBoard?: number;
-  upright: Animated.AnimatedInterpolation<string>;
   onArrive?: (space: number, duration: number) => boolean;
   onWalkEnd?: () => void;
 }) {
@@ -998,19 +990,19 @@ function BoardCanvas({
                   { pointerEvents: 'none' },
                 ]}
               >
-                <Animated.View
+                <View
                   style={{
                     width: spot.size,
                     height: spot.size,
                     alignItems: 'center',
                     justifyContent: 'center',
-                    transform: [{ rotate: upright }],
+                    transform: [{ rotate: nameFacing(row, col) }],
                   }}
                 >
                   <Text style={[styles.ownerEmoji, { fontSize: Math.round(spot.size * 0.82), lineHeight: Math.round(spot.size * 0.92) }]}>
                     {glyph}
                   </Text>
-                </Animated.View>
+                </View>
               </View>
             );
           })
@@ -1047,7 +1039,6 @@ function BoardCanvas({
                 routeId={route?.id ?? 0}
                 routeSpaces={route?.spaces ?? null}
                 holdSpaces={route ? drawnCards.map((card) => card.space) : []}
-                upright={upright}
                 onCardStop={showDrawnCard}
                 onSettled={onTokenSettled}
                 onArrive={onArrive}
@@ -1695,7 +1686,6 @@ function Piece({
   routeId,
   routeSpaces,
   holdSpaces,
-  upright,
   onCardStop,
   onSettled,
   onArrive,
@@ -1712,7 +1702,6 @@ function Piece({
   routeId: number;
   routeSpaces: number[] | null;
   holdSpaces: number[];
-  upright: Animated.AnimatedInterpolation<string>;
   onCardStop: (space: number) => void;
   onSettled: (playerId: string) => void;
   onArrive?: (space: number, duration: number) => boolean;
@@ -1724,6 +1713,15 @@ function Piece({
   const liftX = useRef(new Animated.Value(0)).current;
   const liftY = useRef(new Animated.Value(0)).current;
   const bulge = useRef(new Animated.Value(1)).current;
+  const facingDeg = useRef(new Animated.Value(tokenFacingDegrees(spaceIndex))).current;
+  const facingNow = useRef(tokenFacingDegrees(spaceIndex));
+  const facingSpin = useMemo(
+    () => facingDeg.interpolate({
+      inputRange: [-2520, 2520],
+      outputRange: ['-2520deg', '2520deg'],
+    }),
+    [facingDeg],
+  );
   const settled = useRef(spaceIndex);
   const lastPath = useRef<number[] | null>(null);
   const flyingRef = useRef(false);
@@ -1758,6 +1756,11 @@ function Piece({
     const from = settled.current;
     const placeAt = (index: number, atSlot: number, atCount = 1) =>
       piecePlace(index, sizeRef.current, atSlot, atCount, index === 10 && jailedRef.current);
+    const parkFacing = (index: number) => {
+      const next = tokenFacingDegrees(index);
+      facingNow.current = next;
+      facingDeg.setValue(next);
+    };
     if (diceMotionMs() === 0) {
       settled.current = spaceIndex;
       lastPath.current = null;
@@ -1766,6 +1769,7 @@ function Piece({
       const place = placeAt(spaceIndex, slotRef.current, countRef.current);
       left.setValue(place.left);
       top.setValue(place.top);
+      parkFacing(spaceIndex);
       const holds = holdRef.current;
       if (holds.length > 0) cardNotice.current(holds[holds.length - 1]);
       arriveNotice.current?.(spaceIndex, 0);
@@ -1778,6 +1782,7 @@ function Piece({
       const place = placeAt(spaceIndex, slotRef.current, countRef.current);
       left.setValue(place.left);
       top.setValue(place.top);
+      parkFacing(spaceIndex);
       arriveNotice.current?.(spaceIndex, 0);
       settledNotice.current(playerId);
       return;
@@ -1819,10 +1824,13 @@ function Piece({
         const dir = along ? inwardHop(spaces[step - 1]) : { x: 0, y: 0 };
         const duration = along ? pace : Math.round(pace * 2.4);
         const half = duration / 2;
+        const turn = nearestTokenFacing(facingNow.current, index);
+        facingNow.current = turn;
         const done = await play(
           Animated.parallel([
             Animated.timing(left, { toValue: place.left, duration, easing: Easing.inOut(Easing.quad), useNativeDriver: false }),
             Animated.timing(top, { toValue: place.top, duration, easing: Easing.inOut(Easing.quad), useNativeDriver: false }),
+            Animated.timing(facingDeg, { toValue: turn, duration, easing: Easing.inOut(Easing.quad), useNativeDriver: false }),
             Animated.sequence([
               Animated.timing(liftX, { toValue: dir.x * hop, duration: half, useNativeDriver: false }),
               Animated.timing(liftX, { toValue: 0, duration: half, useNativeDriver: false }),
@@ -1862,6 +1870,7 @@ function Piece({
       liftX.setValue(0);
       liftY.setValue(0);
       bulge.setValue(1);
+      parkFacing(settled.current);
       settledNotice.current(playerId);
     };
     void run();
@@ -1880,9 +1889,10 @@ function Piece({
         liftX.setValue(0);
         liftY.setValue(0);
         bulge.setValue(1);
+        parkFacing(from);
       }
     };
-  }, [bulge, left, liftX, liftY, playerId, routeId, spaceIndex, top]);
+  }, [bulge, facingDeg, left, liftX, liftY, playerId, routeId, spaceIndex, top]);
 
   const emoji = playerToken(token);
   const piece = resting.piece;
@@ -1898,7 +1908,7 @@ function Piece({
           width: piece,
           height: piece,
           zIndex: flying ? 30 : 10 + slot,
-          transform: [{ translateX: liftX }, { translateY: liftY }, { scale: bulge }, { rotate: upright }],
+          transform: [{ translateX: liftX }, { translateY: liftY }, { scale: bulge }, { rotate: facingSpin }],
         },
         { pointerEvents: 'none' },
       ]}

@@ -298,6 +298,39 @@ export function cornerFacing(index: number): '-45deg' | '45deg' | '135deg' | '-1
   return '-135deg';
 }
 
+/**
+ * Turn a player token so its bottom faces the outer edge of this space.
+ * Corners aim at the outer corner, the same way the corner art does.
+ */
+export function tokenFacing(index: number): ReturnType<typeof nameFacing> | ReturnType<typeof cornerFacing> {
+  const space = ((index % 40) + 40) % 40;
+  if (space % 10 === 0) return cornerFacing(space);
+  const { row, col } = spaceToCell(space);
+  return nameFacing(row, col);
+}
+
+const FACING_DEGREES: Record<ReturnType<typeof tokenFacing>, number> = {
+  '0deg': 0,
+  '45deg': 45,
+  '-45deg': -45,
+  '90deg': 90,
+  '-90deg': -90,
+  '135deg': 135,
+  '-135deg': -135,
+  '180deg': 180,
+};
+
+export function tokenFacingDegrees(index: number): number {
+  return FACING_DEGREES[tokenFacing(index)];
+}
+
+/** Degrees to turn from `current` so a token on `index` takes the short way. */
+export function nearestTokenFacing(current: number, index: number): number {
+  const target = tokenFacingDegrees(index);
+  const delta = ((target - current + 540) % 360) - 180;
+  return current + delta;
+}
+
 /** Shrink a corner so a 45° turn stays inside the square. */
 export const CORNER_FIT = Math.SQRT1_2;
 

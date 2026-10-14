@@ -18,6 +18,9 @@ import {
   boardTurnForSpace,
   nameFacing,
   cornerFacing,
+  tokenFacing,
+  tokenFacingDegrees,
+  nearestTokenFacing,
   placeCornerToken,
   boardViewForTurn,
   nearestBoardTurn,
@@ -187,6 +190,30 @@ describe('cornerFacing', () => {
       assert.ok(backY >= box.y + box.height * 0.36 && backY <= box.y + box.height, 'under the label');
       assert.ok(spot.x >= -0.01 && spot.y >= -0.01 && spot.x + spot.piece <= cell + 0.01 && spot.y + spot.piece <= cell + 0.01);
     }
+  });
+});
+
+describe('tokenFacing', () => {
+  it('points the bottom of a token at the outer edge, and at the outer corner on corners', () => {
+    assert.equal(tokenFacing(0), cornerFacing(0));
+    assert.equal(tokenFacing(10), cornerFacing(10));
+    assert.equal(tokenFacing(20), cornerFacing(20));
+    assert.equal(tokenFacing(30), cornerFacing(30));
+    for (const index of [1, 9, 11, 21, 31, 39]) {
+      const { row, col } = spaceToCell(index);
+      assert.equal(tokenFacing(index), nameFacing(row, col));
+    }
+    assert.equal(tokenFacingDegrees(1), 0);
+    assert.equal(tokenFacingDegrees(11), 90);
+    assert.equal(tokenFacingDegrees(21), 180);
+    assert.equal(tokenFacingDegrees(31), -90);
+  });
+
+  it('turns the short way around a corner', () => {
+    assert.equal(nearestTokenFacing(0, 0), -45);
+    assert.equal(nearestTokenFacing(180, 30), 225);
+    assert.equal(nearestTokenFacing(-90, 0), -45);
+    assert.equal(((nearestTokenFacing(180, 30) % 360) + 360) % 360, ((tokenFacingDegrees(30) % 360) + 360) % 360);
   });
 });
 
