@@ -59,7 +59,7 @@ export function BackgammonBoard({ state, moves, selected, flip, disabled, onPoin
 
   return (
     <View style={styles.frame} onLayout={(event) => setBox({ w: event.nativeEvent.layout.width, h: event.nativeEvent.layout.height })}>
-      <Svg width="100%" height="100%" viewBox={`0 0 ${BOARD_W} ${BOARD_H}`} pointerEvents="none">
+      <Svg width="100%" height="100%" viewBox={`0 0 ${BOARD_W} ${BOARD_H}`} style={{ pointerEvents: 'none' }}>
         <Rect x={0} y={0} width={BOARD_W} height={BOARD_H} rx={0.22} fill="#4a2e1c" />
         <Rect x={0.1} y={0.1} width={BOARD_W - 0.2} height={BOARD_H - 0.2} rx={0.14} fill="#2a180e" />
         <Rect x={PAD} y={PAD} width={BOARD_W - PAD * 2} height={BOARD_H - PAD * 2} rx={0.08} fill="#1b4a38" />
@@ -125,7 +125,7 @@ export function BackgammonBoard({ state, moves, selected, flip, disabled, onPoin
         <Cube state={state} flip={flip} />
       </Svg>
 
-      <View style={styles.hits} pointerEvents="box-none">
+      <View style={[styles.hits, { pointerEvents: 'box-none' }]}>
         {top.map((point, index) => (
           <PointHit
             key={`hit-top-${point}`}
@@ -166,7 +166,7 @@ export function BackgammonBoard({ state, moves, selected, flip, disabled, onPoin
         />
       </View>
 
-      <View pointerEvents="none" style={styles.hits}>
+      <View style={[styles.hits, { pointerEvents: 'none' }]}>
         {flying ? null : (
           <>
             {[...origins].map((origin) => (

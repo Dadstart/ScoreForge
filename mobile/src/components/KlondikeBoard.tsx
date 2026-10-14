@@ -861,7 +861,6 @@ function DragGhost({
     lift.origin ?? ghostOrigin(state, lift.source, cardWidth, cardHeight, overlapDown, overlapUp);
   return (
     <View
-      pointerEvents="none"
       style={[
         styles.ghost,
         {
@@ -871,6 +870,7 @@ function DragGhost({
           height: cardHeight + overlapUp * Math.max(0, cards.length - 1),
         },
         lift.settling ? flightMotion(lift.duration ?? 180) : null,
+        { pointerEvents: 'none' },
       ]}
     >
       {cards.map((code, index) => (

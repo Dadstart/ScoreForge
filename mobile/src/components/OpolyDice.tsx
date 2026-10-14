@@ -68,8 +68,7 @@ export function OpolyDice({
   const flightBoard = ready?.board ?? board;
   return (
     <View
-      pointerEvents="none"
-      style={styles.layer}
+      style={[styles.layer, { pointerEvents: 'none' }]}
       accessibilityLabel={`Dice showing ${roll.faces[0]} and ${roll.faces[1]}`}
       onLayout={(event) => {
         const { width, height } = event.nativeEvent.layout;

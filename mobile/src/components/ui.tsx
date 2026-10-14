@@ -170,8 +170,8 @@ export function Screen({
   return (
     <PageScrollContext.Provider value={setEnabled}>
       <View ref={shellRef} style={[styles.screen, web && styles.screenWeb, style]}>
-        <View pointerEvents="none" style={styles.glowTop} />
-        <View pointerEvents="none" style={styles.glowCorner} />
+        <View style={[styles.glowTop, { pointerEvents: 'none' }]} />
+        <View style={[styles.glowCorner, { pointerEvents: 'none' }]} />
         {web ? (
           <View style={[styles.page, { paddingTop: topInset }]}>{page}</View>
         ) : (

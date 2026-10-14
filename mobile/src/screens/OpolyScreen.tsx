@@ -553,7 +553,7 @@ export function OpolyScreen({ navigation, route }: Props) {
           dockControls={narrow}
           focusSpace={game.tokenSpaces?.[turnId] ?? 0}
           roll={(docked) => (
-            <View pointerEvents="box-none" style={docked ? styles.rollRow : styles.rollStack}>
+            <View style={[docked ? styles.rollRow : styles.rollStack, { pointerEvents: 'box-none' }]}>
               <Button
                 label={
                   rollingDice

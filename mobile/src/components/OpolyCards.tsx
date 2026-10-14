@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path, Rect } from 'react-native-svg';
 import { cardCopy, type CardDeck } from '../domain/opolyCards';
 import { DECK_TILT, TRACK_DEPTH, deckPileLayout } from '../domain/opolyBoard';
@@ -31,8 +31,7 @@ export function OpolyCardTable({ boardSize, chanceCount, chestCount, face, onAcc
 
   return (
     <View
-      pointerEvents="box-none"
-      style={[styles.table, { left: origin, top: origin, width: center, height: center }]}
+      style={[styles.table, { left: origin, top: origin, width: center, height: center }, { pointerEvents: 'box-none' }]}
     >
       <CardPile
         deck="chest"
@@ -91,8 +90,7 @@ function CardPile({
   return (
     <View
       accessibilityLabel={deck === 'chance' ? 'Chance deck' : 'Community Chest deck'}
-      pointerEvents="none"
-      style={[styles.pile, { left, top, width, height, transform: [{ rotate: `${angle}deg` }] }]}
+      style={[styles.pile, { left, top, width, height, transform: [{ rotate: `${angle}deg` }] }, { pointerEvents: 'none' }]}
     >
       {Array.from({ length: layers }, (_, layer) => {
         const depth = layers - 1 - layer;
@@ -187,7 +185,6 @@ function FlippedCard({
 
   return (
     <Animated.View
-      pointerEvents="box-none"
       accessibilityLabel={`${copy.name}. ${copy.text}`}
       style={[
         styles.flipping,
@@ -198,6 +195,7 @@ function FlippedCard({
           height: faceHeight,
           transform: [{ perspective: 900 }, { rotate: straighten }, { rotateY: spin }, { scale }],
         },
+        { pointerEvents: 'box-none' },
       ]}
     >
       {showFace ? (
@@ -264,7 +262,7 @@ function CardFront({
   const body = Math.max(11, Math.round(height * (long ? 0.046 : 0.052)));
   const radius = Math.round(width * 0.06);
   return (
-    <View pointerEvents="box-none" style={[styles.front, { width, height, borderRadius: radius }]}>
+    <View style={[styles.front, { width, height, borderRadius: radius }, { pointerEvents: 'box-none' }]}>
       <View style={[styles.band, { backgroundColor: deck === 'chance' ? '#e06a1f' : '#1d4f92' }]}>
         <Text style={[styles.bandText, { fontSize: Math.max(11, Math.round(height * 0.055)) }]}>{name.toUpperCase()}</Text>
       </View>
@@ -315,11 +313,16 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#f6e7c1',
     padding: 5,
-    shadowColor: '#0c1612',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.4,
-    shadowRadius: 4,
     elevation: 4,
+    ...Platform.select({
+      web: { boxShadow: '0px 3px 4px rgba(12, 22, 18, 0.4)' },
+      default: {
+        shadowColor: '#0c1612',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.4,
+        shadowRadius: 4,
+      },
+    }),
   },
   backInner: {
     flex: 1,
@@ -347,11 +350,16 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#1a1408',
     overflow: 'hidden',
-    shadowColor: '#0c1612',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.45,
-    shadowRadius: 12,
     elevation: 8,
+    ...Platform.select({
+      web: { boxShadow: '0px 8px 12px rgba(12, 22, 18, 0.45)' },
+      default: {
+        shadowColor: '#0c1612',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.45,
+        shadowRadius: 12,
+      },
+    }),
   },
   band: {
     paddingVertical: 8,

@@ -81,17 +81,15 @@ export function CheckersBoard({
 
               const body = (offset: { dx: number; dy: number } | null) => (
                 <>
-                  {landed && dark ? <View pointerEvents="none" style={styles.lastMove} /> : null}
-                  {hoverHere ? <View pointerEvents="none" style={styles.hover} /> : null}
+                  {landed && dark ? <View style={[styles.lastMove, { pointerEvents: 'none' }]} /> : null}
+                  {hoverHere ? <View style={[styles.hover, { pointerEvents: 'none' }]} /> : null}
                   {hop ? (
                     <View
-                      pointerEvents="none"
-                      style={[styles.mark, hop.captureRow != null ? styles.markJump : styles.markStep]}
+                      style={[styles.mark, hop.captureRow != null ? styles.markJump : styles.markStep, { pointerEvents: 'none' }]}
                     />
                   ) : null}
                   {piece && side ? (
                     <View
-                      pointerEvents="none"
                       style={[
                         styles.piece,
                         { backgroundColor: side.fill, borderColor: selectedHere ? '#f6e7a8' : side.rim },
@@ -102,10 +100,11 @@ export function CheckersBoard({
                               zIndex: 30,
                             }
                           : null,
+                        { pointerEvents: 'none' },
                       ]}
                     >
-                      <View pointerEvents="none" style={styles.shine} />
-                      {piece.kind === 'king' ? <View pointerEvents="none" style={styles.kingRing} /> : null}
+                      <View style={[styles.shine, { pointerEvents: 'none' }]} />
+                      {piece.kind === 'king' ? <View style={[styles.kingRing, { pointerEvents: 'none' }]} /> : null}
                     </View>
                   ) : null}
                 </>
@@ -156,9 +155,8 @@ export function CheckersBoard({
                   accessibilityRole="button"
                   accessibilityLabel={label}
                   disabled={disabled || !dark}
-                  pointerEvents={dragFrom ? 'none' : 'auto'}
                   onPress={() => handleSquare(row, col)}
-                  style={cellStyle}
+                  style={[cellStyle, { pointerEvents: dragFrom ? 'none' : 'auto' }]}
                 >
                   {body(null)}
                 </Pressable>
@@ -405,11 +403,16 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.35,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 2 },
     elevation: 3,
+    ...Platform.select({
+      web: { boxShadow: '0px 2px 3px rgba(0, 0, 0, 0.35)' },
+      default: {
+        shadowColor: '#000',
+        shadowOpacity: 0.35,
+        shadowRadius: 3,
+        shadowOffset: { width: 0, height: 2 },
+      },
+    }),
   },
   pieceSelected: { borderWidth: 4, transform: [{ scale: 1.06 }] },
   shine: {

@@ -88,20 +88,18 @@ export function CardFlip({ up, play = false, delay = 0, width, height, front, ba
   const perspective = Math.max(700, width * 12);
 
   return (
-    <View pointerEvents="none" style={[styles.stage, depth, { width, height }]}>
+    <View style={[styles.stage, depth, { width, height }, { pointerEvents: 'none' }]}>
       <Animated.View
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
-        pointerEvents="none"
-        style={[styles.face, { width, height, opacity: backOpacity, transform: [{ perspective }, { rotateY: backSpin }] }]}
+        style={[styles.face, { width, height, opacity: backOpacity, transform: [{ perspective }, { rotateY: backSpin }] }, { pointerEvents: 'none' }]}
       >
         {back}
       </Animated.View>
       <Animated.View
         accessibilityElementsHidden={!up}
         importantForAccessibility={up ? 'auto' : 'no-hide-descendants'}
-        pointerEvents="none"
-        style={[styles.face, { width, height, opacity: frontOpacity, transform: [{ perspective }, { rotateY: frontSpin }] }]}
+        style={[styles.face, { width, height, opacity: frontOpacity, transform: [{ perspective }, { rotateY: frontSpin }] }, { pointerEvents: 'none' }]}
       >
         {front}
       </Animated.View>

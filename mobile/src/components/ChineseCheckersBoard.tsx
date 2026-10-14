@@ -240,7 +240,7 @@ export function ChineseCheckersBoard({
       {...(Platform.OS === 'web' ? { onPointerDown } : responder.panHandlers)}
       style={[styles.board, webTouch]}
     >
-      <Svg width="100%" height="100%" viewBox={`${VIEW.x} ${VIEW.y} ${VIEW.width} ${VIEW.height}`} pointerEvents="none">
+      <Svg width="100%" height="100%" viewBox={`${VIEW.x} ${VIEW.y} ${VIEW.width} ${VIEW.height}`} style={{ pointerEvents: 'none' }}>
         <Polygon points={outline} fill={colors.woodDark} stroke={colors.wood} strokeWidth={0.12} />
         {BOARD.map((cell) => {
           const point = pixel(cell.q, cell.r, rotation);

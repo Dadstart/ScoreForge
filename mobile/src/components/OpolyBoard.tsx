@@ -510,7 +510,6 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
       >
         {viewport > 0 ? (
           <Animated.View
-            pointerEvents="box-none"
             style={{
               position: 'absolute',
               width: boardSize,
@@ -524,6 +523,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
                 { rotateZ: boardSpin },
                 { scale: boardFitScale(boardSize) },
               ],
+              pointerEvents: 'box-none',
             }}
           >
             <BoardCanvas
@@ -541,21 +541,20 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
           </Animated.View>
         ) : null}
         {!docked && viewport > 0 && roll ? (
-          <View pointerEvents="box-none" style={[styles.rollDock, rollDockBox(pan, zoom, viewport)]}>
+          <View style={[styles.rollDock, rollDockBox(pan, zoom, viewport), { pointerEvents: 'box-none' }]}>
             {renderRoll(roll, false)}
           </View>
         ) : null}
         {!docked ? (
           <View
-            pointerEvents="box-none"
-            style={[styles.zoomDock, zoomDockSpot(pan, zoom, viewport)]}
+            style={[styles.zoomDock, zoomDockSpot(pan, zoom, viewport), { pointerEvents: 'box-none' }]}
           >
             {zoomPair}
           </View>
         ) : null}
       </View>
       {docked ? (
-        <View pointerEvents="box-none" style={[styles.actionBar, lift > 0 && { marginTop: -lift }]}>
+        <View style={[styles.actionBar, lift > 0 && { marginTop: -lift }, { pointerEvents: 'box-none' }]}>
           {renderRoll(roll, true)}
           <View style={styles.zoomRow}>{zoomPair}</View>
         </View>
@@ -729,7 +728,7 @@ function BoardCanvas({
             ]}
           >
             {isCorner ? (
-              <View pointerEvents="none" style={styles.cornerFill}>
+              <View style={[styles.cornerFill, { pointerEvents: 'none' }]}>
                 <CornerArt index={space.index} cell={Math.max(48, cell)} detail={detail} />
               </View>
             ) : (
@@ -804,8 +803,7 @@ function BoardCanvas({
                 ) : null}
                 {railCaption > 0 && !compact ? (
                   <Text
-                    pointerEvents="none"
-                    style={[styles.cellText, railName(row, cell, railCaption, space.short)]}
+                    style={[styles.cellText, railName(row, cell, railCaption, space.short), { pointerEvents: 'none' }]}
                     numberOfLines={1}
                   >
                     {space.short}
@@ -818,8 +816,7 @@ function BoardCanvas({
                 {mark === 'chest' && !compact ? <ChestMark row={row} col={col} cell={cell} detail={detail} /> : null}
                 {compact && nameBox ? (
                   <View
-                    pointerEvents="none"
-                    style={
+                    style={[
                       compact.vertical
                         ? {
                             position: 'absolute',
@@ -841,8 +838,9 @@ function BoardCanvas({
                             alignItems: 'center',
                             justifyContent: 'center',
                             zIndex: 2,
-                          }
-                    }
+                          },
+                      { pointerEvents: 'none' },
+                    ]}
                   >
                     <Text
                       style={[
@@ -915,7 +913,6 @@ function BoardCanvas({
         );
       })}
       <View
-        pointerEvents="none"
         style={[
           styles.center,
           {
@@ -924,6 +921,7 @@ function BoardCanvas({
             width: `${(1 - 2 * TRACK_DEPTH) * 100}%`,
             height: `${(1 - 2 * TRACK_DEPTH) * 100}%`,
           },
+          { pointerEvents: 'none' },
         ]}
       >
         <Text
@@ -950,7 +948,6 @@ function BoardCanvas({
             return (
               <View
                 key={`owner-${space.index}`}
-                pointerEvents="none"
                 accessibilityLabel={`${playerLabel(owner.name, owner.token)} owns ${space.name}`}
                 style={[
                   styles.ownerMark,
@@ -960,6 +957,7 @@ function BoardCanvas({
                     width: spot.size,
                     height: spot.size,
                   },
+                  { pointerEvents: 'none' },
                 ]}
               >
                 <Animated.View
@@ -1034,7 +1032,7 @@ function BoardCanvas({
       ) : null}
       <MoneyBills flight={burst} boardSize={size} />
       {pinDice && diceRoll ? (
-        <View pointerEvents="none" style={styles.diceLayer}>
+        <View style={[styles.diceLayer, { pointerEvents: 'none' }]}>
           <OpolyDice roll={diceRoll} view={diceView} boardSize={diceBoard > 0 ? diceBoard : size} />
         </View>
       ) : null}
@@ -1314,7 +1312,6 @@ function TrainMark({
   if (beside) {
     return (
       <View
-        pointerEvents="none"
         style={{
           position: 'absolute',
           top: Math.max(1, (beside.span - beside.height) / 2),
@@ -1322,6 +1319,7 @@ function TrainMark({
           width: beside.width,
           height: beside.height,
           transform: col === 0 ? [{ scaleX: -1 as const }] : undefined,
+          pointerEvents: 'none',
         }}
       >
         <TrainSvg width={beside.width} height={beside.height} />
@@ -1337,12 +1335,12 @@ function TrainMark({
   const transform = row === 10 ? [{ scaleX: -1 as const }] : undefined;
   return (
     <View
-      pointerEvents="none"
       style={{
         width: long,
         height: short,
         alignItems: 'center',
         justifyContent: 'center',
+        pointerEvents: 'none',
       }}
     >
       <View style={{ width: long, height: short, transform }}>
@@ -1362,7 +1360,7 @@ function cardMarkSize(row: number, col: number, cell: number, detail: boolean) {
 
 function UtilityMark({ kind, size }: { kind: 'electric' | 'water'; size: number }) {
   return (
-    <View pointerEvents="none" style={{ width: size, height: size }}>
+    <View style={{ width: size, height: size, pointerEvents: 'none' }}>
       {kind === 'water' ? <WaterSvg size={size} /> : <BulbSvg size={size} />}
     </View>
   );
@@ -1406,7 +1404,6 @@ function ChanceMark({
   const size = cardMarkSize(row, col, cell, detail);
   return (
     <Text
-      pointerEvents="none"
       style={{
         fontFamily: fonts.display,
         fontSize: size,
@@ -1415,6 +1412,7 @@ function ChanceMark({
         color: '#c2410c',
         textAlign: 'center',
         width: '100%',
+        pointerEvents: 'none',
       }}
     >
       ?
@@ -1435,7 +1433,7 @@ function ChestMark({
 }) {
   const size = cardMarkSize(row, col, cell, detail);
   return (
-    <View pointerEvents="none" style={{ width: size, height: size }}>
+    <View style={{ width: size, height: size, pointerEvents: 'none' }}>
       <ChestSvg size={size} />
     </View>
   );
@@ -1841,7 +1839,6 @@ function Piece({
 
   return (
     <Animated.View
-      pointerEvents="none"
       accessibilityLabel={emoji ? `${emoji.emoji} ${name} piece` : `${name} piece`}
       style={[
         styles.token,
@@ -1853,6 +1850,7 @@ function Piece({
           zIndex: flying ? 30 : 10 + slot,
           transform: [{ translateX: liftX }, { translateY: liftY }, { scale: bulge }, { rotate: upright }],
         },
+        { pointerEvents: 'none' },
       ]}
     >
       <Text
@@ -1919,11 +1917,16 @@ const styles = StyleSheet.create({
     borderColor: '#f7f1e6',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#0c1612',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.55,
-    shadowRadius: 4,
     elevation: 6,
+    ...Platform.select({
+      web: { boxShadow: '0px 2px 4px rgba(12, 22, 18, 0.55)' },
+      default: {
+        shadowColor: '#0c1612',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.55,
+        shadowRadius: 4,
+      },
+    }),
   },
   zoomBtnPressed: {
     backgroundColor: colors.accentPressed,
