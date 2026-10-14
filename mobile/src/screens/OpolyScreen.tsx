@@ -622,44 +622,8 @@ export function OpolyScreen({ navigation, route }: Props) {
             const piece = playerToken(player?.token);
             const paying = standing.playerId === resolvedPayer;
             const holdings = properties.filter((entry) => play.owned[entry.id] === standing.playerId);
-            return (
-              <Pressable
-                key={standing.playerId}
-                accessibilityRole="button"
-                accessibilityLabel={paying ? `${playerLabel(standing.playerName, player?.token)}, paying` : `Select ${playerLabel(standing.playerName, player?.token)} as paying`}
-                accessibilityState={{ selected: paying, disabled: !canBank }}
-                disabled={!canBank}
-                onPress={() => setPayerId(standing.playerId)}
-                style={[
-                  styles.cashCard,
-                  paying ? styles.cashCardPaying : styles.cashCardOther,
-                  canBank && styles.cashCardEditable,
-                ]}
-              >
-                {canBank ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={editing ? `Save ${playerLabel(standing.playerName, player?.token)}` : `Edit ${playerLabel(standing.playerName, player?.token)}`}
-                    onPress={() => {
-                      if (editing) {
-                        void savePlayerEdit();
-                        return;
-                      }
-                      const openNext = () =>
-                        beginPlayerEdit(standing.playerId, standing.playerName, cash, player?.token);
-                      if (editingPlayerId) {
-                        void savePlayerEdit().then((saved) => {
-                          if (saved) openNext();
-                        });
-                        return;
-                      }
-                      openNext();
-                    }}
-                    style={styles.editBtn}
-                  >
-                    {editing ? <CheckIcon /> : <PencilIcon />}
-                  </Pressable>
-                ) : null}
+            const cardFace = (
+              <>
                 {editing ? (
                   <Field
                     value={nameDraft}
@@ -773,7 +737,55 @@ export function OpolyScreen({ navigation, route }: Props) {
                     />
                   )
                 ) : null}
-              </Pressable>
+              </>
+            );
+            return (
+              <View
+                key={standing.playerId}
+                style={[
+                  styles.cashCard,
+                  paying ? styles.cashCardPaying : styles.cashCardOther,
+                  canBank && styles.cashCardEditable,
+                ]}
+              >
+                {canBank ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={editing ? `Save ${playerLabel(standing.playerName, player?.token)}` : `Edit ${playerLabel(standing.playerName, player?.token)}`}
+                    onPress={() => {
+                      if (editing) {
+                        void savePlayerEdit();
+                        return;
+                      }
+                      const openNext = () =>
+                        beginPlayerEdit(standing.playerId, standing.playerName, cash, player?.token);
+                      if (editingPlayerId) {
+                        void savePlayerEdit().then((saved) => {
+                          if (saved) openNext();
+                        });
+                        return;
+                      }
+                      openNext();
+                    }}
+                    style={styles.editBtn}
+                  >
+                    {editing ? <CheckIcon /> : <PencilIcon />}
+                  </Pressable>
+                ) : null}
+                {canBank && !editing ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={paying ? `${playerLabel(standing.playerName, player?.token)}, paying` : `Select ${playerLabel(standing.playerName, player?.token)} as paying`}
+                    accessibilityState={{ selected: paying }}
+                    onPress={() => setPayerId(standing.playerId)}
+                    style={styles.cashCardBody}
+                  >
+                    {cardFace}
+                  </Pressable>
+                ) : (
+                  <View style={styles.cashCardBody}>{cardFace}</View>
+                )}
+              </View>
             );
           })}
         </View>
@@ -1121,6 +1133,11 @@ const styles = StyleSheet.create({
   },
   cashCardOther: { borderColor: colors.border },
   cashCardEditable: { paddingTop: 36 },
+  cashCardBody: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    gap: 8,
+  },
   cardTitle: {
     ...typography.label,
     fontSize: 15,
