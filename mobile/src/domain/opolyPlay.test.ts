@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import type { DiceRoll } from './monopolyDice';
+import type { DiceRoll } from './opolyDice';
 import {
   buildHouse,
   buyProperty,
@@ -20,8 +20,8 @@ import {
   useJailCard,
   type OpolyPlay,
   type PlayPlayer,
-} from './monopolyPlay';
-import { CHANCE_CARD_IDS, CHEST_CARD_IDS, cardCopy } from './monopolyCards';
+} from './opolyPlay';
+import { CHANCE_CARD_IDS, CHEST_CARD_IDS, cardCopy } from './opolyCards';
 
 const players: PlayPlayer[] = [
   { id: 'ada', name: 'Ada' },

@@ -1,6 +1,6 @@
-import { boardStep, GO_PAYOUT, type DiceRoll, rollOpolyDice } from './monopolyDice';
-import { CHANCE_CARD_IDS, CHEST_CARD_IDS, type CardDeck } from './monopolyCards';
-import { backwardSpaces, forwardSpaces, getBoardSpace } from './monopolyBoard';
+import { boardStep, GO_PAYOUT, type DiceRoll, rollOpolyDice } from './opolyDice';
+import { CHANCE_CARD_IDS, CHEST_CARD_IDS, type CardDeck } from './opolyCards';
+import { backwardSpaces, forwardSpaces, getBoardSpace } from './opolyBoard';
 import {
   BANK_PARTY_ID,
   cashFromDelta,
@@ -10,7 +10,7 @@ import {
   properties,
   transferEvents,
   type BoardProperty,
-} from './monopoly';
+} from './opoly';
 import type { ScoreEvent } from './models';
 import { fillRandom } from './secureRandom';
 

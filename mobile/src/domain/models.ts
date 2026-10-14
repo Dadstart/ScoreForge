@@ -6,7 +6,7 @@ import type { PyramidState } from './pyramid';
 import type { SpiderState } from './spider';
 import type { TriPeaksState } from './tripeaks';
 import type { SorryState } from './sorry';
-import type { OpolyPlay } from './monopolyPlay';
+import type { OpolyPlay } from './opolyPlay';
 import type { YahtzeeState } from './yahtzee';
 import { fillRandom, randomId } from './secureRandom';
 

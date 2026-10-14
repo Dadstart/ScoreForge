@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { boardStep, rollOpolyDice } from './monopolyDice';
+import { boardStep, rollOpolyDice } from './opolyDice';
 
 describe('monopoly dice', () => {
   it('rolls two faces from 1 to 6', () => {

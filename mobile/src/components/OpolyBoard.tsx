@@ -33,16 +33,16 @@ import {
   TRACK_DEPTH,
   visibleBoardRect,
   type BoardView,
-} from '../domain/monopolyBoard';
-import { getProperty, playerLabel, playerToken } from '../domain/monopoly';
-import { compactPropertyLabel, fitBoardLabel, fitSize } from '../domain/monopolyLabel';
-import { clampPan, clampZoom, panForZoom, stepZoom } from '../domain/monopolyZoom';
+} from '../domain/opolyBoard';
+import { getProperty, playerLabel, playerToken } from '../domain/opoly';
+import { compactPropertyLabel, fitBoardLabel, fitSize } from '../domain/opolyLabel';
+import { clampPan, clampZoom, panForZoom, stepZoom } from '../domain/opolyZoom';
 import { diceMotionMs, OpolyDice } from './OpolyDice';
 import { CARD_REVEAL_MS, OpolyCardTable } from './OpolyCards';
 import { MoneyBills, type MoneyFlight } from './MoneyBills';
 import { colors, fonts, radii } from '../theme';
 import { useSetPageScroll } from './ui';
-import type { DrawnCard } from '../domain/monopolyPlay';
+import type { DrawnCard } from '../domain/opolyPlay';
 
 const TOKEN_COLORS = ['#e86a5c', '#6fbf8a', '#7eb6ff', '#d4a84b', '#d93a96', '#f7941d', '#c5d0c9', '#f2e3a0'];
 /** Cells at least this wide show names and prices. Smaller cells are a color map. */

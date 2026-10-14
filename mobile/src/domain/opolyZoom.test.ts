@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { panForWheel, panForZoom, readingZoom, stepZoom } from './monopolyZoom';
+import { panForWheel, panForZoom, readingZoom, stepZoom } from './opolyZoom';
 
 const viewport = 100;
 const track = 10 / 11;

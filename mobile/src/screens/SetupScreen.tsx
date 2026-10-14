@@ -13,7 +13,7 @@ import type { DrawCount } from '../domain/klondike';
 import type { SuitCount } from '../domain/spider';
 import { nextOpolyToken, openingPlayer, playersFromOpolySeats } from '../domain/addPlayer';
 import { createPlayer, type Player } from '../domain/models';
-import { playerToken } from '../domain/monopoly';
+import { playerToken } from '../domain/opoly';
 import { getTemplate, templates } from '../domain/templates';
 import { loadDisplayName, saveDisplayName } from '../storage/displayNameStore';
 import { createAndSaveGame } from '../storage/gameStore';

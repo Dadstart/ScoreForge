@@ -20,7 +20,7 @@ import {
   spaceToCell,
   TRACK_DEPTH,
   visibleBoardRect,
-} from './monopolyBoard';
+} from './opolyBoard';
 
 function boxesClear(a: { x: number; y: number; piece: number }, b: { x: number; y: number; piece: number }) {
   return (

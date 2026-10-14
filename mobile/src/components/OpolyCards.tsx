@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path, Rect } from 'react-native-svg';
-import { cardCopy, type CardDeck } from '../domain/monopolyCards';
-import { DECK_TILT, TRACK_DEPTH, deckPileLayout } from '../domain/monopolyBoard';
+import { cardCopy, type CardDeck } from '../domain/opolyCards';
+import { DECK_TILT, TRACK_DEPTH, deckPileLayout } from '../domain/opolyBoard';
 import { fonts } from '../theme';
 import { diceMotionMs } from './OpolyDice';
 

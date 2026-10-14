@@ -2,8 +2,8 @@ import { ensureBackgammonState } from './backgammon';
 import { ensureCheckersState } from './checkers';
 import { ensureChineseState, playerCap } from './chineseCheckers';
 import { createPlayer, type Game, type Player } from './models';
-import { PLAYER_TOKENS, playerLabel, playerToken, singleEmoji } from './monopoly';
-import { withoutOpolyPlayer } from './monopolyPlay';
+import { PLAYER_TOKENS, playerLabel, playerToken, singleEmoji } from './opoly';
+import { withoutOpolyPlayer } from './opolyPlay';
 import { ensureSorryState } from './sorry';
 
 /** Add a named player to a game, enforcing uniqueness and max capacity. */

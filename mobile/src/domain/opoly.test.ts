@@ -10,7 +10,7 @@ import {
   singleEmoji,
   transferEvents,
   withoutLastCashAction,
-} from './monopoly';
+} from './opoly';
 import { createScoreEvent } from './models';
 
 describe('monopoly', () => {

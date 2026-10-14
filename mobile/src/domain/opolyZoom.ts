@@ -1,4 +1,4 @@
-import { TRACK_DEPTH } from './monopolyBoard';
+import { TRACK_DEPTH } from './opolyBoard';
 
 export const MIN_ZOOM = 0.5;
 /** Far enough in that a phone can show property names, without an unbounded pinch. */

@@ -33,9 +33,9 @@ import {
   UTILITY_COUNTS,
   withoutLastCashAction,
   type BoardProperty,
-} from '../domain/monopoly';
+} from '../domain/opoly';
 import { diceMotionMs } from '../components/OpolyDice';
-import { rollOpolyDice, type DiceRoll } from '../domain/monopolyDice';
+import { rollOpolyDice, type DiceRoll } from '../domain/opolyDice';
 import {
   buildHouse,
   buildingCost,
@@ -65,7 +65,7 @@ import {
   useJailCard,
   type DrawnCard,
   type PlayOutcome,
-} from '../domain/monopolyPlay';
+} from '../domain/opolyPlay';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
 import { usePlaySpark } from '../hooks/usePlaySpark';

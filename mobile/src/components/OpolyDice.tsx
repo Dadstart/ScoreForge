@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, Platform, StyleSheet, View } from 'react-native';
-import { diceHopPoints, diceRollCurves, monopolyDieSize, type BoardView, type Point } from '../domain/monopolyBoard';
+import { diceHopPoints, diceRollCurves, monopolyDieSize, type BoardView, type Point } from '../domain/opolyBoard';
 
 const ROLL_MS = 1700;
 

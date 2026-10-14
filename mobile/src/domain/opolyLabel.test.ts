@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { compactPropertyLabel, fitBoardLabel, textWidth } from './monopolyLabel';
+import { compactPropertyLabel, fitBoardLabel, textWidth } from './opolyLabel';
 
 function fits(name: string, shortName: string, width: number, height: number, start = 28) {
   const fitted = fitBoardLabel(name, shortName, { width, height }, start);

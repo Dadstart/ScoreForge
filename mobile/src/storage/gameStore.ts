@@ -20,7 +20,7 @@ import { createKlondikeState, packKlondike, unpackKlondike, type DrawCount } fro
 import { createPyramidState, packPyramid, unpackPyramid } from '../domain/pyramid';
 import { createSpiderState, packSpider, unpackSpider, type SuitCount } from '../domain/spider';
 import { createTriPeaksState, packTriPeaks, unpackTriPeaks } from '../domain/tripeaks';
-import { unpackOpoly } from '../domain/monopolyPlay';
+import { unpackOpoly } from '../domain/opolyPlay';
 import { createYahtzeeState } from '../domain/yahtzee';
 import {
   isShareCode,
