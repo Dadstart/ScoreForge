@@ -295,9 +295,9 @@ export function SorryBoard({ players, state, selectedPawn, movablePawns, action,
           );
         })}
       </Svg>
-      <View style={styles.stacks} pointerEvents="box-none">
-        <View style={styles.stackColumn} pointerEvents="box-none">
-          <View style={styles.cardPair} pointerEvents="none">
+      <View style={[styles.stacks, { pointerEvents: 'box-none' }]}>
+        <View style={[styles.stackColumn, { pointerEvents: 'box-none' }]}>
+          <View style={[styles.cardPair, { pointerEvents: 'none' }]}>
             {onDraw ? (
               <Pressable
                 accessibilityRole="button"

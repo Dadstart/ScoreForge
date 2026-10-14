@@ -8,7 +8,7 @@ import { linking } from './src/navigation/linking';
 import type { RootStackParamList } from './src/navigation/types';
 import { BoardScreen } from './src/screens/BoardScreen';
 import { CribbageScreen } from './src/screens/CribbageScreen';
-import { MonopolyScreen } from './src/screens/MonopolyScreen';
+import { OpolyScreen } from './src/screens/OpolyScreen';
 import { YahtzeeScreen } from './src/screens/YahtzeeScreen';
 import { SorryScreen } from './src/screens/SorryScreen';
 import { BackgammonScreen } from './src/screens/BackgammonScreen';
@@ -88,9 +88,9 @@ export default function App() {
             options={{ title: 'Cribbage', headerShown: false }}
           />
           <Stack.Screen
-            name="Monopoly"
-            component={MonopolyScreen}
-            options={{ title: 'Monopoly', headerShown: false }}
+            name="Opoly"
+            component={OpolyScreen}
+            options={{ title: 'Opoly', headerShown: false }}
           />
           <Stack.Screen
             name="Yahtzee"

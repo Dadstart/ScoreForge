@@ -11,9 +11,9 @@ import { Button, Field, Screen } from '../components/ui';
 import { setupDetail, setupSummary, type ChineseMode, type PlayerCount, type SetCount, type TwoSetGoals } from '../domain/chineseCheckers';
 import type { DrawCount } from '../domain/klondike';
 import type { SuitCount } from '../domain/spider';
-import { nextMonopolyToken, openingPlayer, playersFromMonopolySeats } from '../domain/addPlayer';
+import { nextOpolyToken, openingPlayer, playersFromOpolySeats } from '../domain/addPlayer';
 import { createPlayer, type Player } from '../domain/models';
-import { playerToken } from '../domain/monopoly';
+import { playerToken } from '../domain/opoly';
 import { getTemplate, templates } from '../domain/templates';
 import { loadDisplayName, saveDisplayName } from '../storage/displayNameStore';
 import { createAndSaveGame } from '../storage/gameStore';
@@ -100,7 +100,7 @@ export function SetupScreen({ navigation }: Props) {
     setSeats((current) => {
       if (current.length >= template.maxPlayers) return current;
       const used = current.map((seat) => seat.emojiText.trim() || seat.token);
-      return [...current, newSeat(nextSeatName(current), nextMonopolyToken(used))];
+      return [...current, newSeat(nextSeatName(current), nextOpolyToken(used))];
     });
     setValidation(null);
   };
@@ -121,7 +121,7 @@ export function SetupScreen({ navigation }: Props) {
     }
 
     const monopolyPlayers =
-      template.id === 'monopoly' ? playersFromMonopolySeats(seats, template.maxPlayers) : null;
+      template.id === 'monopoly' ? playersFromOpolySeats(seats, template.maxPlayers) : null;
     if (monopolyPlayers && 'error' in monopolyPlayers) {
       setValidation(monopolyPlayers.error);
       return;

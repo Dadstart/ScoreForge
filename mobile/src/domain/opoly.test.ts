@@ -10,7 +10,7 @@ import {
   singleEmoji,
   transferEvents,
   withoutLastCashAction,
-} from './monopoly';
+} from './opoly';
 import { createScoreEvent } from './models';
 
 describe('monopoly', () => {
@@ -21,7 +21,7 @@ describe('monopoly', () => {
       railroadsOwned: 1,
       utilitiesOwned: 1,
       dice: 7,
-    }), { amount: 2, summary: 'Mediterranean Avenue, no houses' });
+    }), { amount: 2, summary: 'A, no houses' });
     assert.equal(
       quoteRent({
         propertyId: 'mediterranean',

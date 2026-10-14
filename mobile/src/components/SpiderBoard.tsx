@@ -483,7 +483,7 @@ function Ghost({
 }) {
   if (cards.length === 0) return null;
   return (
-    <View pointerEvents="none" style={[styles.ghost, { left, top }]}>
+    <View style={[styles.ghost, { left, top }, { pointerEvents: 'none' }]}>
       {cards.map((code, index) => {
         const face = cardFace(code);
         if (!face) return null;

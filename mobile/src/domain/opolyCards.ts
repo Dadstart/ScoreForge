@@ -39,10 +39,10 @@ export const CHEST_CARD_IDS = [
 ] as const;
 
 const CHANCE_TEXT: Record<(typeof CHANCE_CARD_IDS)[number], string> = {
-  boardwalk: 'Advance to Boardwalk.',
+  boardwalk: 'Advance to V.',
   go: 'Advance to GO. Collect $200.',
-  illinois: 'Advance to Illinois Avenue. If you pass GO, collect $200.',
-  'st-charles': 'Advance to St. Charles Place. If you pass GO, collect $200.',
+  illinois: 'Advance to N. If you pass GO, collect $200.',
+  'st-charles': 'Advance to F. If you pass GO, collect $200.',
   'railroad-a': 'Advance to the nearest Railroad. If unowned, you may buy it from the Bank. If owned, pay the owner twice the rent.',
   'railroad-b': 'Advance to the nearest Railroad. If unowned, you may buy it from the Bank. If owned, pay the owner twice the rent.',
   utility:
@@ -53,7 +53,7 @@ const CHANCE_TEXT: Record<(typeof CHANCE_CARD_IDS)[number], string> = {
   'go-jail': 'Go directly to Jail. Do not pass GO. Do not collect $200.',
   repairs: 'Make general repairs on all your property. For each house pay $25. For each hotel pay $100.',
   'poor-tax': 'Pay poor tax of $15.',
-  reading: 'Take a ride on the Reading Railroad. If you pass GO, collect $200.',
+  reading: 'Take a ride on 🚂 W. If you pass GO, collect $200.',
   chairman: 'You have been elected Chairman of the Board. Pay each player $50.',
   loan: 'Your building and loan matures. Collect $150.',
 };

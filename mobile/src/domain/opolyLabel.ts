@@ -70,6 +70,62 @@ export function fitSize(text: string, maxWidth: number, start: number) {
   return size;
 }
 
+export type CompactLabel = {
+  text: string;
+  fontSize: number;
+  /** Runs along the longer side of a short property, so top and bottom spaces turn sideways. */
+  vertical: boolean;
+};
+
+/** Largest type used for a property name. Bigger type forces names down to stubs. */
+const MAX_NAME_FONT = 14;
+const MIN_NAME_FONT = 8;
+
+/**
+ * A property name that stays readable as the board shrinks.
+ * The fullest name that fits wins, at a size no larger than the cell can hold.
+ * Top and bottom spaces turn the name along the property when that is what fits.
+ */
+export function compactPropertyLabel(
+  name: string,
+  shortName: string,
+  width: number,
+  height: number,
+): CompactLabel | null {
+  if (width < 8 || height < 8) return null;
+  const choices = labelChoices(name, shortName);
+  let best: CompactLabel & { index: number } | null = null;
+  for (let index = 0; index < choices.length; index += 1) {
+    const text = choices[index] ?? '';
+    const across = fontThatFits(text, width, height);
+    const along = fontThatFits(text, height, width);
+    const options: CompactLabel[] = [];
+    if (across != null) options.push({ text, fontSize: across, vertical: false });
+    if (along != null) options.push({ text, fontSize: along, vertical: true });
+    for (const option of options) {
+      const fuller = best != null && index < best.index;
+      const sameButLarger = best != null && index === best.index && option.fontSize > best.fontSize;
+      const sameSizeLongAxis = best != null
+        && index === best.index
+        && option.fontSize === best.fontSize
+        && option.vertical
+        && height > width;
+      if (!best || fuller || sameButLarger || sameSizeLongAxis) best = { ...option, index };
+    }
+  }
+  if (best) return { text: best.text, fontSize: best.fontSize, vertical: best.vertical };
+  const text = choices.at(-1) ?? name;
+  return { text, fontSize: MIN_NAME_FONT, vertical: height >= width };
+}
+
+function fontThatFits(text: string, length: number, thickness: number): number | null {
+  const cap = Math.min(MAX_NAME_FONT, Math.floor(thickness) - 1, Math.floor(length));
+  for (let size = cap; size >= MIN_NAME_FONT; size -= 1) {
+    if (textWidth(text, size) <= length) return size;
+  }
+  return null;
+}
+
 function fitSingleLine(
   text: string,
   bounds: { width: number; height: number },

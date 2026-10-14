@@ -33,9 +33,9 @@ const street = (
   price: number,
 ): BoardProperty => ({ id, name, group, swatch, kind: 'street', rents, price });
 
-const railroad = (id: string, name: string): BoardProperty => ({
+const railroad = (id: string, letter: string): BoardProperty => ({
   id,
-  name,
+  name: `🚂 ${letter}`,
   group: 'Railroads',
   swatch: '#d0d5d2',
   kind: 'railroad',
@@ -52,32 +52,32 @@ const utility = (id: string, name: string): BoardProperty => ({
 });
 
 export const properties: BoardProperty[] = [
-  street('mediterranean', 'Mediterranean Avenue', 'Brown', '#955436', [2, 10, 30, 90, 160, 250], 60),
-  street('baltic', 'Baltic Avenue', 'Brown', '#955436', [4, 20, 60, 180, 320, 450], 60),
-  street('oriental', 'Oriental Avenue', 'Light blue', '#aae0fa', [6, 30, 90, 270, 400, 550], 100),
-  street('vermont', 'Vermont Avenue', 'Light blue', '#aae0fa', [6, 30, 90, 270, 400, 550], 100),
-  street('connecticut', 'Connecticut Avenue', 'Light blue', '#aae0fa', [8, 40, 100, 300, 450, 600], 120),
-  street('st-charles', 'St. Charles Place', 'Pink', '#d93a96', [10, 50, 150, 450, 625, 750], 140),
-  street('states', 'States Avenue', 'Pink', '#d93a96', [10, 50, 150, 450, 625, 750], 140),
-  street('virginia', 'Virginia Avenue', 'Pink', '#d93a96', [12, 60, 180, 500, 700, 900], 160),
-  street('st-james', 'St. James Place', 'Orange', '#f7941d', [14, 70, 200, 550, 750, 950], 180),
-  street('tennessee', 'Tennessee Avenue', 'Orange', '#f7941d', [14, 70, 200, 550, 750, 950], 180),
-  street('new-york', 'New York Avenue', 'Orange', '#f7941d', [16, 80, 220, 600, 800, 1000], 200),
-  street('kentucky', 'Kentucky Avenue', 'Red', '#ed1b24', [18, 90, 250, 700, 875, 1050], 220),
-  street('indiana', 'Indiana Avenue', 'Red', '#ed1b24', [18, 90, 250, 700, 875, 1050], 220),
-  street('illinois', 'Illinois Avenue', 'Red', '#ed1b24', [20, 100, 300, 750, 925, 1100], 240),
-  street('atlantic', 'Atlantic Avenue', 'Yellow', '#f0d23a', [22, 110, 330, 800, 975, 1150], 260),
-  street('ventnor', 'Ventnor Avenue', 'Yellow', '#f0d23a', [22, 110, 330, 800, 975, 1150], 260),
-  street('marvin-gardens', 'Marvin Gardens', 'Yellow', '#f0d23a', [24, 120, 360, 850, 1025, 1200], 280),
-  street('pacific', 'Pacific Avenue', 'Green', '#1fb25a', [26, 130, 390, 900, 1100, 1275], 300),
-  street('north-carolina', 'North Carolina Avenue', 'Green', '#1fb25a', [26, 130, 390, 900, 1100, 1275], 300),
-  street('pennsylvania-ave', 'Pennsylvania Avenue', 'Green', '#1fb25a', [28, 150, 450, 1000, 1200, 1400], 320),
-  street('park-place', 'Park Place', 'Dark blue', '#0072bc', [35, 175, 500, 1100, 1300, 1500], 350),
-  street('boardwalk', 'Boardwalk', 'Dark blue', '#0072bc', [50, 200, 600, 1400, 1700, 2000], 400),
-  railroad('reading', 'Reading Railroad'),
-  railroad('pennsylvania-rr', 'Pennsylvania Railroad'),
-  railroad('bo', 'B. & O. Railroad'),
-  railroad('short-line', 'Short Line'),
+  street('mediterranean', 'A', 'Brown', '#955436', [2, 10, 30, 90, 160, 250], 60),
+  street('baltic', 'B', 'Brown', '#955436', [4, 20, 60, 180, 320, 450], 60),
+  street('oriental', 'C', 'Light blue', '#aae0fa', [6, 30, 90, 270, 400, 550], 100),
+  street('vermont', 'D', 'Light blue', '#aae0fa', [6, 30, 90, 270, 400, 550], 100),
+  street('connecticut', 'E', 'Light blue', '#aae0fa', [8, 40, 100, 300, 450, 600], 120),
+  street('st-charles', 'F', 'Pink', '#d93a96', [10, 50, 150, 450, 625, 750], 140),
+  street('states', 'G', 'Pink', '#d93a96', [10, 50, 150, 450, 625, 750], 140),
+  street('virginia', 'H', 'Pink', '#d93a96', [12, 60, 180, 500, 700, 900], 160),
+  street('st-james', 'I', 'Orange', '#f7941d', [14, 70, 200, 550, 750, 950], 180),
+  street('tennessee', 'J', 'Orange', '#f7941d', [14, 70, 200, 550, 750, 950], 180),
+  street('new-york', 'K', 'Orange', '#f7941d', [16, 80, 220, 600, 800, 1000], 200),
+  street('kentucky', 'L', 'Red', '#ed1b24', [18, 90, 250, 700, 875, 1050], 220),
+  street('indiana', 'M', 'Red', '#ed1b24', [18, 90, 250, 700, 875, 1050], 220),
+  street('illinois', 'N', 'Red', '#ed1b24', [20, 100, 300, 750, 925, 1100], 240),
+  street('atlantic', 'O', 'Yellow', '#f0d23a', [22, 110, 330, 800, 975, 1150], 260),
+  street('ventnor', 'P', 'Yellow', '#f0d23a', [22, 110, 330, 800, 975, 1150], 260),
+  street('marvin-gardens', 'Q', 'Yellow', '#f0d23a', [24, 120, 360, 850, 1025, 1200], 280),
+  street('pacific', 'R', 'Green', '#1fb25a', [26, 130, 390, 900, 1100, 1275], 300),
+  street('north-carolina', 'S', 'Green', '#1fb25a', [26, 130, 390, 900, 1100, 1275], 300),
+  street('pennsylvania-ave', 'T', 'Green', '#1fb25a', [28, 150, 450, 1000, 1200, 1400], 320),
+  street('park-place', 'U', 'Dark blue', '#0072bc', [35, 175, 500, 1100, 1300, 1500], 350),
+  street('boardwalk', 'V', 'Dark blue', '#0072bc', [50, 200, 600, 1400, 1700, 2000], 400),
+  railroad('reading', 'W'),
+  railroad('pennsylvania-rr', 'X'),
+  railroad('bo', 'Y'),
+  railroad('short-line', 'Z'),
   utility('electric', 'Electric Company'),
   utility('water', 'Water Works'),
 ];
@@ -131,7 +131,7 @@ export type RentQuote = {
 
 export const PURCHASE_OPTION = 'purchase';
 
-/** Classic Monopoly pieces first, then the later set. Each one has a clear emoji. */
+/** Classic Opoly pieces first, then the later set. Each one has a clear emoji. */
 export const PLAYER_TOKENS = [
   { id: 'car', emoji: '🚗', label: 'Race car' },
   { id: 'dog', emoji: '🐶', label: 'Scottie dog' },

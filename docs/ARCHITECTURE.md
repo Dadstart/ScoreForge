@@ -17,8 +17,8 @@ mobile/
 │   ├── storage/               # Firestore game store + known codes + displayName
 │   ├── linking/               # share URL create/parse for QR + deep links
 │   ├── navigation/            # types + React Navigation linking config
-│   ├── screens/               # Home, Setup, Join, Board, Cribbage, Monopoly, Yahtzee, Sorry, Checkers, Chinese Checkers, Klondike, Settings
-│   └── components/            # CribbageBoard, MonopolyBoard, YahtzeeScoreboard, SorryBoard, CheckersBoard, ChineseCheckersBoard, FireworksOverlay, ShareCodePanel
+│   ├── screens/               # Home, Setup, Join, Board, Cribbage, Opoly, Yahtzee, Sorry, Checkers, Chinese Checkers, Klondike, Settings
+│   └── components/            # CribbageBoard, OpolyBoard, YahtzeeScoreboard, SorryBoard, CheckersBoard, ChineseCheckersBoard, FireworksOverlay, ShareCodePanel
 ```
 
 ### Startup / navigation
@@ -32,7 +32,7 @@ React Navigation native stack with `expo-linking` prefixes (`scoreforge://` and 
 | **Join** | Display name + code → fetch cloud game, add player |
 | **Board** | Live subscribe; Free Play / Rounds / Rummy / Golf |
 | **Cribbage** | Live subscribe; own-peg scoring + fireworks |
-| **Monopoly** | Live subscribe; own cash, optional board |
+| **Opoly** | Live subscribe; own cash, optional board |
 | **Yahtzee** | Live subscribe; score any column |
 | **Sorry** | Live subscribe; shared board, deck, and turn |
 | **Checkers** | Live subscribe; shared board and turn |
@@ -85,7 +85,7 @@ All templates start with `minPlayers: 1`; others join via code.
 | Rummy | Per-player round scores | First to target (500) |
 | Golf | Per-player hole scores | Lowest after N holes |
 | Cribbage | Instant pegging | First to 121 |
-| Monopoly | Instant cash | Highest |
+| Opoly | Instant cash | Highest |
 | Yahtzee | Score-card boxes | Highest |
 | Sorry | Board pawns home | First to 4 |
 | Checkers | Shared board | Capture all pieces, or leave no move |

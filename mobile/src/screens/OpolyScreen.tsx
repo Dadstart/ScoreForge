@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AddPlayerModal } from '../components/AddPlayerModal';
-import { MonopolyBoard, type TokenRouteView } from '../components/MonopolyBoard';
+import { COMPACT_SCREEN, OpolyBoard, type TokenRouteView } from '../components/OpolyBoard';
 import { type MoneyFlight } from '../components/MoneyBills';
 import { FireworksOverlay } from '../components/FireworksOverlay';
 import { PlaySpark } from '../components/PlaySpark';
@@ -13,7 +13,7 @@ import { TokenPicker } from '../components/TokenPicker';
 import { GameHelp } from '../components/GameHelp';
 import { HomeButton } from '../components/HomeButton';
 import { ShareCodePanel } from '../components/ShareCodePanel';
-import { Badge, Button, Card, Field, Screen, usePageScroll } from '../components/ui';
+import { Badge, Button, Card, Field, Screen } from '../components/ui';
 import { withoutPlayer } from '../domain/addPlayer';
 import { findLocalPlayerId } from '../domain/localPlayer';
 import { type Game, createScoreEvent } from '../domain/models';
@@ -33,9 +33,9 @@ import {
   UTILITY_COUNTS,
   withoutLastCashAction,
   type BoardProperty,
-} from '../domain/monopoly';
-import { diceMotionMs } from '../components/MonopolyDice';
-import { rollMonopolyDice, type DiceRoll } from '../domain/monopolyDice';
+} from '../domain/opoly';
+import { diceMotionMs } from '../components/OpolyDice';
+import { rollOpolyDice, type DiceRoll } from '../domain/opolyDice';
 import {
   buildHouse,
   buildingCost,
@@ -45,13 +45,13 @@ import {
   canSellBuilding,
   cashOf,
   acceptCard,
-  createMonopolyPlay,
+  createOpolyPlay,
   declineProperty,
   landedPropertyId,
   moneyFromSquare,
   mortgageProperty,
   mortgageValue,
-  ownsMonopoly,
+  ownsOpoly,
   payToLeaveJail,
   payDue,
   rentDue,
@@ -59,13 +59,13 @@ import {
   sellBuilding,
   turnPrompt,
   undoForCash,
-  undoMonopoly,
+  undoOpoly,
   unmortgageCost,
   unmortgageProperty,
   useJailCard,
   type DrawnCard,
   type PlayOutcome,
-} from '../domain/monopolyPlay';
+} from '../domain/opolyPlay';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
 import { usePlaySpark } from '../hooks/usePlaySpark';
@@ -75,7 +75,7 @@ import { addPlayerToGame, preferNewerGame, saveGame, subscribeGame } from '../st
 import { colors, radii, space, typography } from '../theme';
 import type { RootStackParamList } from '../navigation/types';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Monopoly'>;
+type Props = NativeStackScreenProps<RootStackParamList, 'Opoly'>;
 
 const INITIAL_TOKEN = 'initial';
 
@@ -97,7 +97,7 @@ function isPlay(result: PlayOutcome | { error: string }): result is PlayOutcome 
   return !('error' in result);
 }
 
-export function MonopolyScreen({ navigation, route }: Props) {
+export function OpolyScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { gameId } = route.params;
   const [game, setGame] = useState<Game | null>(null);
@@ -116,8 +116,17 @@ export function MonopolyScreen({ navigation, route }: Props) {
   const billSerial = useRef(0);
   const [rollingDice, setRollingDice] = useState(false);
   const rollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [boardDragging, setBoardDragging] = useState(false);
-  usePageScroll(!boardDragging);
+  const [boardZoomed, setBoardZoomed] = useState(false);
+  const narrow = useWindowDimensions().width < COMPACT_SCREEN;
+  useEffect(() => {
+    navigation.setOptions({
+      gestureEnabled: !boardZoomed,
+      fullScreenGestureEnabled: false,
+    });
+  }, [boardZoomed, navigation]);
+  useEffect(() => {
+    return () => navigation.setOptions({ gestureEnabled: true });
+  }, [navigation]);
   const [landNote, setLandNote] = useState<string | null>(null);
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
   const [confirmingRemoveId, setConfirmingRemoveId] = useState<string | null>(null);
@@ -182,7 +191,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
   );
   const play = useMemo(() => {
     if (!game) return null;
-    return game.monopoly ?? createMonopolyPlay(game.players.map((player) => player.id));
+    return game.monopoly ?? createOpolyPlay(game.players.map((player) => player.id));
   }, [game]);
   const localPlayerId = useMemo(
     () => (game ? findLocalPlayerId(game, displayName) : null),
@@ -325,7 +334,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
 
   const rollForPlayer = () => {
     if (!canBank || rollingDice || !play || play.pending || !turnPlayer) return;
-    const rolled = rollMonopolyDice();
+    const rolled = rollOpolyDice();
     setDice(String(rolled.total));
     setDiceRoll({ id: Date.now(), faces: rolled.faces });
     setRollingDice(true);
@@ -434,6 +443,65 @@ export function MonopolyScreen({ navigation, route }: Props) {
   const quoteOwner = play.owned[property.id];
   const quoteRentAmount = quoteOwner ? rentDue(play, property.id, quoteDice) : null;
 
+  const tableActions = (
+    <View style={styles.actions}>
+      <Button
+        label="Undo"
+        onPress={() => {
+          setMoneyFlight(null);
+          setDrawnCards([]);
+          void applyGame(
+            (g) => {
+              if (g.monopoly?.undo) {
+                const restored = undoOpoly(g.monopoly, g.events);
+                if (restored) {
+                  g.monopoly = restored.play;
+                  g.tokenSpaces = restored.tokens;
+                  g.events = restored.events;
+                  return g;
+                }
+              }
+              g.events = withoutLastCashAction(g.events);
+              return g;
+            },
+            { suppressWin: true },
+          );
+        }}
+        disabled={!play.undo && game.events.length === 0}
+      />
+      {inJail && !play.pending ? (
+        <>
+          <Button
+            label="Pay $50"
+            disabled={!canBank || turnCash < 50}
+            onPress={() => void commitPlay(payToLeaveJail(play, game.tokenSpaces ?? {}, game.players, turnCash))}
+          />
+          {jailCards > 0 ? (
+            <Button
+              label="Use Get Out of Jail Free"
+              disabled={!canBank}
+              onPress={() => void commitPlay(useJailCard(play, game.tokenSpaces ?? {}, game.players))}
+            />
+          ) : null}
+        </>
+      ) : null}
+      {game.players.length < template.maxPlayers ? (
+        <Button label="Add player" onPress={() => setAddingPlayer(true)} />
+      ) : null}
+      {!complete ? (
+        <Button
+          label="Mark complete"
+          onPress={() =>
+            void applyGame((g) => {
+              g.status = 'Completed';
+              return g;
+            })
+          }
+        />
+      ) : null}
+    </View>
+  );
+
   return (
     <Screen>
       <View
@@ -448,7 +516,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
         <View style={styles.header}>
           <View style={styles.titleBlock}>
             <Text style={[typography.title, styles.centerText]}>{game.name}</Text>
-            <Badge label="Monopoly" tone="accent" style={styles.centerBadge} />
+            <Badge label="Opoly" tone="accent" style={styles.centerBadge} />
           </View>
           <View style={styles.headerTools}>
             <GameHelp templateId="monopoly" />
@@ -463,63 +531,8 @@ export function MonopolyScreen({ navigation, route }: Props) {
           <Text style={styles.bannerText}>{banner}</Text>
           {landNote ? <Text style={styles.bannerNote}>{landNote}</Text> : null}
         </View>
-        <View style={styles.actions}>
-                  <Button
-                    label="Undo"
-                    onPress={() => {
-                      setMoneyFlight(null);
-                      setDrawnCards([]);
-                      void applyGame(
-                        (g) => {
-                          if (g.monopoly?.undo) {
-                            const restored = undoMonopoly(g.monopoly, g.events);
-                            if (restored) {
-                              g.monopoly = restored.play;
-                              g.tokenSpaces = restored.tokens;
-                              g.events = restored.events;
-                              return g;
-                            }
-                          }
-                          g.events = withoutLastCashAction(g.events);
-                          return g;
-                        },
-                        { suppressWin: true },
-                      );
-                    }}
-                    disabled={!play.undo && game.events.length === 0}
-                  />
-                  {inJail && !play.pending ? (
-                    <>
-                      <Button
-                        label="Pay $50"
-                        disabled={!canBank || turnCash < 50}
-                        onPress={() => void commitPlay(payToLeaveJail(play, game.tokenSpaces ?? {}, game.players, turnCash))}
-                      />
-                      {jailCards > 0 ? (
-                        <Button
-                          label="Use Get Out of Jail Free"
-                          disabled={!canBank}
-                          onPress={() => void commitPlay(useJailCard(play, game.tokenSpaces ?? {}, game.players))}
-                        />
-                      ) : null}
-                    </>
-                  ) : null}
-                  {game.players.length < template.maxPlayers ? (
-                    <Button label="Add player" onPress={() => setAddingPlayer(true)} />
-                  ) : null}
-                  {!complete ? (
-                    <Button
-                      label="Mark complete"
-                      onPress={() =>
-                        void applyGame((g) => {
-                          g.status = 'Completed';
-                          return g;
-                        })
-                      }
-                    />
-                  ) : null}
-        </View>
-        <MonopolyBoard
+        {narrow ? null : tableActions}
+        <OpolyBoard
           players={game.players}
           owned={play.owned}
           tokenSpaces={game.tokenSpaces}
@@ -535,9 +548,12 @@ export function MonopolyScreen({ navigation, route }: Props) {
           chanceCount={play.chance.length}
           chestCount={play.chest.length}
           moneyFlight={moneyFlight}
-          onDragging={setBoardDragging}
-          roll={
-            <View pointerEvents="box-none" style={styles.rollStack}>
+          onDragging={() => {}}
+          onZoomed={setBoardZoomed}
+          dockControls={narrow}
+          focusSpace={game.tokenSpaces?.[turnId] ?? 0}
+          roll={(docked) => (
+            <View style={[docked ? styles.rollRow : styles.rollStack, { pointerEvents: 'box-none' }]}>
               <Button
                 label={
                   rollingDice
@@ -576,9 +592,10 @@ export function MonopolyScreen({ navigation, route }: Props) {
                 </>
               ) : null}
             </View>
-          }
+          )}
           diceRoll={diceRoll}
         />
+        {narrow ? tableActions : null}
 
         {landedProperty ? (
           <RentLookup
@@ -605,44 +622,8 @@ export function MonopolyScreen({ navigation, route }: Props) {
             const piece = playerToken(player?.token);
             const paying = standing.playerId === resolvedPayer;
             const holdings = properties.filter((entry) => play.owned[entry.id] === standing.playerId);
-            return (
-              <Pressable
-                key={standing.playerId}
-                accessibilityRole="button"
-                accessibilityLabel={paying ? `${playerLabel(standing.playerName, player?.token)}, paying` : `Select ${playerLabel(standing.playerName, player?.token)} as paying`}
-                accessibilityState={{ selected: paying, disabled: !canBank }}
-                disabled={!canBank}
-                onPress={() => setPayerId(standing.playerId)}
-                style={[
-                  styles.cashCard,
-                  paying ? styles.cashCardPaying : styles.cashCardOther,
-                  canBank && styles.cashCardEditable,
-                ]}
-              >
-                {canBank ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={editing ? `Save ${playerLabel(standing.playerName, player?.token)}` : `Edit ${playerLabel(standing.playerName, player?.token)}`}
-                    onPress={() => {
-                      if (editing) {
-                        void savePlayerEdit();
-                        return;
-                      }
-                      const openNext = () =>
-                        beginPlayerEdit(standing.playerId, standing.playerName, cash, player?.token);
-                      if (editingPlayerId) {
-                        void savePlayerEdit().then((saved) => {
-                          if (saved) openNext();
-                        });
-                        return;
-                      }
-                      openNext();
-                    }}
-                    style={styles.editBtn}
-                  >
-                    {editing ? <CheckIcon /> : <PencilIcon />}
-                  </Pressable>
-                ) : null}
+            const cardFace = (
+              <>
                 {editing ? (
                   <Field
                     value={nameDraft}
@@ -756,7 +737,55 @@ export function MonopolyScreen({ navigation, route }: Props) {
                     />
                   )
                 ) : null}
-              </Pressable>
+              </>
+            );
+            return (
+              <View
+                key={standing.playerId}
+                style={[
+                  styles.cashCard,
+                  paying ? styles.cashCardPaying : styles.cashCardOther,
+                  canBank && styles.cashCardEditable,
+                ]}
+              >
+                {canBank ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={editing ? `Save ${playerLabel(standing.playerName, player?.token)}` : `Edit ${playerLabel(standing.playerName, player?.token)}`}
+                    onPress={() => {
+                      if (editing) {
+                        void savePlayerEdit();
+                        return;
+                      }
+                      const openNext = () =>
+                        beginPlayerEdit(standing.playerId, standing.playerName, cash, player?.token);
+                      if (editingPlayerId) {
+                        void savePlayerEdit().then((saved) => {
+                          if (saved) openNext();
+                        });
+                        return;
+                      }
+                      openNext();
+                    }}
+                    style={styles.editBtn}
+                  >
+                    {editing ? <CheckIcon /> : <PencilIcon />}
+                  </Pressable>
+                ) : null}
+                {canBank && !editing ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={paying ? `${playerLabel(standing.playerName, player?.token)}, paying` : `Select ${playerLabel(standing.playerName, player?.token)} as paying`}
+                    accessibilityState={{ selected: paying }}
+                    onPress={() => setPayerId(standing.playerId)}
+                    style={styles.cashCardBody}
+                  >
+                    {cardFace}
+                  </Pressable>
+                ) : (
+                  <View style={styles.cashCardBody}>{cardFace}</View>
+                )}
+              </View>
             );
           })}
         </View>
@@ -905,7 +934,7 @@ export function MonopolyScreen({ navigation, route }: Props) {
       {showCelebration ? (
         <FireworksOverlay
           winnerName={winnerLabel}
-          subtitle="Monopoly"
+          subtitle="Opoly"
           onDismiss={dismissCelebration}
         />
       ) : null}
@@ -940,7 +969,7 @@ function RentLookup({
   const owned = Boolean(ownerName) && !mortgaged;
   const level = play.houses[property.id] ?? 0;
   const doubled =
-    owned && property.kind === 'street' && level === 0 && ownsMonopoly(play, play.owned[property.id] ?? '', property.group);
+    owned && property.kind === 'street' && level === 0 && ownsOpoly(play, play.owned[property.id] ?? '', property.group);
   const summary = !ownerName
     ? `Unowned. Price ${formatMoney(property.price)}.`
     : mortgaged
@@ -1068,8 +1097,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     alignSelf: 'stretch',
   },
-  actions: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
+  actions: {
+    width: '100%',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
   rollStack: { alignItems: 'center', gap: 8 },
+  rollRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
   bannerText: { ...typography.label, fontSize: 15, textAlign: 'center', alignSelf: 'stretch' },
   row: { alignSelf: 'stretch', flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
   error: { color: colors.danger, textAlign: 'center', alignSelf: 'stretch' },
@@ -1090,6 +1133,11 @@ const styles = StyleSheet.create({
   },
   cashCardOther: { borderColor: colors.border },
   cashCardEditable: { paddingTop: 36 },
+  cashCardBody: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    gap: 8,
+  },
   cardTitle: {
     ...typography.label,
     fontSize: 15,

@@ -22,45 +22,45 @@ const space = (
 
 export const boardSpaces: BoardSpace[] = [
   space(0, 'Go', 'GO'),
-  space(1, 'Mediterranean Avenue', 'Med', { propertyId: 'mediterranean' }),
+  space(1, 'A', 'A', { propertyId: 'mediterranean' }),
   space(2, 'Community Chest', 'Chest'),
-  space(3, 'Baltic Avenue', 'Baltic', { propertyId: 'baltic' }),
+  space(3, 'B', 'B', { propertyId: 'baltic' }),
   space(4, 'Income Tax', 'Tax', { tax: INCOME_TAX }),
-  space(5, 'Reading Railroad', 'Reading', { propertyId: 'reading' }),
-  space(6, 'Oriental Avenue', 'Orient', { propertyId: 'oriental' }),
+  space(5, '🚂 W', '🚂 W', { propertyId: 'reading' }),
+  space(6, 'C', 'C', { propertyId: 'oriental' }),
   space(7, 'Chance', 'Chance'),
-  space(8, 'Vermont Avenue', 'Verm', { propertyId: 'vermont' }),
-  space(9, 'Connecticut Avenue', 'Conn', { propertyId: 'connecticut' }),
+  space(8, 'D', 'D', { propertyId: 'vermont' }),
+  space(9, 'E', 'E', { propertyId: 'connecticut' }),
   space(10, 'Jail', 'Jail'),
-  space(11, 'St. Charles Place', 'St. Ch', { propertyId: 'st-charles' }),
+  space(11, 'F', 'F', { propertyId: 'st-charles' }),
   space(12, 'Electric Company', 'Electric', { propertyId: 'electric' }),
-  space(13, 'States Avenue', 'States', { propertyId: 'states' }),
-  space(14, 'Virginia Avenue', 'Virginia', { propertyId: 'virginia' }),
-  space(15, 'Pennsylvania Railroad', 'Penn RR', { propertyId: 'pennsylvania-rr' }),
-  space(16, 'St. James Place', 'St. Ja', { propertyId: 'st-james' }),
+  space(13, 'G', 'G', { propertyId: 'states' }),
+  space(14, 'H', 'H', { propertyId: 'virginia' }),
+  space(15, '🚂 X', '🚂 X', { propertyId: 'pennsylvania-rr' }),
+  space(16, 'I', 'I', { propertyId: 'st-james' }),
   space(17, 'Community Chest', 'Chest'),
-  space(18, 'Tennessee Avenue', 'Tenn', { propertyId: 'tennessee' }),
-  space(19, 'New York Avenue', 'New York', { propertyId: 'new-york' }),
+  space(18, 'J', 'J', { propertyId: 'tennessee' }),
+  space(19, 'K', 'K', { propertyId: 'new-york' }),
   space(20, 'Free Parking', 'Free'),
-  space(21, 'Kentucky Avenue', 'Kent', { propertyId: 'kentucky' }),
+  space(21, 'L', 'L', { propertyId: 'kentucky' }),
   space(22, 'Chance', 'Chance'),
-  space(23, 'Indiana Avenue', 'Indiana', { propertyId: 'indiana' }),
-  space(24, 'Illinois Avenue', 'Illinois', { propertyId: 'illinois' }),
-  space(25, 'B. & O. Railroad', 'B & O', { propertyId: 'bo' }),
-  space(26, 'Atlantic Avenue', 'Atlantic', { propertyId: 'atlantic' }),
-  space(27, 'Ventnor Avenue', 'Ventnor', { propertyId: 'ventnor' }),
+  space(23, 'M', 'M', { propertyId: 'indiana' }),
+  space(24, 'N', 'N', { propertyId: 'illinois' }),
+  space(25, '🚂 Y', '🚂 Y', { propertyId: 'bo' }),
+  space(26, 'O', 'O', { propertyId: 'atlantic' }),
+  space(27, 'P', 'P', { propertyId: 'ventnor' }),
   space(28, 'Water Works', 'Water', { propertyId: 'water' }),
-  space(29, 'Marvin Gardens', 'Marvin', { propertyId: 'marvin-gardens' }),
+  space(29, 'Q', 'Q', { propertyId: 'marvin-gardens' }),
   space(30, 'Go to Jail', 'To Jail'),
-  space(31, 'Pacific Avenue', 'Pacific', { propertyId: 'pacific' }),
-  space(32, 'North Carolina Avenue', 'N. Car', { propertyId: 'north-carolina' }),
+  space(31, 'R', 'R', { propertyId: 'pacific' }),
+  space(32, 'S', 'S', { propertyId: 'north-carolina' }),
   space(33, 'Community Chest', 'Chest'),
-  space(34, 'Pennsylvania Avenue', 'Penn Av', { propertyId: 'pennsylvania-ave' }),
-  space(35, 'Short Line', 'Short', { propertyId: 'short-line' }),
+  space(34, 'T', 'T', { propertyId: 'pennsylvania-ave' }),
+  space(35, '🚂 Z', '🚂 Z', { propertyId: 'short-line' }),
   space(36, 'Chance', 'Chance'),
-  space(37, 'Park Place', 'Park Pl', { propertyId: 'park-place' }),
+  space(37, 'U', 'U', { propertyId: 'park-place' }),
   space(38, 'Luxury Tax', 'Luxury', { tax: LUXURY_TAX }),
-  space(39, 'Boardwalk', 'Boardwalk', { propertyId: 'boardwalk' }),
+  space(39, 'V', 'V', { propertyId: 'boardwalk' }),
 ];
 
 export function getBoardSpace(index: number): BoardSpace | undefined {
@@ -74,6 +74,63 @@ export function spaceToCell(index: number): { row: number; col: number } {
   if (i <= 20) return { row: 20 - i, col: 0 };
   if (i <= 30) return { row: 0, col: i - 20 };
   return { row: i - 30, col: 10 };
+}
+
+/**
+ * Degrees to rotate the board so this space's side is the near edge.
+ * 0 is the Go row. Each next side is a quarter turn counter-clockwise.
+ */
+export function boardTurnForSpace(space: number): number {
+  const s = ((space % 40) + 40) % 40;
+  if (s < 10) return 0;
+  if (s < 20) return -90;
+  if (s < 30) return -180;
+  return -270;
+}
+
+/** Same facing as `boardTurnForSpace`, choosing the turn closest to `current`. */
+export function nearestBoardTurn(current: number, space: number): number {
+  const base = boardTurnForSpace(space);
+  let best = base;
+  let bestDist = Infinity;
+  for (let lap = -2; lap <= 2; lap += 1) {
+    const next = base + lap * 360;
+    const dist = Math.abs(next - current);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = next;
+    }
+  }
+  return best;
+}
+
+/** Board-space rect shown in `view` after the board has rotated `turn` degrees around its center. */
+export function boardViewForTurn(view: BoardView, turn: number, board: number): BoardView {
+  const quarter = ((Math.round(-turn / 90) % 4) + 4) % 4;
+  if (quarter === 0 || board <= 0) return view;
+  const cx = board / 2;
+  const cy = board / 2;
+  const corners = [
+    { x: view.x, y: view.y },
+    { x: view.x + view.width, y: view.y },
+    { x: view.x, y: view.y + view.height },
+    { x: view.x + view.width, y: view.y + view.height },
+  ];
+  const mapped = corners.map((point) => {
+    let x = point.x - cx;
+    let y = point.y - cy;
+    for (let step = 0; step < quarter; step += 1) {
+      const nextX = -y;
+      y = x;
+      x = nextX;
+    }
+    return { x: x + cx, y: y + cy };
+  });
+  const xs = mapped.map((point) => point.x);
+  const ys = mapped.map((point) => point.y);
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  return { x: minX, y: minY, width: Math.max(...xs) - minX, height: Math.max(...ys) - minY };
 }
 
 /** How far each property runs in from the edge. Larger than a square cell, so the spaces are long rectangles. */
@@ -114,7 +171,9 @@ export function layoutSharedTokens(
   let y1 = Math.max(y0 + 1, height - edge);
   if (!corner) {
     const inward = row === 0 || row === 10 ? height : width;
-    const reserve = Math.round(inward * 0.38);
+    const along = Math.min(width, height);
+    // A phone property cannot spare a color-bar strip and still show an emoji.
+    const reserve = Math.round(inward * (along < 40 ? 0.08 : 0.38));
     if (row === 10) y1 = Math.max(y0 + 1, y1 - reserve);
     else if (row === 0) y0 = Math.min(y1 - 1, y0 + reserve);
     else if (col === 0) x0 = Math.min(x1 - 1, x0 + reserve);
@@ -206,21 +265,31 @@ export function layoutVisitingTokens(cell: number, count: number): TokenSpot[] {
   return shiftSpots(layoutSharedTokens(width, height, 10, 0, count), gap, y);
 }
 
-export type OwnerMark = { x: number; y: number; size: number; rotate: '0deg' | '90deg' | '-90deg' | '180deg' };
+export type OwnerMark = {
+  x: number;
+  y: number;
+  size: number;
+  rotate: '0deg' | '90deg' | '-90deg' | '180deg';
+  /** Mirror left-right. Used on the side spaces, where rotation alone faces the emoji the wrong way. */
+  flipX: boolean;
+};
 
 /**
  * Owner emoji just inside the board, above the property card.
  * Rotation points the emoji's feet at that side of the board.
+ * Left and right marks are also flipped horizontally.
  */
 export function ownerMarkPlacement(row: number, col: number, width: number, height: number): OwnerMark {
   const along = row === 0 || row === 10 ? width : height;
   const depth = row === 0 || row === 10 ? height : width;
-  const size = Math.max(12, Math.min(along - 2, Math.round(along * 0.62)));
+  const fitted = Math.min(Math.max(8, along - 2), Math.round(along * 0.62));
+  // On a phone the property is only a few dozen pixels wide. Use that whole width so the emoji reads.
+  const size = along < 40 ? Math.max(fitted, Math.min(28, along)) : fitted;
   const gap = Math.max(2, Math.round(depth * 0.03));
-  if (row === 10) return { x: (width - size) / 2, y: -(size + gap), size, rotate: '0deg' };
-  if (row === 0) return { x: (width - size) / 2, y: height + gap, size, rotate: '180deg' };
-  if (col === 0) return { x: width + gap, y: (height - size) / 2, size, rotate: '-90deg' };
-  return { x: -(size + gap), y: (height - size) / 2, size, rotate: '90deg' };
+  if (row === 10) return { x: (width - size) / 2, y: -(size + gap), size, rotate: '0deg', flipX: false };
+  if (row === 0) return { x: (width - size) / 2, y: height + gap, size, rotate: '180deg', flipX: false };
+  if (col === 0) return { x: width + gap, y: (height - size) / 2, size, rotate: '-90deg', flipX: true };
+  return { x: -(size + gap), y: (height - size) / 2, size, rotate: '90deg', flipX: true };
 }
 
 export function fractionToIndex(fraction: number): number {
@@ -275,12 +344,12 @@ export function backwardSpaces(from: number, to: number): number[] {
  * Path for a move whose direction was not recorded.
  * Short trips follow the track. A long jump, such as being sent to jail, slides straight across.
  */
-/** MONOPOLY word size. `corner` is the board's corner cell, `board * TRACK_DEPTH`. */
+/** OPOLY word size. `corner` is the board's corner cell, `board * TRACK_DEPTH`. */
 export function centerTitleFont(corner: number): number {
   return Math.min(96, Math.max(18, Math.round(corner * 0.62)));
 }
 
-/** Fraunces 700 "MONOPOLY" at letter-spacing 1, measured on the board. */
+/** Fraunces 700 "OPOLY" at letter-spacing 1, measured on the board. */
 const TITLE_EM = 5.8;
 const TITLE_LINE = 1.25;
 export const DECK_TILT = 34;
@@ -428,6 +497,226 @@ export function deckPileLayout(board: number): DeckPileLayout {
     }
   }
   return best;
+}
+
+export type Point = { x: number; y: number };
+
+/** Die face size for a square board. */
+export function monopolyDieSize(board: number): number {
+  return Math.max(42, Math.min(68, Math.round(board * 0.12)));
+}
+
+type DieBounds = { minX: number; maxX: number; minY: number; maxY: number };
+
+/** A rectangle of the board, in board pixels. The origin is the board's top-left. */
+export type BoardView = { x: number; y: number; width: number; height: number };
+
+function dieMargin(dieSize: number) {
+  return Math.max(2, Math.round(dieSize * 0.06));
+}
+
+/** Centers that keep a die fully on the green. */
+function greenDieBounds(board: number, dieSize: number): DieBounds {
+  const edge = TRACK_DEPTH * board;
+  const half = dieSize / 2;
+  const margin = dieMargin(dieSize);
+  const green: DieBounds = {
+    minX: edge + half + margin,
+    maxX: board - edge - half - margin,
+    minY: edge + half + margin,
+    maxY: board - edge - half - margin,
+  };
+  if (green.maxX <= green.minX || green.maxY <= green.minY) {
+    const mid = board / 2;
+    return { minX: mid, maxX: mid, minY: mid, maxY: mid };
+  }
+  return green;
+}
+
+/** Board Y below the roll controls that hang in from the top of the felt. */
+function controlFloor(board: number, dieSize: number): number {
+  const edge = TRACK_DEPTH * board;
+  const half = dieSize / 2;
+  const along = (board * (1 - 2 * TRACK_DEPTH)) / 9;
+  const ownerClear = Math.round(along * 0.62 + board * TRACK_DEPTH * 0.04) + 10;
+  return edge + ownerClear + 96 + half;
+}
+
+/** Centers that keep a die fully on the green, below the roll and zoom controls. */
+function diceRestBounds(board: number, dieSize: number): DieBounds {
+  const green = greenDieBounds(board, dieSize);
+  const minY = Math.min(controlFloor(board, dieSize), green.maxY);
+  return { ...green, minY: Math.max(green.minY, minY) };
+}
+
+/**
+ * The slice of the board that is on screen.
+ * `pan` places the board inside the viewport. When the viewport itself is
+ * partly off the window, pass the viewport's window origin and the window size
+ * so the rect is only the overlap.
+ */
+export function visibleBoardRect(args: {
+  pan: { x: number; y: number };
+  viewport: { width: number; height: number };
+  windowOrigin?: { x: number; y: number };
+  windowSize?: { width: number; height: number };
+}): BoardView {
+  const { pan, viewport } = args;
+  let localX = 0;
+  let localY = 0;
+  let width = Math.max(0, viewport.width);
+  let height = Math.max(0, viewport.height);
+  if (args.windowOrigin && args.windowSize) {
+    const { x, y } = args.windowOrigin;
+    const left = Math.max(0, x);
+    const top = Math.max(0, y);
+    const right = Math.min(args.windowSize.width, x + viewport.width);
+    const bottom = Math.min(args.windowSize.height, y + viewport.height);
+    localX = left - x;
+    localY = top - y;
+    width = Math.max(0, right - left);
+    height = Math.max(0, bottom - top);
+  }
+  return {
+    x: localX - pan.x,
+    y: localY - pan.y,
+    width,
+    height,
+  };
+}
+
+function intersectBounds(a: DieBounds, b: DieBounds): DieBounds | null {
+  const next = {
+    minX: Math.max(a.minX, b.minX),
+    maxX: Math.min(a.maxX, b.maxX),
+    minY: Math.max(a.minY, b.minY),
+    maxY: Math.min(a.maxY, b.maxY),
+  };
+  if (next.maxX < next.minX || next.maxY < next.minY) return null;
+  return next;
+}
+
+function clampAxis(viewStart: number, viewSpan: number, limit: number, half: number, margin: number) {
+  let min = Math.max(half + margin, viewStart + half + margin);
+  let max = Math.min(limit - half - margin, viewStart + viewSpan - half - margin);
+  if (max >= min) return { min, max };
+  const sliceStart = Math.max(0, viewStart);
+  const sliceEnd = Math.min(limit, viewStart + Math.max(0, viewSpan));
+  const mid = Math.min(limit - half, Math.max(half, (sliceStart + sliceEnd) / 2));
+  return { min: mid, max: mid };
+}
+
+/** Die centers that stay inside the visible rectangle and on the board. */
+function viewDieBounds(board: number, dieSize: number, view: BoardView): DieBounds {
+  const half = dieSize / 2;
+  const margin = dieMargin(dieSize);
+  const x = clampAxis(view.x, view.width, board, half, margin);
+  const y = clampAxis(view.y, view.height, board, half, margin);
+  return { minX: x.min, maxX: x.max, minY: y.min, maxY: y.max };
+}
+
+/**
+ * Where a die may land. Prefer the green that is on screen, below the roll
+ * controls when that still leaves a real patch. A zoomed view must win over
+ * the full-board green, or the dice settle off screen.
+ */
+function landingBounds(board: number, dieSize: number, view?: BoardView): DieBounds {
+  if (!view || view.width <= 0 || view.height <= 0) return diceRestBounds(board, dieSize);
+  const seen = viewDieBounds(board, dieSize, view);
+  const onScreen = intersectBounds(greenDieBounds(board, dieSize), seen) ?? seen;
+  const cleared = {
+    ...onScreen,
+    minY: Math.max(onScreen.minY, Math.min(controlFloor(board, dieSize), onScreen.maxY)),
+  };
+  const openSpan = onScreen.maxY - onScreen.minY;
+  const clearedSpan = cleared.maxY - cleared.minY;
+  if (clearedSpan >= dieSize * 0.75 || clearedSpan >= openSpan - 0.5) return cleared;
+  return onScreen;
+}
+
+function clampPoint(point: Point, bounds: DieBounds): Point {
+  return {
+    x: Math.min(bounds.maxX, Math.max(bounds.minX, point.x)),
+    y: Math.min(bounds.maxY, Math.max(bounds.minY, point.y)),
+  };
+}
+
+function placeSecondDie(first: Point, bounds: DieBounds, dieSize: number, sample: () => number): Point {
+  const minDist = dieSize * 1.05;
+  const spanX = bounds.maxX - bounds.minX;
+  const spanY = bounds.maxY - bounds.minY;
+  let best = first;
+  for (let attempt = 0; attempt < 18; attempt += 1) {
+    const next = {
+      x: bounds.minX + sample() * spanX,
+      y: bounds.minY + sample() * spanY,
+    };
+    if (Math.hypot(next.x - first.x, next.y - first.y) >= minDist) return next;
+    best = next;
+  }
+  const pushed = clampPoint(
+    { x: first.x + minDist, y: first.y },
+    bounds,
+  );
+  if (Math.hypot(pushed.x - first.x, pushed.y - first.y) >= minDist * 0.9) return pushed;
+  return clampPoint({ x: first.x, y: Math.min(bounds.maxY, first.y + minDist) }, bounds);
+}
+
+/**
+ * Two tumble paths in board pixels. Every control point stays on the green,
+ * and the last point of each path is where that die lands.
+ */
+export function diceRollCurves(
+  board: number,
+  dieSize: number,
+  sample: () => number = Math.random,
+  view?: BoardView,
+): [Point, Point, Point, Point][] {
+  const bounds = landingBounds(board, dieSize, view);
+  const spanX = Math.max(0, bounds.maxX - bounds.minX);
+  const spanY = Math.max(0, bounds.maxY - bounds.minY);
+  const pick = () => ({
+    x: bounds.minX + sample() * spanX,
+    y: bounds.minY + sample() * spanY,
+  });
+  const first = pick();
+  const second = placeSecondDie(first, bounds, dieSize, sample);
+  return [0, 1].map((lane) => {
+    const end = lane === 0 ? first : second;
+    const start = {
+      x: bounds.minX + spanX * (lane === 0 ? 0.02 : 0.16),
+      y: bounds.maxY - spanY * (lane === 0 ? 0.06 : 0.2),
+    };
+    return [start, pick(), pick(), end] as [Point, Point, Point, Point];
+  });
+}
+
+/** Points along a die tumble, including the hop above the curve. */
+export function diceHopPoints(
+  curve: readonly [Point, Point, Point, Point],
+  board: number,
+  view?: BoardView,
+): Point[] {
+  const [a, b, c, d] = curve;
+  const steps = 20;
+  const points: Point[] = [];
+  const seen = view && view.width > 0 && view.height > 0
+    ? viewDieBounds(board, monopolyDieSize(board), view)
+    : null;
+  for (let index = 0; index <= steps; index += 1) {
+    const t = index / steps;
+    const u = 1 - t;
+    let x = u * u * u * a.x + 3 * u * u * t * b.x + 3 * u * t * t * c.x + t * t * t * d.x;
+    let y = u * u * u * a.y + 3 * u * u * t * b.y + 3 * u * t * t * c.y + t * t * t * d.y;
+    const bounce = Math.max(0, Math.sin(t * Math.PI * 4)) * (1 - t) * board * 0.07;
+    y -= bounce;
+    if (seen) {
+      x = Math.min(seen.maxX, Math.max(seen.minX, x));
+      y = Math.min(seen.maxY, Math.max(seen.minY, y));
+    }
+    points.push({ x, y });
+  }
+  return points;
 }
 
 export function tokenSpacesBetween(from: number, to: number): number[] {

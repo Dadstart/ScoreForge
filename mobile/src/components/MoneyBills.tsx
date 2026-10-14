@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native';
-import { cellBox, spaceToCell } from '../domain/monopolyBoard';
-import { diceMotionMs } from './MonopolyDice';
+import { cellBox, spaceToCell } from '../domain/opolyBoard';
+import { diceMotionMs } from './OpolyDice';
 import { fonts } from '../theme';
 
 export type MoneyFlight = {
@@ -43,7 +43,6 @@ function BillBurst({ space, boardSize }: { space: number; boardSize: number }) {
 
   return (
     <View
-      pointerEvents="none"
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
       style={[
@@ -52,6 +51,7 @@ function BillBurst({ space, boardSize }: { space: number; boardSize: number }) {
           left: (frame.x + frame.w / 2) * boardSize,
           top: (frame.y + frame.h / 2) * boardSize,
         },
+        { pointerEvents: 'none' },
       ]}
     >
       {bills.map((bill, index) => (
@@ -150,8 +150,13 @@ const styles = StyleSheet.create({
     fontFamily: fonts.display,
     color: '#f4fff4',
     fontWeight: '800',
-    textShadowColor: 'rgba(12, 60, 24, 0.45)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 1,
+    ...Platform.select({
+      web: { textShadow: '0px 1px 1px rgba(12, 60, 24, 0.45)' },
+      default: {
+        textShadowColor: 'rgba(12, 60, 24, 0.45)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 1,
+      },
+    }),
   },
 });

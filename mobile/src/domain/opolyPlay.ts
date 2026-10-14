@@ -1,6 +1,6 @@
-import { boardStep, GO_PAYOUT, type DiceRoll, rollMonopolyDice } from './monopolyDice';
-import { CHANCE_CARD_IDS, CHEST_CARD_IDS, type CardDeck } from './monopolyCards';
-import { backwardSpaces, forwardSpaces, getBoardSpace } from './monopolyBoard';
+import { boardStep, GO_PAYOUT, type DiceRoll, rollOpolyDice } from './opolyDice';
+import { CHANCE_CARD_IDS, CHEST_CARD_IDS, type CardDeck } from './opolyCards';
+import { backwardSpaces, forwardSpaces, getBoardSpace } from './opolyBoard';
 import {
   BANK_PARTY_ID,
   cashFromDelta,
@@ -10,7 +10,7 @@ import {
   properties,
   transferEvents,
   type BoardProperty,
-} from './monopoly';
+} from './opoly';
 import type { ScoreEvent } from './models';
 import { fillRandom } from './secureRandom';
 
@@ -19,7 +19,7 @@ export type CardPending = { kind: 'card'; deck: CardDeck; id: string; space: num
 export type PayPending = { kind: 'pay'; amount: number; payeeId: string; space: number; label: string };
 export type PlayPending = BuyPending | CardPending | PayPending;
 
-export type MonopolyUndo = {
+export type OpolyUndo = {
   turn: string;
   doubles: number;
   jail: Record<string, number>;
@@ -33,10 +33,10 @@ export type MonopolyUndo = {
   pending: PlayPending | null;
   tokens: Record<string, number>;
   events: number;
-  prior: MonopolyUndo | null;
+  prior: OpolyUndo | null;
 };
 
-export type MonopolyPlay = {
+export type OpolyPlay = {
   turn: string;
   doubles: number;
   /** Failed doubles rolls already spent in jail. Absent means the player is not in jail. */
@@ -50,7 +50,7 @@ export type MonopolyPlay = {
   chanceFree: Record<string, number>;
   chestFree: Record<string, number>;
   pending: PlayPending | null;
-  undo: MonopolyUndo | null;
+  undo: OpolyUndo | null;
 };
 
 export type PlayPlayer = { id: string; name: string; token?: string | null };
@@ -60,7 +60,7 @@ export type TokenRoute = { playerId: string; spaces: number[] };
 export type DrawnCard = { deck: CardDeck; id: string; space: number };
 
 export type PlayOutcome = {
-  play: MonopolyPlay;
+  play: OpolyPlay;
   tokens: Record<string, number>;
   events: ScoreEvent[];
   note: string;
@@ -115,11 +115,11 @@ function countOf(map: Record<string, number>, id: string): number {
   return map[id] ?? 0;
 }
 
-function levelOf(play: MonopolyPlay, propertyId: string): number {
+function levelOf(play: OpolyPlay, propertyId: string): number {
   return play.houses[propertyId] ?? 0;
 }
 
-export function ownsMonopoly(play: MonopolyPlay, playerId: string, group: string): boolean {
+export function ownsOpoly(play: OpolyPlay, playerId: string, group: string): boolean {
   const streets = streetsIn(group);
   return (
     streets.length > 1 &&
@@ -127,18 +127,18 @@ export function ownsMonopoly(play: MonopolyPlay, playerId: string, group: string
   );
 }
 
-export function canBuild(play: MonopolyPlay, propertyId: string): boolean {
+export function canBuild(play: OpolyPlay, propertyId: string): boolean {
   const property = getProperty(propertyId);
   if (!property || property.kind !== 'street') return false;
   const owner = play.owned[propertyId];
-  if (!owner || !ownsMonopoly(play, owner, property.group)) return false;
+  if (!owner || !ownsOpoly(play, owner, property.group)) return false;
   const level = levelOf(play, propertyId);
   if (level >= 5) return false;
   const lowest = Math.min(...streetsIn(property.group).map((street) => levelOf(play, street.id)));
   return level === lowest;
 }
 
-export function canSellBuilding(play: MonopolyPlay, propertyId: string): boolean {
+export function canSellBuilding(play: OpolyPlay, propertyId: string): boolean {
   const property = getProperty(propertyId);
   if (!property || property.kind !== 'street') return false;
   const level = levelOf(play, propertyId);
@@ -147,7 +147,7 @@ export function canSellBuilding(play: MonopolyPlay, propertyId: string): boolean
   return level === highest;
 }
 
-export function canMortgage(play: MonopolyPlay, propertyId: string): boolean {
+export function canMortgage(play: OpolyPlay, propertyId: string): boolean {
   const property = getProperty(propertyId);
   if (!property || !play.owned[propertyId] || play.mortgaged.includes(propertyId)) return false;
   if (property.kind !== 'street') return true;
@@ -165,7 +165,7 @@ function shuffle(ids: string[], sample: () => number): string[] {
   return next;
 }
 
-function blankPlay(turn: string): MonopolyPlay {
+function blankPlay(turn: string): OpolyPlay {
   return {
     turn,
     doubles: 0,
@@ -188,7 +188,7 @@ function shuffleSample(): number {
   return (buffer[0] ?? 0) / 0x1_0000_0000;
 }
 
-export function createMonopolyPlay(playerIds: string[], sample: () => number = shuffleSample): MonopolyPlay {
+export function createOpolyPlay(playerIds: string[], sample: () => number = shuffleSample): OpolyPlay {
   const play = blankPlay(playerIds[0] ?? '');
   play.chance = shuffle(CHANCE_IDS, sample);
   play.chest = shuffle(CHEST_IDS, sample);
@@ -224,9 +224,9 @@ function knownDeck(ids: unknown, allowed: string[], heldFree: boolean): string[]
 }
 
 /** Drop records that no longer match the table, and keep a usable deck. */
-export function normalizeMonopolyPlay(value: unknown, playerIds: string[]): MonopolyPlay | null {
+export function normalizeOpolyPlay(value: unknown, playerIds: string[]): OpolyPlay | null {
   if (!value || typeof value !== 'object') return null;
-  const raw = value as Partial<MonopolyPlay>;
+  const raw = value as Partial<OpolyPlay>;
   const ids = new Set(playerIds);
   const turn = typeof raw.turn === 'string' && ids.has(raw.turn) ? raw.turn : playerIds[0] ?? '';
   const play = blankPlay(turn);
@@ -297,20 +297,20 @@ export function normalizeMonopolyPlay(value: unknown, playerIds: string[]): Mono
       label: pending.label,
     };
   }
-  play.undo = raw.undo && typeof raw.undo === 'object' ? raw.undo : null;
+  play.undo = raw.undo && typeof raw.undo === 'object' ? linkedUndo(raw.undo, MAX_UNDO_LINKS) : null;
   return play;
 }
 
-export function unpackMonopoly(value: unknown, playerIds: string[]): MonopolyPlay | null {
-  return normalizeMonopolyPlay(value, playerIds);
+export function unpackOpoly(value: unknown, playerIds: string[]): OpolyPlay | null {
+  return normalizeOpolyPlay(value, playerIds);
 }
 
 /** Property from the latest token move, including a buy decision still open on that square. */
-export function landedPropertyId(play: MonopolyPlay, tokens: Record<string, number>): string | null {
+export function landedPropertyId(play: OpolyPlay, tokens: Record<string, number>): string | null {
   if (play.pending?.kind === 'buy' && getProperty(play.pending.propertyId)) return play.pending.propertyId;
   let spaces = tokens;
   let undo = play.undo;
-  const seen = new Set<MonopolyUndo>();
+  const seen = new Set<OpolyUndo>();
   while (undo && !seen.has(undo)) {
     seen.add(undo);
     const prior = undo.tokens ?? {};
@@ -342,7 +342,7 @@ function nextPlayer(players: PlayPlayer[], current: string): string {
 }
 
 type Ctx = {
-  play: MonopolyPlay;
+  play: OpolyPlay;
   tokens: Record<string, number>;
   players: PlayPlayer[];
   events: ScoreEvent[];
@@ -364,20 +364,20 @@ function charge(ctx: Ctx, fromId: string, toId: string, amount: number) {
   if (amount > 0) ctx.events.push(...transferEvents(fromId, toId, amount));
 }
 
-function activeCount(play: MonopolyPlay, owner: string, kind: BoardProperty['kind']): number {
+function activeCount(play: OpolyPlay, owner: string, kind: BoardProperty['kind']): number {
   return properties.filter(
     (property) => property.kind === kind && play.owned[property.id] === owner && !play.mortgaged.includes(property.id),
   ).length;
 }
 
-export function rentDue(play: MonopolyPlay, propertyId: string, dice: number, scale = 1, utilityDice: number | null = null): number {
+export function rentDue(play: OpolyPlay, propertyId: string, dice: number, scale = 1, utilityDice: number | null = null): number {
   const property = getProperty(propertyId);
   const owner = play.owned[propertyId];
   if (!property || !owner || play.mortgaged.includes(propertyId)) return 0;
   if (property.kind === 'street' && property.rents) {
     const level = levelOf(play, propertyId);
     const base = property.rents[level] ?? property.rents[0];
-    const doubled = level === 0 && ownsMonopoly(play, owner, property.group);
+    const doubled = level === 0 && ownsOpoly(play, owner, property.group);
     return base * (doubled ? 2 : 1);
   }
   if (property.kind === 'railroad') {
@@ -528,7 +528,7 @@ function resolveSpace(
   ctx.notes.push(`${playerName(ctx.players, playerId)} landed on ${space.name}.`);
 }
 
-function improvements(play: MonopolyPlay, playerId: string) {
+function improvements(play: OpolyPlay, playerId: string) {
   let houses = 0;
   let hotels = 0;
   for (const property of properties) {
@@ -575,22 +575,22 @@ function applyCard(ctx: Ctx, playerId: string, deck: 'chance' | 'chest', id: str
     return;
   }
   if (id === 'boardwalk') {
-    ctx.notes.push(`${label}: Advance to Boardwalk.`);
+    ctx.notes.push(`${label}: Advance to V.`);
     resolveSpace(ctx, playerId, from, advance(from, 39));
     return;
   }
   if (id === 'illinois') {
-    ctx.notes.push(`${label}: Advance to Illinois Avenue.`);
+    ctx.notes.push(`${label}: Advance to N.`);
     resolveSpace(ctx, playerId, from, advance(from, 24));
     return;
   }
   if (id === 'st-charles') {
-    ctx.notes.push(`${label}: Advance to St. Charles Place.`);
+    ctx.notes.push(`${label}: Advance to F.`);
     resolveSpace(ctx, playerId, from, advance(from, 11));
     return;
   }
   if (id === 'reading') {
-    ctx.notes.push(`${label}: Take a ride on the Reading Railroad.`);
+    ctx.notes.push(`${label}: Take a ride on 🚂 W.`);
     resolveSpace(ctx, playerId, from, advance(from, 5));
     return;
   }
@@ -605,7 +605,7 @@ function applyCard(ctx: Ctx, playerId: string, deck: 'chance' | 'chest', id: str
     const propertyId = getBoardSpace(target)?.propertyId;
     const owner = propertyId ? ctx.play.owned[propertyId] : undefined;
     if (owner && owner !== playerId) {
-      const rolled = rollMonopolyDice(ctx.sample);
+      const rolled = rollOpolyDice(ctx.sample);
       ctx.utilityDice = rolled.total;
       ctx.notes.push(`${label}: Advance to the nearest utility and throw ${rolled.faces[0]} and ${rolled.faces[1]}.`);
     } else {
@@ -678,7 +678,20 @@ function stamped(events: ScoreEvent[]): ScoreEvent[] {
   return events.map((event) => ({ ...event, timestamp: stamp }));
 }
 
-function packUndo(play: MonopolyPlay, tokens: Record<string, number>, events: number): MonopolyUndo {
+/**
+ * Firestore rejects a map nested more than 20 levels deep. Each undo keeps the
+ * previous one, so a long game has to drop the oldest links.
+ */
+const MAX_UNDO_LINKS = 8;
+
+function linkedUndo(undo: OpolyUndo | null | undefined, remaining: number): OpolyUndo | null {
+  if (!undo || remaining <= 0) return null;
+  const prior = linkedUndo(undo.prior, remaining - 1);
+  if ((undo.prior ?? null) === prior) return undo;
+  return { ...undo, prior };
+}
+
+function packUndo(play: OpolyPlay, tokens: Record<string, number>, events: number): OpolyUndo {
   return {
     turn: play.turn,
     doubles: play.doubles,
@@ -693,11 +706,11 @@ function packUndo(play: MonopolyPlay, tokens: Record<string, number>, events: nu
     pending: play.pending ? { ...play.pending } : null,
     tokens: { ...tokens },
     events,
-    prior: play.undo,
+    prior: linkedUndo(play.undo, MAX_UNDO_LINKS - 1),
   };
 }
 
-function commit(before: MonopolyPlay, tokensBefore: Record<string, number>, ctx: Ctx): PlayOutcome {
+function commit(before: OpolyPlay, tokensBefore: Record<string, number>, ctx: Ctx): PlayOutcome {
   return {
     play: { ...ctx.play, undo: packUndo(before, tokensBefore, ctx.events.length) },
     tokens: ctx.tokens,
@@ -709,7 +722,7 @@ function commit(before: MonopolyPlay, tokensBefore: Record<string, number>, ctx:
 }
 
 export function resolveRoll(
-  play: MonopolyPlay,
+  play: OpolyPlay,
   tokens: Record<string, number>,
   players: PlayPlayer[],
   roll: DiceRoll,
@@ -785,8 +798,8 @@ export function resolveRoll(
 }
 
 function afterChoice(
-  original: MonopolyPlay,
-  updated: MonopolyPlay,
+  original: OpolyPlay,
+  updated: OpolyPlay,
   tokens: Record<string, number>,
   players: PlayPlayer[],
   notes: string[],
@@ -811,7 +824,7 @@ function afterChoice(
 }
 
 export function payDue(
-  play: MonopolyPlay,
+  play: OpolyPlay,
   tokens: Record<string, number>,
   players: PlayPlayer[],
 ): PlayOutcome | { error: string } {
@@ -830,7 +843,7 @@ export function payDue(
   );
 }
 
-export function moneyFromSquare(prior: MonopolyPlay, result: PlayOutcome): number | null {
+export function moneyFromSquare(prior: OpolyPlay, result: PlayOutcome): number | null {
   const paid = result.events.find((event) => event.points < 0);
   if (!paid) return null;
   const space = result.tokens[paid.playerId];
@@ -853,7 +866,7 @@ export function moneyFromSquare(prior: MonopolyPlay, result: PlayOutcome): numbe
 }
 
 export function acceptCard(
-  play: MonopolyPlay,
+  play: OpolyPlay,
   tokens: Record<string, number>,
   players: PlayPlayer[],
   sample: () => number = Math.random,
@@ -892,7 +905,7 @@ export function acceptCard(
 }
 
 export function buyProperty(
-  play: MonopolyPlay,
+  play: OpolyPlay,
   tokens: Record<string, number>,
   players: PlayPlayer[],
   cash: number,
@@ -902,7 +915,7 @@ export function buyProperty(
   const property = getProperty(pending.propertyId);
   if (!property) return { error: 'That property is not on the board.' };
   if (cash < property.price) return { error: `${playerName(players, play.turn)} does not have ${formatMoney(property.price)}.` };
-  const updated: MonopolyPlay = {
+  const updated: OpolyPlay = {
     ...play,
     owned: { ...play.owned, [property.id]: play.turn },
     pending: null,
@@ -918,7 +931,7 @@ export function buyProperty(
   );
 }
 
-export function declineProperty(play: MonopolyPlay, tokens: Record<string, number>, players: PlayPlayer[]): PlayOutcome | { error: string } {
+export function declineProperty(play: OpolyPlay, tokens: Record<string, number>, players: PlayPlayer[]): PlayOutcome | { error: string } {
   if (play.pending?.kind !== 'buy') return { error: 'There is nothing to pass on.' };
   const property = getProperty(play.pending.propertyId);
   return afterChoice(
@@ -931,7 +944,7 @@ export function declineProperty(play: MonopolyPlay, tokens: Record<string, numbe
   );
 }
 
-export function payToLeaveJail(play: MonopolyPlay, tokens: Record<string, number>, players: PlayPlayer[], cash: number): PlayOutcome | { error: string } {
+export function payToLeaveJail(play: OpolyPlay, tokens: Record<string, number>, players: PlayPlayer[], cash: number): PlayOutcome | { error: string } {
   if (play.jail[play.turn] == null) return { error: 'That player is not in jail.' };
   if (cash < 50) return { error: `Leaving jail costs ${formatMoney(50)}.` };
   const jail = { ...play.jail };
@@ -946,7 +959,7 @@ export function payToLeaveJail(play: MonopolyPlay, tokens: Record<string, number
   };
 }
 
-export function useJailCard(play: MonopolyPlay, tokens: Record<string, number>, players: PlayPlayer[]): PlayOutcome | { error: string } {
+export function useJailCard(play: OpolyPlay, tokens: Record<string, number>, players: PlayPlayer[]): PlayOutcome | { error: string } {
   if (play.jail[play.turn] == null) return { error: 'That player is not in jail.' };
   const chance = countOf(play.chanceFree, play.turn);
   const chest = countOf(play.chestFree, play.turn);
@@ -964,7 +977,7 @@ export function useJailCard(play: MonopolyPlay, tokens: Record<string, number>, 
     chestFree[play.turn] = chest - 1;
     chestDeck.push('jail-free');
   }
-  const next: MonopolyPlay = { ...play, jail, chanceFree, chestFree, chance: chanceDeck, chest: chestDeck, doubles: 0 };
+  const next: OpolyPlay = { ...play, jail, chanceFree, chestFree, chance: chanceDeck, chest: chestDeck, doubles: 0 };
   return {
     play: { ...next, undo: packUndo(play, tokens, 0) },
     tokens,
@@ -973,13 +986,13 @@ export function useJailCard(play: MonopolyPlay, tokens: Record<string, number>, 
   };
 }
 
-function ownedPlay(play: MonopolyPlay, propertyId: string, playerId: string): BoardProperty | null {
+function ownedPlay(play: OpolyPlay, propertyId: string, playerId: string): BoardProperty | null {
   const property = getProperty(propertyId);
   if (!property || play.owned[propertyId] !== playerId) return null;
   return property;
 }
 
-export function buildHouse(play: MonopolyPlay, tokens: Record<string, number>, players: PlayPlayer[], propertyId: string, cash: number): PlayOutcome | { error: string } {
+export function buildHouse(play: OpolyPlay, tokens: Record<string, number>, players: PlayPlayer[], propertyId: string, cash: number): PlayOutcome | { error: string } {
   if (play.pending || play.doubles > 0) return { error: 'Finish the move before building.' };
   if (!canBuild(play, propertyId)) return { error: 'Build evenly on a complete color group.' };
   const property = ownedPlay(play, propertyId, play.turn);
@@ -998,7 +1011,7 @@ export function buildHouse(play: MonopolyPlay, tokens: Record<string, number>, p
   };
 }
 
-export function sellBuilding(play: MonopolyPlay, tokens: Record<string, number>, players: PlayPlayer[], propertyId: string): PlayOutcome | { error: string } {
+export function sellBuilding(play: OpolyPlay, tokens: Record<string, number>, players: PlayPlayer[], propertyId: string): PlayOutcome | { error: string } {
   if (!canSellBuilding(play, propertyId)) return { error: 'Sell houses evenly, hotels first.' };
   const property = ownedPlay(play, propertyId, play.turn);
   if (!property) return { error: 'You do not own that property.' };
@@ -1016,7 +1029,7 @@ export function sellBuilding(play: MonopolyPlay, tokens: Record<string, number>,
   };
 }
 
-export function mortgageProperty(play: MonopolyPlay, tokens: Record<string, number>, players: PlayPlayer[], propertyId: string): PlayOutcome | { error: string } {
+export function mortgageProperty(play: OpolyPlay, tokens: Record<string, number>, players: PlayPlayer[], propertyId: string): PlayOutcome | { error: string } {
   if (!canMortgage(play, propertyId) || play.owned[propertyId] !== play.turn) return { error: 'Sell the houses on that color before mortgaging.' };
   const property = getProperty(propertyId);
   if (!property) return { error: 'That property is not on the board.' };
@@ -1031,7 +1044,7 @@ export function mortgageProperty(play: MonopolyPlay, tokens: Record<string, numb
 }
 
 export function unmortgageProperty(
-  play: MonopolyPlay,
+  play: OpolyPlay,
   tokens: Record<string, number>,
   players: PlayPlayer[],
   propertyId: string,
@@ -1055,10 +1068,10 @@ export function unmortgageProperty(
   };
 }
 
-export function undoMonopoly(
-  play: MonopolyPlay,
+export function undoOpoly(
+  play: OpolyPlay,
   events: ScoreEvent[],
-): { play: MonopolyPlay; tokens: Record<string, number>; events: ScoreEvent[] } | null {
+): { play: OpolyPlay; tokens: Record<string, number>; events: ScoreEvent[] } | null {
   const undo = play.undo;
   if (!undo) return null;
   const restored = blankPlay(undo.turn);
@@ -1081,11 +1094,11 @@ export function undoMonopoly(
 }
 
 /** Remember a manual cash transfer so Undo puts the table back. */
-export function undoForCash(play: MonopolyPlay, tokens: Record<string, number>, eventCount: number): MonopolyPlay {
+export function undoForCash(play: OpolyPlay, tokens: Record<string, number>, eventCount: number): OpolyPlay {
   return { ...play, undo: packUndo(play, tokens, eventCount) };
 }
 
-export function withoutMonopolyPlayer(play: MonopolyPlay, playerId: string, players: PlayPlayer[]): MonopolyPlay {
+export function withoutOpolyPlayer(play: OpolyPlay, playerId: string, players: PlayPlayer[]): OpolyPlay {
   const owned: Record<string, string> = {};
   const houses: Record<string, number> = {};
   for (const [propertyId, owner] of Object.entries(play.owned)) {
@@ -1125,7 +1138,7 @@ export function withoutMonopolyPlayer(play: MonopolyPlay, playerId: string, play
   };
 }
 
-export function turnPrompt(play: MonopolyPlay, players: PlayPlayer[]): string {
+export function turnPrompt(play: OpolyPlay, players: PlayPlayer[]): string {
   const name = playerName(players, play.turn);
   if (play.pending?.kind === 'buy') {
     const property = getProperty(play.pending.propertyId);

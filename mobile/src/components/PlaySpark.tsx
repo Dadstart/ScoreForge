@@ -164,8 +164,13 @@ const styles = StyleSheet.create({
     fontSize: 34,
     fontWeight: '800',
     letterSpacing: -0.4,
-    textShadowColor: 'rgba(0, 0, 0, 0.55)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 8,
+    ...Platform.select({
+      web: { textShadow: '0px 2px 8px rgba(0, 0, 0, 0.55)' },
+      default: {
+        textShadowColor: 'rgba(0, 0, 0, 0.55)',
+        textShadowOffset: { width: 0, height: 2 },
+        textShadowRadius: 8,
+      },
+    }),
   },
 });

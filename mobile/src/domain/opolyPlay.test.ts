@@ -1,33 +1,34 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import type { DiceRoll } from './monopolyDice';
+import type { DiceRoll } from './opolyDice';
 import {
   buildHouse,
   buyProperty,
   canBuild,
-  createMonopolyPlay,
+  createOpolyPlay,
   declineProperty,
   moneyFromSquare,
   mortgageProperty,
   acceptCard,
   landedPropertyId,
+  normalizeOpolyPlay,
   payDue,
   rentDue,
   resolveRoll,
   turnPrompt,
-  undoMonopoly,
+  undoOpoly,
   useJailCard,
-  type MonopolyPlay,
+  type OpolyPlay,
   type PlayPlayer,
-} from './monopolyPlay';
-import { CHANCE_CARD_IDS, CHEST_CARD_IDS, cardCopy } from './monopolyCards';
+} from './opolyPlay';
+import { CHANCE_CARD_IDS, CHEST_CARD_IDS, cardCopy } from './opolyCards';
 
 const players: PlayPlayer[] = [
   { id: 'ada', name: 'Ada' },
   { id: 'bea', name: 'Bea' },
 ];
 
-function offeredProperty(play: MonopolyPlay | undefined): string | undefined {
+function offeredProperty(play: OpolyPlay | undefined): string | undefined {
   return play?.pending?.kind === 'buy' ? play.pending.propertyId : undefined;
 }
 
@@ -35,8 +36,8 @@ function roll(first: number, second: number): DiceRoll {
   return { faces: [first, second], total: first + second, doubles: first === second };
 }
 
-function table(partial: Partial<MonopolyPlay> = {}): MonopolyPlay {
-  return { ...createMonopolyPlay(['ada', 'bea'], () => 0), undo: null, ...partial };
+function table(partial: Partial<OpolyPlay> = {}): OpolyPlay {
+  return { ...createOpolyPlay(['ada', 'bea'], () => 0), undo: null, ...partial };
 }
 
 describe('monopoly play', () => {
@@ -46,7 +47,7 @@ describe('monopoly play', () => {
     assert.equal(offeredProperty(moved.play), 'mediterranean');
     assert.equal(moved.events.reduce((sum, event) => sum + event.points, 0), 200);
     assert.match(moved.note, /passing GO/);
-    assert.match(moved.note, /Mediterranean Avenue/);
+    assert.match(moved.note, /can buy A for/);
     assert.deepEqual(moved.route?.spaces, [39, 0, 1]);
 
     const bought = buyProperty(moved.play, moved.tokens, players, 1700);
@@ -147,7 +148,7 @@ describe('monopoly play', () => {
     assert.ok(!('error' in paid));
     if ('error' in paid) return;
     assert.equal(paid.events.find((event) => event.playerId === 'ada')?.points, -50);
-    assert.match(accepted.note, /Boardwalk/);
+    assert.match(accepted.note, /Advance to V/);
     assert.equal(accepted.route?.spaces[0], 7);
     assert.equal(accepted.route?.spaces.at(-1), 39);
     assert.ok((accepted.route?.spaces.length ?? 0) > 12);
@@ -173,17 +174,17 @@ describe('monopoly play', () => {
     const bought = buyProperty(moved.play, moved.tokens, players, 1700);
     assert.ok(!('error' in bought));
     if ('error' in bought) return;
-    const undoneBuy = undoMonopoly(bought.play, [...moved.events, ...bought.events]);
+    const undoneBuy = undoOpoly(bought.play, [...moved.events, ...bought.events]);
     assert.ok(undoneBuy);
     assert.equal(undoneBuy?.play.owned.mediterranean, undefined);
     assert.equal(offeredProperty(undoneBuy?.play), 'mediterranean');
     assert.equal(undoneBuy?.events.length, moved.events.length);
-    const chained = undoMonopoly(undoneBuy!.play, undoneBuy!.events);
+    const chained = undoOpoly(undoneBuy!.play, undoneBuy!.events);
     assert.equal(chained?.tokens.ada, 39);
     assert.equal(chained?.play.pending, null);
     assert.equal(chained?.events.length, 0);
 
-    const undoneRoll = undoMonopoly(moved.play, moved.events);
+    const undoneRoll = undoOpoly(moved.play, moved.events);
     assert.equal(undoneRoll?.tokens.ada, 39);
     assert.equal(undoneRoll?.events.length, 0);
   });
@@ -311,4 +312,49 @@ describe('monopoly play', () => {
     assert.equal(passed.play.owned.reading, undefined);
     assert.equal(passed.play.turn, 'bea');
   });
+
+  it('ends the turn after buying or passing when the undo history is very deep', () => {
+    let prior: OpolyPlay['undo'] = null;
+    for (let step = 0; step < 40; step += 1) {
+      prior = {
+        turn: 'ada',
+        doubles: 0,
+        jail: {},
+        owned: {},
+        houses: {},
+        mortgaged: [],
+        chance: ['go'],
+        chest: ['go'],
+        chanceFree: {},
+        chestFree: {},
+        pending: null,
+        tokens: { ada: 0 },
+        events: 0,
+        prior,
+      };
+    }
+    const loaded = normalizeOpolyPlay(table({ undo: prior }), ['ada', 'bea']);
+    assert.ok(loaded);
+    if (!loaded) return;
+    assert.ok(nestingDepth({ monopoly: loaded }) <= 20);
+    const moved = resolveRoll(loaded, { ada: 0 }, players, roll(2, 3));
+    const passed = declineProperty(moved.play, moved.tokens, players);
+    const bought = buyProperty(moved.play, moved.tokens, players, 1500);
+    assert.ok(!('error' in passed));
+    assert.ok(!('error' in bought));
+    if ('error' in passed || 'error' in bought) return;
+    assert.equal(passed.play.turn, 'bea');
+    assert.equal(bought.play.turn, 'bea');
+    assert.equal(passed.play.pending, null);
+    assert.equal(bought.play.pending, null);
+    assert.ok(nestingDepth({ monopoly: passed.play }) <= 20);
+    assert.ok(nestingDepth({ monopoly: bought.play }) <= 20);
+  });
 });
+
+function nestingDepth(value: unknown, depth = 0): number {
+  if (value == null || typeof value !== 'object') return depth;
+  const next = depth + 1;
+  if (Array.isArray(value)) return value.reduce((max, item) => Math.max(max, nestingDepth(item, next)), next);
+  return Object.values(value).reduce((max, item) => Math.max(max, nestingDepth(item, next)), next);
+}

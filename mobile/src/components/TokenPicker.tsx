@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { PLAYER_TOKENS, emojiFieldValue, playerToken, singleEmoji } from '../domain/monopoly';
+import { PLAYER_TOKENS, emojiFieldValue, playerToken, singleEmoji } from '../domain/opoly';
 import { colors, fonts, radii, typography } from '../theme';
 import { Field } from './ui';
 

@@ -1,20 +1,20 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { boardStep, rollMonopolyDice } from './monopolyDice';
+import { boardStep, rollOpolyDice } from './opolyDice';
 
 describe('monopoly dice', () => {
   it('rolls two faces from 1 to 6', () => {
-    const low = rollMonopolyDice(() => 0);
+    const low = rollOpolyDice(() => 0);
     assert.deepEqual(low.faces, [1, 1]);
     assert.equal(low.total, 2);
     assert.equal(low.doubles, true);
 
-    const high = rollMonopolyDice(() => 0.999);
+    const high = rollOpolyDice(() => 0.999);
     assert.deepEqual(high.faces, [6, 6]);
     assert.equal(high.total, 12);
     assert.equal(high.doubles, true);
 
-    const mixed = rollMonopolyDice(() => 0.5);
+    const mixed = rollOpolyDice(() => 0.5);
     assert.equal(mixed.faces[0], 4);
     assert.equal(mixed.doubles, true);
   });

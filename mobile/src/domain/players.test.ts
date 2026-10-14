@@ -25,12 +25,12 @@ describe('players', () => {
     assert.throws(() => withAddedPlayer(full, 'Ed', 4), /maximum of 4/);
   });
 
-  it('gives the Monopoly host the first piece', () => {
+  it('gives the Opoly host the first piece', () => {
     assert.equal(openingPlayer('monopoly', 'Ada').token, 'car');
     assert.equal(openingPlayer('rounds', 'Ada').token, undefined);
   });
 
-  it('gives a new Monopoly player the first free token', () => {
+  it('gives a new Opoly player the first free token', () => {
     const game = fresh('monopoly');
     const host = game.players[0];
     assert.ok(host);

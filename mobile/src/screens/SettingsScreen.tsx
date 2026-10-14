@@ -50,7 +50,7 @@ export function SettingsScreen({ navigation, route }: Props) {
       <View style={styles.screen}>
         {game && template ? (
           <View style={styles.group}>
-            <Text style={typography.section}>Monopoly</Text>
+            <Text style={typography.section}>Opoly</Text>
             <Card>
               <View style={styles.actions}>
                 <Button label="Reset" onPress={() => void resetGame()} />

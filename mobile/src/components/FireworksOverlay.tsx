@@ -79,8 +79,7 @@ export function FireworksOverlay({ winnerName, subtitle = 'ScoreForge', onDismis
         </Animated.View>
 
         <Animated.View
-          pointerEvents="box-none"
-          style={[styles.buttonBar, { opacity: entrance, bottom: Math.max(24, insets.bottom + 16) }]}
+          style={[styles.buttonBar, { opacity: entrance, bottom: Math.max(24, insets.bottom + 16) }, { pointerEvents: 'box-none' }]}
         >
           <Pressable style={styles.btn} onPress={onDismiss}>
             <Text style={styles.btnText}>Continue</Text>
@@ -115,7 +114,7 @@ function FireworkField({ width, height }: { width: number; height: number }) {
   }, [show]);
 
   return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+    <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
       <Svg width={width} height={height}>
         {scene.stars.map((star, index) => (
           <Circle
@@ -183,18 +182,28 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: -0.4,
     textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.8)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 12,
+    ...Platform.select({
+      web: { textShadow: '0px 2px 12px rgba(0, 0, 0, 0.8)' },
+      default: {
+        textShadowColor: 'rgba(0, 0, 0, 0.8)',
+        textShadowOffset: { width: 0, height: 2 },
+        textShadowRadius: 12,
+      },
+    }),
   },
   sub: {
     fontFamily: fonts.body,
     color: colors.accent,
     fontSize: 18,
     fontWeight: '600',
-    textShadowColor: 'rgba(0, 0, 0, 0.7)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 8,
+    ...Platform.select({
+      web: { textShadow: '0px 1px 8px rgba(0, 0, 0, 0.7)' },
+      default: {
+        textShadowColor: 'rgba(0, 0, 0, 0.7)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 8,
+      },
+    }),
   },
   buttonBar: {
     position: 'absolute',

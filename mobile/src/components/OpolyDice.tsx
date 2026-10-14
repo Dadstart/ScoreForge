@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, Platform, StyleSheet, View } from 'react-native';
+import { diceHopPoints, diceRollCurves, monopolyDieSize, type BoardView, type Point } from '../domain/opolyBoard';
 
 const ROLL_MS = 1700;
 
@@ -11,8 +12,6 @@ const PIPS: Record<number, boolean[]> = {
   5: [true, false, true, false, true, false, true, false, true],
   6: [true, false, true, true, false, true, true, false, true],
 };
-
-type Point = { x: number; y: number };
 
 let nativeReduced = false;
 if (Platform.OS !== 'web') {
@@ -35,22 +34,51 @@ export function diceMotionMs(): number {
 
 type Roll = { id: number; faces: [number, number] };
 
-export function MonopolyDice({ roll }: { roll: Roll }) {
+export function OpolyDice({
+  roll,
+  view,
+  boardSize = 0,
+}: {
+  roll: Roll;
+  /** Null until the on-screen board rect for this roll is known. */
+  view?: BoardView | null;
+  /** Board canvas size. The visible rect uses this same coordinate space. */
+  boardSize?: number;
+}) {
   const [box, setBox] = useState({ width: 0, height: 0 });
+  const flight = useRef<{
+    id: number;
+    board: number;
+    curves: [Point, Point, Point, Point][];
+    view?: BoardView;
+  } | null>(null);
+  const measured = Math.min(box.width, box.height);
+  const board = boardSize > 0 ? boardSize : measured;
+  if (board > 0 && view && flight.current?.id !== roll.id) {
+    flight.current = {
+      id: roll.id,
+      board,
+      curves: diceRollCurves(board, monopolyDieSize(board), Math.random, view),
+      view,
+    };
+  }
+  const ready = flight.current?.id === roll.id ? flight.current : null;
+  const curves = ready?.curves ?? null;
+  const landedView = ready?.view;
+  const flightBoard = ready?.board ?? board;
   return (
     <View
-      pointerEvents="none"
-      style={styles.layer}
+      style={[styles.layer, { pointerEvents: 'none' }]}
       accessibilityLabel={`Dice showing ${roll.faces[0]} and ${roll.faces[1]}`}
       onLayout={(event) => {
         const { width, height } = event.nativeEvent.layout;
         setBox((current) => (current.width === width && current.height === height ? current : { width, height }));
       }}
     >
-      {box.width > 0 ? (
+      {curves ? (
         <>
-          <TravelDie face={roll.faces[0]} rollId={roll.id} box={box} lane={0} delay={0} />
-          <TravelDie face={roll.faces[1]} rollId={roll.id} box={box} lane={1} delay={160} />
+          <TravelDie face={roll.faces[0]} rollId={roll.id} board={flightBoard} curve={curves[0]} lane={0} delay={0} view={landedView} />
+          <TravelDie face={roll.faces[1]} rollId={roll.id} board={flightBoard} curve={curves[1]} lane={1} delay={160} view={landedView} />
         </>
       ) : null}
     </View>
@@ -60,20 +88,24 @@ export function MonopolyDice({ roll }: { roll: Roll }) {
 function TravelDie({
   face,
   rollId,
-  box,
+  board,
+  curve,
   lane,
   delay,
+  view,
 }: {
   face: number;
   rollId: number;
-  box: { width: number; height: number };
+  board: number;
+  curve: [Point, Point, Point, Point];
   lane: number;
   delay: number;
+  view?: BoardView;
 }) {
   const progress = useRef(new Animated.Value(diceMotionMs() === 0 ? 1 : 0)).current;
   const [shown, setShown] = useState(face);
-  const size = Math.max(42, Math.min(68, Math.round(Math.min(box.width, box.height) * 0.12)));
-  const points = hopPath(track(lane), box.width, box.height);
+  const size = monopolyDieSize(board);
+  const points = diceHopPoints(curve, board, view);
   const input = points.map((_, index) => index / (points.length - 1));
   const travelX = progress.interpolate({
     inputRange: input,
@@ -112,7 +144,7 @@ function TravelDie({
       delay,
       easing: Easing.out(Easing.cubic),
       isInteraction: false,
-      useNativeDriver: Platform.OS !== 'web',
+      useNativeDriver: false,
     });
     animation.start();
     return () => {
@@ -126,6 +158,8 @@ function TravelDie({
     <Animated.View
       style={{
         position: 'absolute',
+        left: 0,
+        top: 0,
         width: size,
         height: size,
         transform: [{ translateX: travelX }, { translateY: travelY }, { rotate: spin }],
@@ -143,38 +177,6 @@ function TravelDie({
       </View>
     </Animated.View>
   );
-}
-
-function track(lane: number): [Point, Point, Point, Point] {
-  if (lane === 0) {
-    return [
-      { x: -0.06, y: 0.78 },
-      { x: 0.22, y: 0.18 },
-      { x: 0.88, y: 0.28 },
-      { x: 0.38, y: 0.6 },
-    ];
-  }
-  return [
-    { x: -0.02, y: 0.92 },
-    { x: 0.4, y: 0.84 },
-    { x: 0.96, y: 0.42 },
-    { x: 0.52, y: 0.66 },
-  ];
-}
-
-function hopPath(curve: [Point, Point, Point, Point], width: number, height: number): Point[] {
-  const [a, b, c, d] = curve;
-  const steps = 20;
-  const points: Point[] = [];
-  for (let index = 0; index <= steps; index += 1) {
-    const t = index / steps;
-    const u = 1 - t;
-    const x = u * u * u * a.x + 3 * u * u * t * b.x + 3 * u * t * t * c.x + t * t * t * d.x;
-    const y = u * u * u * a.y + 3 * u * u * t * b.y + 3 * u * t * t * c.y + t * t * t * d.y;
-    const bounce = Math.sin(t * Math.PI * 4) * (1 - t) * 0.07;
-    points.push({ x: x * width, y: (y - bounce) * height });
-  }
-  return points;
 }
 
 const styles = StyleSheet.create({

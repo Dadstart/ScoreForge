@@ -3,11 +3,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const SETTINGS_KEY = 'scoreforge.settings';
 
 export type Settings = {
-  showMonopolyBoard: boolean;
+  showOpolyBoard: boolean;
 };
 
 export const defaultSettings: Settings = {
-  showMonopolyBoard: false,
+  showOpolyBoard: false,
 };
 
 type Listener = (settings: Settings) => void;
@@ -28,7 +28,7 @@ function parseSettings(raw: string | null): Settings {
     if (!parsed || typeof parsed !== 'object') return { ...defaultSettings };
     return {
       ...defaultSettings,
-      showMonopolyBoard: parsed.showMonopolyBoard === true,
+      showOpolyBoard: parsed.showOpolyBoard === true,
     };
   } catch {
     return { ...defaultSettings };
