@@ -114,6 +114,41 @@ export function getProperty(id: string): BoardProperty | undefined {
   return properties.find((property) => property.id === id);
 }
 
+/** Ink that stays readable on a board color bar. Light bars get dark type. */
+export function contrastInk(swatch: string): string {
+  const hex = swatch.replace('#', '');
+  const r = Number.parseInt(hex.slice(0, 2), 16);
+  const g = Number.parseInt(hex.slice(2, 4), 16);
+  const b = Number.parseInt(hex.slice(4, 6), 16);
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum > 0.62 ? '#1a1408' : '#f7f1e6';
+}
+
+const propertyByName = new Map(properties.map((property) => [property.name, property]));
+
+const propertyMentionPattern = new RegExp(
+  `(?<![\\p{L}\\p{N}])(?:${[...properties]
+    .sort((a, b) => b.name.length - a.name.length || a.name.localeCompare(b.name))
+    .map((property) => property.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|')})(?![\\p{L}\\p{N}])`,
+  'gu',
+);
+
+/** Split copy so each property name can be drawn in that space's board color. */
+export function splitPropertyMentions(text: string): { text: string; property: BoardProperty | null }[] {
+  const parts: { text: string; property: BoardProperty | null }[] = [];
+  let cursor = 0;
+  for (const match of text.matchAll(propertyMentionPattern)) {
+    const start = match.index ?? 0;
+    if (start > cursor) parts.push({ text: text.slice(cursor, start), property: null });
+    const name = match[0];
+    parts.push({ text: name, property: propertyByName.get(name) ?? null });
+    cursor = start + name.length;
+  }
+  if (cursor < text.length || parts.length === 0) parts.push({ text: text.slice(cursor), property: null });
+  return parts;
+}
+
 export function formatMoney(amount: number): string {
   const negative = amount < 0;
   const formatted = Math.abs(Math.trunc(amount)).toLocaleString('en-US');

@@ -8,6 +8,7 @@ import {
   playerToken,
   quoteRent,
   singleEmoji,
+  splitPropertyMentions,
   transferEvents,
   withoutLastCashAction,
 } from './opoly';
@@ -113,5 +114,29 @@ describe('monopoly', () => {
     const paid = { ...createScoreEvent('ada', -50), timestamp: '2026-01-01T00:00:01.000Z' };
     const received = { ...createScoreEvent('bea', 50), timestamp: '2026-01-01T00:00:01.000Z' };
     assert.deepEqual(withoutLastCashAction([older, paid, received]), [older]);
+  });
+
+  it('finds property names without coloring words that merely contain them', () => {
+    const buy = splitPropertyMentions('Alex can buy C for $100.');
+    assert.deepEqual(
+      buy.map((part) => [part.text, part.property?.id ?? null]),
+      [
+        ['Alex can buy ', null],
+        ['C', 'oriental'],
+        [' for $100.', null],
+      ],
+    );
+    const letter = splitPropertyMentions('Alex can buy A for $60.');
+    assert.deepEqual(
+      letter.filter((part) => part.property).map((part) => part.text),
+      ['A'],
+    );
+    const utility = splitPropertyMentions('Landed on Electric Company.');
+    assert.equal(utility.find((part) => part.property)?.property?.id, 'electric');
+    const railroad = splitPropertyMentions('Owns 🚂 W and 🚂 X.');
+    assert.deepEqual(
+      railroad.filter((part) => part.property).map((part) => part.property?.id),
+      ['reading', 'pennsylvania-rr'],
+    );
   });
 });

@@ -9,6 +9,7 @@ import { type MoneyFlight } from '../components/MoneyBills';
 import { FireworksOverlay } from '../components/FireworksOverlay';
 import { PlaySpark } from '../components/PlaySpark';
 import { OptionSelect } from '../components/OptionSelect';
+import { PropertyMentions, PropertyName } from '../components/PropertyMention';
 import { TokenPicker } from '../components/TokenPicker';
 import { GameHelp } from '../components/GameHelp';
 import { HomeButton } from '../components/HomeButton';
@@ -528,8 +529,8 @@ export function OpolyScreen({ navigation, route }: Props) {
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <View style={styles.banner}>
-          <Text style={styles.bannerText}>{banner}</Text>
-          {landNote ? <Text style={styles.bannerNote}>{landNote}</Text> : null}
+          <PropertyMentions text={banner} style={styles.bannerText} />
+          {landNote ? <PropertyMentions text={landNote} style={styles.bannerNote} /> : null}
         </View>
         {narrow ? null : tableActions}
         <OpolyBoard
@@ -683,13 +684,10 @@ export function OpolyScreen({ navigation, route }: Props) {
                               ? `${level} house${level === 1 ? '' : 's'}`
                               : null;
                       return (
-                        <View key={entry.id} style={styles.holding}>
-                          <View style={[styles.holdingSwatch, { backgroundColor: entry.swatch }]} />
-                          <Text style={[styles.holdingName, mortgaged && styles.holdingMortgaged]}>
-                            {entry.name}
-                            {detail ? <Text style={styles.holdingDetail}>{` · ${detail}`}</Text> : null}
-                          </Text>
-                        </View>
+                        <Text key={entry.id} style={styles.holdingName}>
+                          <PropertyName name={entry.name} swatch={entry.swatch} />
+                          {detail ? <Text style={styles.holdingDetail}>{` · ${detail}`}</Text> : null}
+                        </Text>
                       );
                     })
                   )}
@@ -861,7 +859,8 @@ export function OpolyScreen({ navigation, route }: Props) {
               return (
                 <View key={entry.id} style={styles.deed}>
                   <Text style={styles.cardTitle}>
-                    {entry.name} · {owner ? playerLabel(owner.name, owner.token) : 'Owner'} · {status}
+                    <PropertyName name={entry.name} swatch={entry.swatch} />
+                    {` · ${owner ? playerLabel(owner.name, owner.token) : 'Owner'} · ${status}`}
                   </Text>
                   {yours && canDevelop ? (
                     <View style={styles.row}>
@@ -984,10 +983,9 @@ function RentLookup({
   return (
     <Card style={styles.panel}>
       <Text style={[typography.section, styles.centerText]}>Rent lookup</Text>
-      <View style={styles.rentTitle}>
-        <View style={[styles.rentSwatch, { backgroundColor: property.swatch }]} />
-        <Text style={styles.rentName}>{property.name}</Text>
-      </View>
+      <Text style={styles.rentName}>
+        <PropertyName name={property.name} swatch={property.swatch} />
+      </Text>
       <Text style={styles.rentPreview}>{summary}</Text>
       {lines.map((line) => (
         <View key={line.label} style={[styles.rentRow, line.active && styles.rentRowActive]}>
@@ -1093,6 +1091,7 @@ const styles = StyleSheet.create({
   bannerNote: {
     ...typography.label,
     fontSize: 13,
+    lineHeight: 20,
     color: colors.textDim,
     textAlign: 'center',
     alignSelf: 'stretch',
@@ -1113,7 +1112,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
   },
-  bannerText: { ...typography.label, fontSize: 15, textAlign: 'center', alignSelf: 'stretch' },
+  bannerText: { ...typography.label, fontSize: 15, lineHeight: 24, textAlign: 'center', alignSelf: 'stretch' },
   row: { alignSelf: 'stretch', flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
   error: { color: colors.danger, textAlign: 'center', alignSelf: 'stretch' },
   wrap: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: 'center' },
@@ -1141,6 +1140,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     ...typography.label,
     fontSize: 15,
+    lineHeight: 24,
     textAlign: 'center',
   },
   cash: {
@@ -1151,30 +1151,15 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     gap: 4,
   },
-  holding: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 6,
-  },
-  holdingSwatch: {
-    width: 8,
-    height: 14,
-    borderRadius: 2,
-    marginTop: 2,
-  },
   holdingName: {
     ...typography.label,
-    flex: 1,
     fontSize: 12,
-    lineHeight: 16,
+    lineHeight: 18,
     textAlign: 'left',
   },
   holdingDetail: {
     color: colors.textDim,
     fontWeight: '600',
-  },
-  holdingMortgaged: {
-    color: colors.muted,
   },
   holdingEmpty: {
     ...typography.label,
@@ -1222,8 +1207,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     alignSelf: 'stretch',
   },
-  rentTitle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  rentSwatch: { width: 18, height: 18, borderRadius: 4, borderWidth: 1, borderColor: colors.border },
   rentName: { ...typography.label, fontSize: 16 },
   rentRow: {
     alignSelf: 'stretch',

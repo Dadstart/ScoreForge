@@ -41,7 +41,7 @@ import {
   visibleBoardRect,
   type BoardView,
 } from '../domain/opolyBoard';
-import { getProperty, playerLabel, playerToken } from '../domain/opoly';
+import { contrastInk, getProperty, playerLabel, playerToken } from '../domain/opoly';
 import { facingPropertyLabel, fitBoardLabel, fitSize } from '../domain/opolyLabel';
 import { clampPan, clampZoom, panForZoom, stepZoom } from '../domain/opolyZoom';
 import { diceMotionMs, OpolyDice } from './OpolyDice';
@@ -822,7 +822,7 @@ function BoardCanvas({
                       >
                         <Text
                           style={{
-                            color: inkOn(barColor),
+                            color: contrastInk(barColor),
                             fontFamily: fonts.body,
                             fontWeight: '800',
                             fontSize: barNameSize,
@@ -1267,15 +1267,6 @@ function GoToJailCorner({ cell, detail }: { cell: number; detail: boolean }) {
       ) : null}
     </View>
   );
-}
-
-function inkOn(swatch: string) {
-  const hex = swatch.replace('#', '');
-  const r = Number.parseInt(hex.slice(0, 2), 16);
-  const g = Number.parseInt(hex.slice(2, 4), 16);
-  const b = Number.parseInt(hex.slice(4, 6), 16);
-  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return lum > 0.62 ? '#1a1408' : '#f7f1e6';
 }
 
 function trainExtent(cell: number, col: number, detail: boolean) {
