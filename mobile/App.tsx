@@ -52,8 +52,32 @@ function useWebFonts() {
   }, []);
 }
 
+function useUnselectableText() {
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const id = 'scoreforge-unselectable';
+    if (document.getElementById(id)) return;
+    const style = document.createElement('style');
+    style.id = id;
+    style.textContent = `
+      html, body, #root {
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+      }
+      input, textarea, [contenteditable="true"] {
+        -webkit-user-select: text;
+        user-select: text;
+        -webkit-touch-callout: default;
+      }
+    `;
+    document.head.appendChild(style);
+  }, []);
+}
+
 export default function App() {
   useWebFonts();
+  useUnselectableText();
 
   return (
     <SafeAreaProvider>
