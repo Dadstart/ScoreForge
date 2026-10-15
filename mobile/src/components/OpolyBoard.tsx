@@ -134,6 +134,28 @@ function dockLift(board: number, panY: number, frameHeight: number) {
   return Math.max(0, Math.round(frameHeight - bottom) - 4);
 }
 
+/**
+ * Empty pixels above the tilted board. The square frame is tall enough for the
+ * near corners; the far edge sits well below the top of that square.
+ */
+function boardTopGap(board: number, turnDeg: number, panY: number) {
+  if (board <= 0) return 0;
+  const rad = (turnDeg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const half = board / 2;
+  let top = Infinity;
+  for (const cx of [-half, half]) {
+    for (const cy of [-half, half]) {
+      const x = cx * cos - cy * sin;
+      const y = cx * sin + cy * cos;
+      const projected = projectTablePoint(x, y, board).y;
+      if (projected < top) top = projected;
+    }
+  }
+  return Math.max(0, Math.round(panY + half + top) - 2);
+}
+
 const VIEW_FRAME = 0;
 
 function touchDistance(a: { pageX: number; pageY: number }, b: { pageX: number; pageY: number }) {
@@ -174,6 +196,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
   const setPageScrollRef = useRef(setPageScroll);
   const boardTurn = useRef(new Animated.Value(0)).current;
   const boardTurnRef = useRef(0);
+  const topCrop = useRef(new Animated.Value(0)).current;
   const boardTurnAnim = useRef<Animated.CompositeAnimation | null>(null);
   const boardSpin = useMemo(
     () => boardTurn.interpolate({
@@ -249,6 +272,17 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
       },
     }),
   ).current;
+
+  useLayoutEffect(() => {
+    const apply = (turn: number) => {
+      const zoomNow = zoomRef.current;
+      const board = viewportRefSize.current * zoomNow;
+      topCrop.setValue(zoomNow > 1 ? 0 : boardTopGap(board, turn, panRef.current.y));
+    };
+    apply(boardTurnRef.current);
+    const id = boardTurn.addListener(({ value }) => apply(value));
+    return () => boardTurn.removeListener(id);
+  }, [boardTurn, topCrop, viewport, zoom, pan.y]);
 
   useEffect(() => {
     onZoomedRef.current?.(zoom > 1);
@@ -455,8 +489,8 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
     };
   }, [diceRoll?.id, viewport > 0]);
 
-  const frameHeight = zoom < 1 ? boardSize : viewport;
-  const lift = dockLift(boardSize, pan.y, frameHeight);
+  const square = zoom < 1 ? boardSize : viewport;
+  const lift = dockLift(boardSize, pan.y, square);
   const zoomPair = (
     <>
       <Pressable
@@ -480,12 +514,23 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
 
   return (
     <View style={styles.frame}>
-      <View
+      <Animated.View
+        style={[
+          styles.clip,
+          viewport > 0 ? { height: Animated.subtract(square, topCrop) } : styles.viewportSquare,
+          zoom > 1 && styles.viewportHold,
+        ]}
+      >
+      <Animated.View
         ref={viewportRef}
         style={[
           styles.viewport,
-          zoom < 1 && viewport > 0 ? { height: boardSize } : styles.viewportSquare,
+          viewport > 0 && {
+            height: square,
+            marginTop: Animated.multiply(topCrop, -1),
+          },
           zoom > 1 && styles.viewportHold,
+          preserve3d,
         ]}
         onLayout={(event) => {
           const width = Math.max(0, event.nativeEvent.layout.width - VIEW_FRAME * 2);
@@ -535,7 +580,8 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
             />
           </Animated.View>
         ) : null}
-      </View>
+      </Animated.View>
+      </Animated.View>
       <View style={[styles.actionBar, lift > 0 && { marginTop: -lift }, { pointerEvents: 'box-none' }]}>
         {renderRoll(roll, true)}
         <View style={styles.zoomRow}>{zoomPair}</View>
@@ -1918,6 +1964,7 @@ function Piece({
 
 const styles = StyleSheet.create({
   frame: { width: '100%', alignSelf: 'stretch', gap: 8 },
+  clip: { width: '100%', overflow: 'hidden' },
   viewport: {
     width: '100%',
     overflow: 'hidden',
