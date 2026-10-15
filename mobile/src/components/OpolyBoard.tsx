@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import type { Player } from '../domain/models';
+import { boardCamera, projectTiltedPoint } from '../domain/dieProjection';
 import {
   boardSpaces,
   boardViewForTurn,
@@ -43,7 +44,7 @@ import {
 import { contrastInk, getProperty, playerLabel, playerToken } from '../domain/opoly';
 import { facingPropertyLabel, fitBoardLabel, fitSize } from '../domain/opolyLabel';
 import { clampPan, clampZoom, panForZoom, stepZoom } from '../domain/opolyZoom';
-import { diceMotionMs, OpolyDice } from './OpolyDice';
+import { diceMotionMs, diceUseFlatCamera, FlatDice, OpolyDice } from './OpolyDice';
 import { CARD_REVEAL_MS, OpolyCardTable } from './OpolyCards';
 import { MoneyBills, type MoneyFlight } from './MoneyBills';
 import { colors, fonts, radii } from '../theme';
@@ -88,7 +89,6 @@ type Props = {
 
 /** Table angle. The near edge, where the piece is walking, is the large one. */
 const BOARD_TILT = '50deg';
-const BOARD_TILT_RAD = (50 * Math.PI) / 180;
 /** Spin back to the player whose turn it is, slow enough to keep the dice in view. */
 const RETURN_MS = 1200;
 const RETURN_EASE = Easing.bezier(0.42, 0.02, 0.18, 1);
@@ -102,15 +102,11 @@ const preserve3d = { transformStyle: 'preserve-3d' } as ViewStyle;
  * stay inside the square frame.
  */
 function boardPerspective(board: number) {
-  return Math.max(900, board * 1.85);
+  return boardCamera(board).perspective;
 }
 
 function boardFitScale(board: number) {
-  if (board <= 0) return 1;
-  const perspective = boardPerspective(board);
-  const margin = 0.92;
-  const sin = Math.sin(BOARD_TILT_RAD);
-  return Math.min(1, (margin * perspective) / (perspective + (margin / 2) * board * sin));
+  return boardCamera(board).scale;
 }
 
 /**
@@ -118,13 +114,8 @@ function boardFitScale(board: number) {
  * board. x and y are origin-centered board pixels after the quarter turn.
  */
 function projectTablePoint(x: number, y: number, board: number) {
-  const scale = boardFitScale(board);
-  const perspective = boardPerspective(board);
-  const w = 1 - (scale * y * Math.sin(BOARD_TILT_RAD)) / perspective;
-  return {
-    x: (scale * x) / w,
-    y: (scale * y * Math.cos(BOARD_TILT_RAD)) / w - board * 0.04,
-  };
+  const point = projectTiltedPoint(x, y, 0, board);
+  return { x: point.x, y: point.y };
 }
 
 /** How far the buttons can rise before they meet the near edge of the tilted board. */
@@ -572,7 +563,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
               onArrive={(space, duration) => faceSpaceRef.current(space, duration)}
               onWalkEnd={onWalkEnd}
               diceRoll={props.cardOffer ? null : diceRoll}
-              pinDice
+              pinDice={!diceUseFlatCamera()}
               diceBoard={boardSize}
               diceView={diceView}
               diceTurn={boardTurn}
@@ -582,6 +573,28 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
         ) : null}
       </Animated.View>
       </Animated.View>
+      {diceUseFlatCamera() && diceRoll && boardSize > 0 && square > 0 ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.flatDice,
+            {
+              height: square,
+              top: Animated.multiply(topCrop, -1),
+            },
+          ]}
+        >
+          <FlatDice
+            roll={diceRoll}
+            view={diceView}
+            boardSize={boardSize}
+            pan={pan}
+            turn={boardTurn}
+            width={viewport}
+            height={square}
+          />
+        </Animated.View>
+      ) : null}
       <View style={[styles.actionBar, lift > 0 && { marginTop: -lift }, { pointerEvents: 'box-none' }]}>
         {renderRoll(roll, true)}
         <View style={styles.zoomRow}>{zoomPair}</View>
@@ -1963,7 +1976,15 @@ function Piece({
 }
 
 const styles = StyleSheet.create({
-  frame: { width: '100%', alignSelf: 'stretch', gap: 8 },
+  frame: { width: '100%', alignSelf: 'stretch', gap: 8, position: 'relative' },
+  flatDice: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    zIndex: 30,
+    overflow: 'visible',
+  },
   clip: { width: '100%', overflow: 'hidden' },
   viewport: {
     width: '100%',
