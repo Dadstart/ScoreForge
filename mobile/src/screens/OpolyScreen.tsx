@@ -37,6 +37,7 @@ import {
 } from '../domain/opoly';
 import { diceSettleMs } from '../components/OpolyDice';
 import { playDiceRoll, prepareDiceRoll } from '../audio/diceRollSound';
+import { useShake } from '../sensors/useShake';
 import { rollOpolyDice, type DiceRoll } from '../domain/opolyDice';
 import {
   buildHouse,
@@ -216,6 +217,15 @@ export function OpolyScreen({ navigation, route }: Props) {
     setGame((current) => preferNewerGame(current, saved));
   };
 
+  const rollForPlayerRef = useRef<() => void>(() => {});
+  const canShakeRef = useRef(false);
+  canShakeRef.current =
+    Boolean(play) && snapshot != null && !snapshot.isComplete && !addingPlayer && editingPlayerId == null;
+  useShake(() => {
+    if (!canShakeRef.current) return;
+    rollForPlayerRef.current();
+  }, Boolean(play) && snapshot != null && !snapshot.isComplete);
+
   if (!game || !template || !snapshot || !play) {
     return (
       <Screen>
@@ -350,6 +360,7 @@ export function OpolyScreen({ navigation, route }: Props) {
       setRollingDice(false);
     }, diceSettleMs());
   };
+  rollForPlayerRef.current = rollForPlayer;
 
   const beginPlayerEdit = (playerId: string, name: string, cash: number, token?: string | null) => {
     setEditingPlayerId(playerId);
