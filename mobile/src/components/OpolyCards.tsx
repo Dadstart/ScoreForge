@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import Svg, { Path, Rect } from 'react-native-svg';
 import { cardCopy, type CardDeck } from '../domain/opolyCards';
 import { DECK_TILT, TRACK_DEPTH, deckPileLayout } from '../domain/opolyBoard';
@@ -20,18 +20,31 @@ type Props = {
   chestCount: number;
   face: FaceCard | null;
   onAccept?: () => void;
+  /** Board spin in degrees. Cards counter-rotate so their bottoms stay on the near edge. */
+  turn?: Animated.Value | null;
 };
 
-export function OpolyCardTable({ boardSize, chanceCount, chestCount, face, onAccept }: Props) {
+export function OpolyCardTable({ boardSize, chanceCount, chestCount, face, onAccept, turn = null }: Props) {
   const center = boardSize * (1 - 2 * TRACK_DEPTH);
   const origin = boardSize * TRACK_DEPTH;
   const piles = deckPileLayout(boardSize);
   const faceLeft = face?.deck === 'chance' ? piles.chanceLeft : piles.chestLeft;
   const faceTop = face?.deck === 'chance' ? piles.chanceTop : piles.chestTop;
 
+  const facing = useFacingBottom(turn);
   return (
     <View
-      style={[styles.table, { left: origin, top: origin, width: center, height: center }, { pointerEvents: 'box-none' }]}
+      style={[
+        styles.table,
+        preserve3d,
+        {
+          left: origin,
+          top: origin,
+          width: center,
+          height: center,
+        },
+        { pointerEvents: 'box-none' },
+      ]}
     >
       <CardPile
         deck="chest"
@@ -41,6 +54,7 @@ export function OpolyCardTable({ boardSize, chanceCount, chestCount, face, onAcc
         left={piles.chestLeft}
         top={piles.chestTop}
         angle={-DECK_TILT}
+        facing={facing}
       />
       <CardPile
         deck="chance"
@@ -50,6 +64,7 @@ export function OpolyCardTable({ boardSize, chanceCount, chestCount, face, onAcc
         left={piles.chanceLeft}
         top={piles.chanceTop}
         angle={DECK_TILT}
+        facing={facing}
       />
       {face ? (
         <FlippedCard
@@ -62,12 +77,29 @@ export function OpolyCardTable({ boardSize, chanceCount, chestCount, face, onAcc
           pileLeft={faceLeft}
           pileTop={faceTop}
           angle={face.deck === 'chance' ? DECK_TILT : -DECK_TILT}
+          facing={facing}
           onAccept={onAccept}
         />
       ) : null}
     </View>
   );
 }
+
+/** Inverse of the board spin, so a card's bottom stays toward the near edge. */
+function useFacingBottom(turn: Animated.Value | null) {
+  return useMemo(
+    () =>
+      turn
+        ? turn.interpolate({
+            inputRange: [-1, 1],
+            outputRange: ['1deg', '-1deg'],
+          })
+        : null,
+    [turn],
+  );
+}
+
+const preserve3d = { transformStyle: 'preserve-3d' } as ViewStyle;
 
 function CardPile({
   deck,
@@ -77,6 +109,7 @@ function CardPile({
   left,
   top,
   angle,
+  facing,
 }: {
   deck: CardDeck;
   count: number;
@@ -85,12 +118,24 @@ function CardPile({
   left: number;
   top: number;
   angle: number;
+  facing: ReturnType<typeof useFacingBottom>;
 }) {
   const layers = Math.max(1, Math.min(LAYERS, count));
+  const tilt = `${angle}deg`;
   return (
-    <View
+    <Animated.View
       accessibilityLabel={deck === 'chance' ? 'Chance deck' : 'Chest deck'}
-      style={[styles.pile, { left, top, width, height, transform: [{ rotate: `${angle}deg` }] }, { pointerEvents: 'none' }]}
+      style={[
+        styles.pile,
+        {
+          left,
+          top,
+          width,
+          height,
+          transform: facing ? [{ rotateZ: facing }, { rotate: tilt }] : [{ rotate: tilt }],
+        },
+        { pointerEvents: 'none' },
+      ]}
     >
       {Array.from({ length: layers }, (_, layer) => {
         const depth = layers - 1 - layer;
@@ -99,11 +144,11 @@ function CardPile({
             key={depth}
             style={[styles.layer, { transform: [{ translateX: depth * 3 }, { translateY: depth * 4 }] }]}
           >
-            <CardBack deck={deck} width={width} height={height} angle={angle} />
+            <CardBack deck={deck} width={width} height={height} />
           </View>
         );
       })}
-    </View>
+    </Animated.View>
   );
 }
 
@@ -116,6 +161,7 @@ function FlippedCard({
   pileLeft,
   pileTop,
   angle,
+  facing,
   onAccept,
 }: {
   deck: CardDeck;
@@ -126,6 +172,7 @@ function FlippedCard({
   pileLeft: number;
   pileTop: number;
   angle: number;
+  facing: ReturnType<typeof useFacingBottom>;
   onAccept?: () => void;
 }) {
   const copy = cardCopy(deck, id);
@@ -182,18 +229,26 @@ function FlippedCard({
     inputRange: [0, 1],
     outputRange: [`${angle}deg`, '0deg'],
   });
+  const pose = [
+    ...(facing ? [{ rotateZ: facing }] : []),
+    { perspective: 900 },
+    { rotate: straighten },
+    { rotateY: spin },
+    { scale },
+  ] as unknown as NonNullable<ViewStyle['transform']>;
 
   return (
     <Animated.View
       accessibilityLabel={`${copy.name}. ${copy.text}`}
       style={[
         styles.flipping,
+        preserve3d,
         {
           left,
           top,
           width: faceWidth,
           height: faceHeight,
-          transform: [{ perspective: 900 }, { rotate: straighten }, { rotateY: spin }, { scale }],
+          transform: pose,
         },
         { pointerEvents: 'box-none' },
       ]}
@@ -208,13 +263,13 @@ function FlippedCard({
           onAccept={onAccept}
         />
       ) : (
-        <CardBack deck={deck} width={faceWidth} height={faceHeight} angle={angle} />
+        <CardBack deck={deck} width={faceWidth} height={faceHeight} />
       )}
     </Animated.View>
   );
 }
 
-function CardBack({ deck, width, height, angle = 0 }: { deck: CardDeck; width: number; height: number; angle?: number }) {
+function CardBack({ deck, width, height }: { deck: CardDeck; width: number; height: number }) {
   const chance = deck === 'chance';
   const radius = Math.round(width * 0.07);
   return (
@@ -233,7 +288,7 @@ function CardBack({ deck, width, height, angle = 0 }: { deck: CardDeck; width: n
         {chance ? (
           <Text style={[styles.mark, { fontSize: width * 0.52, lineHeight: width * 0.56 }]}>?</Text>
         ) : (
-          <ChestGlyph size={width * 0.42} rotate={`${90 - angle}deg`} />
+          <ChestGlyph size={width * 0.42} />
         )}
         <Text style={[styles.backName, { fontSize: Math.max(8, width * 0.09), lineHeight: Math.max(10, width * 0.11) }]}>
           {chance ? 'CHANCE' : 'CHEST'}
@@ -281,10 +336,10 @@ function CardFront({
   );
 }
 
-function ChestGlyph({ size, rotate = '0deg' }: { size: number; rotate?: string }) {
+function ChestGlyph({ size }: { size: number }) {
   const height = size * 0.82;
   return (
-    <View style={{ width: size, height, transform: [{ rotate }] }}>
+    <View style={{ width: size, height }}>
     <Svg width={size} height={height} viewBox="0 0 64 52">
       <Path d="M8 20h48v24a6 6 0 0 1-6 6H14a6 6 0 0 1-6-6V20z" fill="#f6e7c1" />
       <Path d="M6 20c0-8 10-14 26-14s26 6 26 14v4H6v-4z" fill="#f3d48a" />

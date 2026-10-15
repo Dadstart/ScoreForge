@@ -78,8 +78,8 @@ export const properties: BoardProperty[] = [
   railroad('pennsylvania-rr', 'X'),
   railroad('bo', 'Y'),
   railroad('short-line', 'Z'),
-  utility('electric', 'Electric Company'),
-  utility('water', 'Water Works'),
+  utility('electric', 'Power'),
+  utility('water', 'Water'),
 ];
 
 export const RAILROAD_RENTS: Record<RailroadCount, number> = {

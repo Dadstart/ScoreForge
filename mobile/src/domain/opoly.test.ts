@@ -131,7 +131,7 @@ describe('monopoly', () => {
       letter.filter((part) => part.property).map((part) => part.text),
       ['A'],
     );
-    const utility = splitPropertyMentions('Landed on Electric Company.');
+    const utility = splitPropertyMentions('Landed on Power.');
     assert.equal(utility.find((part) => part.property)?.property?.id, 'electric');
     const railroad = splitPropertyMentions('Owns 🚂 W and 🚂 X.');
     assert.deepEqual(

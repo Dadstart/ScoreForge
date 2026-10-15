@@ -95,6 +95,8 @@ const TURN_MS = 420;
 /** Spin back to the player whose turn it is, slow enough to keep the dice in view. */
 const RETURN_MS = 1200;
 const RETURN_EASE = Easing.bezier(0.42, 0.02, 0.18, 1);
+/** After a move finishes, let the landing sit before the board turns. */
+const POST_MOVE_PAUSE_MS = 2000;
 /** Lets dice cubes share the board's camera instead of being flattened first. */
 const preserve3d = { transformStyle: 'preserve-3d' } as ViewStyle;
 
@@ -410,22 +412,49 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
     const motion = diceMotionMs() > 0;
     faceSpaceRef.current(space, motion ? RETURN_MS : 0, motion ? RETURN_EASE : Easing.linear);
   };
+  const turnHold = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearTurnHold = () => {
+    if (!turnHold.current) return;
+    clearTimeout(turnHold.current);
+    turnHold.current = null;
+  };
+  const boardNeedsTurn = (space: number) => {
+    const next = nearestBoardTurn(boardTurnRef.current, space);
+    return Math.abs(next - boardTurnRef.current) >= 1;
+  };
+
+  useEffect(() => () => clearTurnHold(), []);
+
+  useEffect(() => {
+    if ((tokenRoute?.id ?? 0) !== finishedHop.current) clearTurnHold();
+  }, [tokenRoute?.id]);
 
   useEffect(() => {
     if (hopping.current !== 0) return;
     const first = !hasFaced.current;
     hasFaced.current = true;
     if (first) {
+      clearTurnHold();
       faceSpaceRef.current(focusSpace, 0);
       return;
     }
+    if (turnHold.current) return;
     faceCurrent(focusSpace);
   }, [focusSpace]);
 
   const onWalkEnd = () => {
     finishedHop.current = routeIdRef.current;
     hopping.current = 0;
-    faceCurrent(focusRef.current);
+    clearTurnHold();
+    const space = focusRef.current;
+    if (diceMotionMs() === 0 || !boardNeedsTurn(space)) {
+      faceCurrent(space);
+      return;
+    }
+    turnHold.current = setTimeout(() => {
+      turnHold.current = null;
+      faceCurrent(focusRef.current);
+    }, POST_MOVE_PAUSE_MS);
   };
 
   const boardSize = viewport * zoom;
@@ -1082,6 +1111,7 @@ function BoardCanvas({
               : null
           }
           onAccept={cardOffer ? onAcceptCard : undefined}
+          turn={diceTurn}
         />
       ) : null}
       <MoneyBills flight={burst} boardSize={size} />
