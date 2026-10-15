@@ -41,7 +41,7 @@ export const boardSpaces: BoardSpace[] = [
   space(17, 'Chest', 'Chest'),
   space(18, 'J', 'J', { propertyId: 'tennessee' }),
   space(19, 'K', 'K', { propertyId: 'new-york' }),
-  space(20, 'Free Parking', 'Free'),
+  space(20, 'Free Park', 'Free'),
   space(21, 'L', 'L', { propertyId: 'kentucky' }),
   space(22, 'Chance', 'Chance'),
   space(23, 'M', 'M', { propertyId: 'indiana' }),

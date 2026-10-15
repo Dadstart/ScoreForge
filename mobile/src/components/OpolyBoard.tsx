@@ -1124,7 +1124,7 @@ function spaceTint(name: string, kind?: string) {
   if (name === 'Income Tax' || name === 'Luxury Tax') return '#f6e0dc';
   if (kind === 'railroad') return '#e3ebf1';
   if (kind === 'utility') return '#f6f0d2';
-  if (name === 'Go' || name === 'Jail' || name === 'Free Parking' || name === 'Go to Jail') return '#f3ead8';
+  if (name === 'Go' || name === 'Jail' || name === 'Free Park' || name === 'Go to Jail') return '#f3ead8';
   return '#f7f1e6';
 }
 
@@ -1221,7 +1221,7 @@ function ParkingCar({ width, height }: { width: number; height: number }) {
 function FreeParkingCorner({ cell, detail }: { cell: number; detail: boolean }) {
   const pad = Math.round(cell * 0.04);
   const width = cell - pad * 2;
-  const title = displaySize('PARKING', width, Math.round(cell * (detail ? 0.22 : 0.28)));
+  const title = displaySize('PARK', width, Math.round(cell * (detail ? 0.22 : 0.28)));
   const carH = Math.round(cell * (detail ? 0.42 : 0.48));
   return (
     <View style={[styles.corner, { padding: pad }]}>
@@ -1230,7 +1230,7 @@ function FreeParkingCorner({ cell, detail }: { cell: number; detail: boolean }) 
         FREE
       </Text>
       <Text style={[styles.cornerTitle, { fontSize: title, lineHeight: title }]} numberOfLines={1}>
-        PARKING
+        PARK
       </Text>
     </View>
   );
