@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { colors, fonts, radii, typography } from '../theme';
+import { PropertyName } from './PropertyMention';
 
 export type SelectOption = {
   id: string;
@@ -34,10 +35,15 @@ export function OptionSelect({ label, value, options, onChange, disabled, center
         onPress={() => setOpen(true)}
         style={({ pressed }) => [styles.trigger, disabled && styles.disabled, pressed && styles.pressed]}
       >
-        {selected?.swatch ? <View style={[styles.swatch, { backgroundColor: selected.swatch }]} /> : null}
-        <Text style={[styles.value, centered && styles.valueCentered]} numberOfLines={1}>
-          {selected?.label ?? 'Choose'}
-        </Text>
+        <View style={[styles.valueSlot, centered && styles.valueSlotCentered]}>
+          {selected?.swatch ? (
+            <PropertyName name={selected.label} swatch={selected.swatch} />
+          ) : (
+            <Text style={[styles.value, centered && styles.valueCentered]} numberOfLines={1}>
+              {selected?.label ?? 'Choose'}
+            </Text>
+          )}
+        </View>
         <Text style={styles.chevron}>▾</Text>
       </Pressable>
 
@@ -69,17 +75,18 @@ export function OptionSelect({ label, value, options, onChange, disabled, center
                       ]}
                     >
                       {option.swatch ? (
-                        <View style={[styles.swatch, { backgroundColor: option.swatch }]} />
-                      ) : null}
-                      <Text
-                        style={[
-                          styles.optionLabel,
-                          option.ink ? { color: option.ink } : null,
-                          active && !option.ink && styles.optionLabelActive,
-                        ]}
-                      >
-                        {option.label}
-                      </Text>
+                        <PropertyName name={option.label} swatch={option.swatch} />
+                      ) : (
+                        <Text
+                          style={[
+                            styles.optionLabel,
+                            option.ink ? { color: option.ink } : null,
+                            active && !option.ink && styles.optionLabelActive,
+                          ]}
+                        >
+                          {option.label}
+                        </Text>
+                      )}
                     </Pressable>
                   </View>
                 );
@@ -110,21 +117,15 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.88 },
   disabled: { opacity: 0.45 },
   value: {
-    flex: 1,
     fontFamily: fonts.body,
     color: colors.text,
     fontSize: 16,
     fontWeight: '600',
   },
-  valueCentered: { textAlign: 'center' },
+  valueCentered: { textAlign: 'center', alignSelf: 'stretch' },
+  valueSlot: { flex: 1 },
+  valueSlotCentered: { alignItems: 'center' },
   chevron: { color: colors.muted, fontSize: 16 },
-  swatch: {
-    width: 14,
-    height: 14,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.35)',
-  },
   backdrop: {
     flex: 1,
     backgroundColor: colors.overlay,

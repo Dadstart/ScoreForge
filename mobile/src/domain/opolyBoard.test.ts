@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   cellBox,
+  colorBarThickness,
   centerTitleBounds,
   DECK_TILT,
   deckPileLayout,
@@ -15,6 +16,13 @@ import {
   monopolyDieSize,
   ownerMarkPlacement,
   boardTurnForSpace,
+  pointHeldOnTurn,
+  nameFacing,
+  cornerFacing,
+  tokenFacing,
+  tokenFacingDegrees,
+  nearestTokenFacing,
+  placeCornerToken,
   boardViewForTurn,
   nearestBoardTurn,
   spaceToCell,
@@ -40,12 +48,12 @@ function staysOffColorBar(
 ) {
   const corner = (row === 0 || row === 10) && (col === 0 || col === 10);
   if (corner) return true;
-  // Phone squares are only a few dozen pixels across. The emoji needs that whole square.
-  if (Math.min(width, height) < 40) return true;
-  if (row === 10) return spot.y + spot.piece <= height * 0.65;
-  if (row === 0) return spot.y >= height * 0.35;
-  if (col === 0) return spot.x >= width * 0.35;
-  return spot.x + spot.piece <= width * 0.65;
+  const inward = row === 0 || row === 10 ? height : width;
+  const band = colorBarThickness(inward);
+  if (row === 10) return spot.y + 0.5 >= band;
+  if (row === 0) return spot.y + spot.piece <= height - band + 0.5;
+  if (col === 0) return spot.x + spot.piece <= width - band + 0.5;
+  return spot.x + 0.5 >= band;
 }
 
 describe('layoutSharedTokens', () => {
@@ -145,6 +153,69 @@ describe('deckPileLayout', () => {
       }
     });
   }
+});
+
+describe('nameFacing', () => {
+  function facing(index: number) {
+    const { row, col } = spaceToCell(index);
+    return nameFacing(row, col);
+  }
+
+  it('points the bottom of a property name at that side of the board', () => {
+    assert.equal(facing(1), '0deg');
+    assert.equal(facing(21), '180deg');
+    assert.equal(facing(11), '90deg');
+    assert.equal(facing(31), '-90deg');
+  });
+});
+
+describe('cornerFacing', () => {
+  it('points the bottom of each corner at the outer corner of the board', () => {
+    assert.equal(cornerFacing(0), '-45deg');
+    assert.equal(cornerFacing(10), '45deg');
+    assert.equal(cornerFacing(20), '135deg');
+    assert.equal(cornerFacing(30), '-135deg');
+  });
+
+  it('keeps jailed tokens inside the bars after the corner turns', () => {
+    const cell = 100;
+    const box = jailCell(cell);
+    for (const spot of layoutJailedTokens(cell, 4).map((raw) => placeCornerToken(cell, raw, cornerFacing(10)))) {
+      const cx = spot.x + spot.piece / 2;
+      const cy = spot.y + spot.piece / 2;
+      const dx = cx - cell / 2;
+      const dy = cy - cell / 2;
+      const backX = cell / 2 + (dx + dy);
+      const backY = cell / 2 + (dy - dx);
+      assert.ok(backX >= box.x && backX <= box.x + box.width, 'across the jail');
+      assert.ok(backY >= box.y + box.height * 0.36 && backY <= box.y + box.height, 'under the label');
+      assert.ok(spot.x >= -0.01 && spot.y >= -0.01 && spot.x + spot.piece <= cell + 0.01 && spot.y + spot.piece <= cell + 0.01);
+    }
+  });
+});
+
+describe('tokenFacing', () => {
+  it('points the bottom of a token at the outer edge, and at the outer corner on corners', () => {
+    assert.equal(tokenFacing(0), cornerFacing(0));
+    assert.equal(tokenFacing(10), cornerFacing(10));
+    assert.equal(tokenFacing(20), cornerFacing(20));
+    assert.equal(tokenFacing(30), cornerFacing(30));
+    for (const index of [1, 9, 11, 21, 31, 39]) {
+      const { row, col } = spaceToCell(index);
+      assert.equal(tokenFacing(index), nameFacing(row, col));
+    }
+    assert.equal(tokenFacingDegrees(1), 0);
+    assert.equal(tokenFacingDegrees(11), 90);
+    assert.equal(tokenFacingDegrees(21), 180);
+    assert.equal(tokenFacingDegrees(31), -90);
+  });
+
+  it('turns the short way around a corner', () => {
+    assert.equal(nearestTokenFacing(0, 0), -45);
+    assert.equal(nearestTokenFacing(180, 30), 225);
+    assert.equal(nearestTokenFacing(-90, 0), -45);
+    assert.equal(((nearestTokenFacing(180, 30) % 360) + 360) % 360, ((tokenFacingDegrees(30) % 360) + 360) % 360);
+  });
 });
 
 describe('ownerMarkPlacement', () => {
@@ -310,6 +381,18 @@ describe('board facing', () => {
     assert.equal(nearestBoardTurn(-270, 0), -360);
     assert.equal(nearestBoardTurn(0, 30), 90);
     assert.equal(nearestBoardTurn(-90, 15), -90);
+  });
+
+  it('keeps a landed die on the same spot on screen when the board turns', () => {
+    const board = 200;
+    const bottom = { x: 100, y: 180 };
+    assert.deepEqual(pointHeldOnTurn(bottom, 0, 0, board), bottom);
+    const quarter = pointHeldOnTurn(bottom, 0, -90, board);
+    assert.ok(Math.abs(quarter.x - 20) < 1e-9);
+    assert.ok(Math.abs(quarter.y - 100) < 1e-9);
+    const half = pointHeldOnTurn(bottom, -90, 90, board);
+    assert.ok(Math.abs(half.x - 100) < 1e-9);
+    assert.ok(Math.abs(half.y - 20) < 1e-9);
   });
 
   it('maps the on-screen window back through a quarter turn', () => {

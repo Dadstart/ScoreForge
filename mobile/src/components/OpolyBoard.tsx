@@ -20,22 +20,29 @@ import {
   boardSpaces,
   boardViewForTurn,
   cellBox,
+  colorBarThickness,
   centerTitleFont,
   jailCell,
   layoutJailedTokens,
   layoutSharedTokens,
   layoutVisitingTokens,
-  ownerMarkPlacement,
+  nameFacing,
+  cornerFacing,
+  CORNER_FIT,
+  placeCornerToken,
   nearestBoardTurn,
+  nearestTokenFacing,
+  ownerMarkPlacement,
   spaceToCell,
+  tokenFacingDegrees,
   tokenSpace,
   tokenSpacesBetween,
   TRACK_DEPTH,
   visibleBoardRect,
   type BoardView,
 } from '../domain/opolyBoard';
-import { getProperty, playerLabel, playerToken } from '../domain/opoly';
-import { compactPropertyLabel, fitBoardLabel, fitSize } from '../domain/opolyLabel';
+import { contrastInk, getProperty, playerLabel, playerToken } from '../domain/opoly';
+import { facingPropertyLabel, fitBoardLabel, fitSize } from '../domain/opolyLabel';
 import { clampPan, clampZoom, panForZoom, stepZoom } from '../domain/opolyZoom';
 import { diceMotionMs, OpolyDice } from './OpolyDice';
 import { CARD_REVEAL_MS, OpolyCardTable } from './OpolyCards';
@@ -84,7 +91,13 @@ type Props = {
 /** Table angle. The near edge, where the piece is walking, is the large one. */
 const BOARD_TILT = '50deg';
 const BOARD_TILT_RAD = (50 * Math.PI) / 180;
-const TURN_MS = 420;
+/** Spin back to the player whose turn it is, slow enough to keep the dice in view. */
+const RETURN_MS = 1200;
+const RETURN_EASE = Easing.bezier(0.42, 0.02, 0.18, 1);
+/** After a move finishes, let the landing sit before the board turns. */
+const POST_MOVE_PAUSE_MS = 2000;
+/** Lets dice cubes share the board's camera instead of being flattened first. */
+const preserve3d = { transformStyle: 'preserve-3d' } as ViewStyle;
 
 /**
  * Shrink the tilted board so the near corners, which perspective enlarges,
@@ -214,13 +227,6 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
     () => boardTurn.interpolate({
       inputRange: [-1440, 1440],
       outputRange: ['-1440deg', '1440deg'],
-    }),
-    [boardTurn],
-  );
-  const pieceUpright = useMemo(
-    () => boardTurn.interpolate({
-      inputRange: [-1440, 1440],
-      outputRange: ['1440deg', '-1440deg'],
     }),
     [boardTurn],
   );
@@ -369,7 +375,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
     setPan(nextPan);
   };
 
-  const faceSpace = (space: number, duration: number) => {
+  const faceSpace = (space: number, duration: number, easing: (value: number) => number = Easing.inOut(Easing.quad)) => {
     const next = nearestBoardTurn(boardTurnRef.current, space);
     if (Math.abs(next - boardTurnRef.current) < 1) return false;
     boardTurnRef.current = next;
@@ -381,7 +387,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
     const anim = Animated.timing(boardTurn, {
       toValue: next,
       duration,
-      easing: Easing.inOut(Easing.quad),
+      easing,
       useNativeDriver: false,
     });
     boardTurnAnim.current = anim;
@@ -401,22 +407,59 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
   if ((tokenRoute?.id ?? 0) !== finishedHop.current) hopping.current = tokenRoute?.id ?? 0;
   const hasFaced = useRef(false);
 
+  const faceCurrent = (space: number) => {
+    const motion = diceMotionMs() > 0;
+    faceSpaceRef.current(space, motion ? RETURN_MS : 0, motion ? RETURN_EASE : Easing.linear);
+  };
+  const turnHold = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearTurnHold = () => {
+    if (!turnHold.current) return;
+    clearTimeout(turnHold.current);
+    turnHold.current = null;
+  };
+  const boardNeedsTurn = (space: number) => {
+    const next = nearestBoardTurn(boardTurnRef.current, space);
+    return Math.abs(next - boardTurnRef.current) >= 1;
+  };
+
+  useEffect(() => () => clearTurnHold(), []);
+
+  useEffect(() => {
+    if ((tokenRoute?.id ?? 0) !== finishedHop.current) clearTurnHold();
+  }, [tokenRoute?.id]);
+
   useEffect(() => {
     if (hopping.current !== 0) return;
-    const duration = hasFaced.current && diceMotionMs() > 0 ? TURN_MS : 0;
+    const first = !hasFaced.current;
     hasFaced.current = true;
-    faceSpaceRef.current(focusSpace, duration);
+    if (first) {
+      clearTurnHold();
+      faceSpaceRef.current(focusSpace, 0);
+      return;
+    }
+    if (turnHold.current) return;
+    faceCurrent(focusSpace);
   }, [focusSpace]);
 
   const onWalkEnd = () => {
     finishedHop.current = routeIdRef.current;
     hopping.current = 0;
-    faceSpaceRef.current(focusRef.current, diceMotionMs() > 0 ? TURN_MS : 0);
+    clearTurnHold();
+    const space = focusRef.current;
+    if (diceMotionMs() === 0 || !boardNeedsTurn(space)) {
+      faceCurrent(space);
+      return;
+    }
+    turnHold.current = setTimeout(() => {
+      turnHold.current = null;
+      faceCurrent(focusRef.current);
+    }, POST_MOVE_PAUSE_MS);
   };
 
   const boardSize = viewport * zoom;
-  const [diceWindow, setDiceWindow] = useState<{ id: number; view: BoardView } | null>(null);
+  const [diceWindow, setDiceWindow] = useState<{ id: number; view: BoardView; turn: number } | null>(null);
   const diceView = diceRoll && diceWindow?.id === diceRoll.id ? diceWindow.view : null;
+  const diceHomeTurn = diceRoll && diceWindow?.id === diceRoll.id ? diceWindow.turn : 0;
 
   useLayoutEffect(() => {
     const id = diceRoll?.id;
@@ -434,7 +477,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
     const fallback = seen(visibleBoardRect({ pan: panNow, viewport: viewportBox }));
     const node = viewportRef.current;
     if (!node || typeof node.measureInWindow !== 'function') {
-      setDiceWindow({ id, view: fallback });
+      setDiceWindow({ id, view: fallback, turn: boardTurnRef.current });
       return;
     }
     let cancelled = false;
@@ -454,6 +497,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
       setDiceWindow({
         id,
         view: oriented.width > 1 && oriented.height > 1 ? oriented : fallback,
+        turn: boardTurnRef.current,
       });
     });
     return () => {
@@ -510,32 +554,36 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
       >
         {viewport > 0 ? (
           <Animated.View
-            style={{
-              position: 'absolute',
-              width: boardSize,
-              height: boardSize,
-              left: pan.x,
-              top: pan.y,
-              transform: [
-                { translateY: -boardSize * 0.04 },
-                { perspective: boardPerspective(boardSize) },
-                { rotateX: BOARD_TILT },
-                { rotateZ: boardSpin },
-                { scale: boardFitScale(boardSize) },
-              ],
-              pointerEvents: 'box-none',
-            }}
+            style={[
+              {
+                position: 'absolute',
+                width: boardSize,
+                height: boardSize,
+                left: pan.x,
+                top: pan.y,
+                transform: [
+                  { translateY: -boardSize * 0.04 },
+                  { perspective: boardPerspective(boardSize) },
+                  { rotateX: BOARD_TILT },
+                  { rotateZ: boardSpin },
+                  { scale: boardFitScale(boardSize) },
+                ],
+                pointerEvents: 'box-none',
+              },
+              preserve3d,
+            ]}
           >
             <BoardCanvas
               {...props}
               tokenRoute={tokenRoute}
-              upright={pieceUpright}
               onArrive={(space, duration) => faceSpaceRef.current(space, duration)}
               onWalkEnd={onWalkEnd}
               diceRoll={props.cardOffer ? null : diceRoll}
               pinDice
               diceBoard={boardSize}
               diceView={diceView}
+              diceTurn={boardTurn}
+              diceHomeTurn={diceHomeTurn}
               style={{ width: boardSize, height: boardSize }}
             />
           </Animated.View>
@@ -583,7 +631,8 @@ function BoardCanvas({
   pinDice = false,
   diceView = null,
   diceBoard = 0,
-  upright,
+  diceTurn = null,
+  diceHomeTurn = 0,
   onArrive,
   onWalkEnd,
 }: Omit<Props, 'onDragging' | 'onZoomed' | 'focusSpace'> & {
@@ -591,7 +640,8 @@ function BoardCanvas({
   pinDice?: boolean;
   diceView?: BoardView | null;
   diceBoard?: number;
-  upright: Animated.AnimatedInterpolation<string>;
+  diceTurn?: Animated.Value | null;
+  diceHomeTurn?: number;
   onArrive?: (space: number, duration: number) => boolean;
   onWalkEnd?: () => void;
 }) {
@@ -644,7 +694,7 @@ function BoardCanvas({
         const width = event.nativeEvent.layout.width;
         setSize((current) => (current === width ? current : width));
       }}
-      style={[styles.board, style]}
+      style={[styles.board, preserve3d, style]}
       accessibilityLabel="Opoly board"
     >
       {boardSpaces.map((space) => {
@@ -660,22 +710,21 @@ function BoardCanvas({
         const isUtility = property?.kind === 'utility';
         const isCorner = space.index % 10 === 0;
         const swatch = property && !isRailroad && !isUtility ? property.swatch : undefined;
-        const bar = swatch
-          ? detail
-            ? Math.max(12, Math.round(cell * 0.18))
-            : Math.max(6, Math.round(Math.min(pxW, pxH) * 0.2))
-          : 0;
+        const barColor = swatch ?? (isRailroad ? property?.swatch : undefined);
+        const letterBand = barColor ? colorBarThickness(inward) : 0;
+        const trainBlock = isRailroad ? Math.max(12, Math.round(letterBand * 0.72)) : 0;
+        const bar = Math.min(Math.round(inward * 0.78), letterBand + trainBlock);
         const label = Math.max(8, Math.round(cell * (detail ? 0.08 : 0.14)));
         const lane = !isCorner && (col === 0 || col === 10) ? sideLane(cell) : tokenLane(cell);
-        const mark = space.name === 'Chance' ? 'chance' : space.name === 'Community Chest' ? 'chest' : null;
+        const mark = space.name === 'Chance' ? 'chance' : space.name === 'Chest' ? 'chest' : null;
         const priceLine = detail && (property || space.tax) ? Math.max(9, Math.round(cell * 0.07)) : 0;
         const priceBand = priceLine > 0 && (row === 0 || row === 10)
           ? priceLine + 2
           : priceLine > 0
             ? 56
             : 0;
-        const nameBox = !isCorner && !mark
-          ? compactNameBox(row, col, pxW, pxH, swatch ? bar : 0, priceBand)
+        const nameBox = !isCorner && !mark && !barColor
+          ? compactNameBox(row, col, pxW, pxH, 0, priceBand)
           : null;
         const nameReserve = priceLine + 40;
         const utility = isUtility ? Math.min(utilityExtent(cell, detail), Math.max(18, pxH - nameReserve)) : 0;
@@ -691,25 +740,38 @@ function BoardCanvas({
         const padLane = farRail ? Math.min(lane, Math.max(8, cell - railCaption - 18)) : lane;
         const bounds = labelBounds(row, col, pxW, pxH, bar, lane, trainHeight, priceLine, utility, trainInset);
         const fullName = property?.name ?? space.name;
+        const facing = nameFacing(row, col);
+        const quarter = col === 0 || col === 10;
+        const readingWidth = nameBox ? (quarter ? nameBox.height : nameBox.width) : 0;
+        const readingHeight = nameBox ? (quarter ? nameBox.width : nameBox.height) : 0;
         const compact = nameBox
-          ? compactPropertyLabel(
+          ? facingPropertyLabel(
               fullName,
               space.short,
-              Math.max(8, nameBox.width - 2),
-              Math.max(8, nameBox.height - 2),
+              Math.max(8, readingWidth - 2),
+              Math.max(8, readingHeight - 2),
             )
           : null;
-        const nameText = compact || mark || farRail ? null : !detail && space.tax ? `$${space.tax}` : fullName;
+        const nameText = barColor || compact || mark || farRail ? null : !detail && space.tax ? `$${space.tax}` : fullName;
         const fitted =
           nameText && bounds.width >= 22 && bounds.height >= 12
             ? fitBoardLabel(nameText, !detail && space.tax ? nameText : space.short, bounds, label)
             : null;
-        const barFit = !detail && swatch && !fitted && !compact
-          ? fitBoardLabel(fullName, space.short, { width: Math.max(8, along - 8), height: Math.max(8, bar - 2) }, Math.max(8, bar - 4), 1)
-          : null;
-        const barLabel = barFit?.lines[0] ?? null;
-        const barTurn = col === 0 ? '-90deg' : col === 10 ? '90deg' : null;
-        const amount = priceLine > 0 && (compact || fitted) ? (property?.price ?? space.tax) : undefined;
+        const shownName = isRailroad ? fullName.replace('🚂', '').trim() : fullName;
+        const barNameSize = letterBand
+          ? Math.max(8, Math.min(letterBand - 4, fitSize(shownName, Math.max(8, along - 4), Math.max(8, letterBand - 4))))
+          : 0;
+        let trainH = 0;
+        let trainW = 0;
+        if (isRailroad && bar > letterBand) {
+          trainH = Math.max(8, bar - letterBand - 2);
+          trainW = Math.round(trainH * (64 / 36));
+          if (trainW > along - 4) {
+            trainW = Math.max(8, along - 4);
+            trainH = Math.max(8, Math.round(trainW * (36 / 64)));
+          }
+        }
+        const amount = priceLine > 0 && (barColor || compact || fitted) ? (property?.price ?? space.tax) : undefined;
         return (
           <View
             key={space.index}
@@ -717,8 +779,8 @@ function BoardCanvas({
             style={[
               styles.cell,
               { backgroundColor: spaceTint(space.name, property?.kind) },
-              isCorner ? null : spacePadding(row, col, padLane, swatch ? bar : 0, inward, railCaption, trainInset),
-              compact?.vertical ? { overflow: 'visible' as const } : null,
+              isCorner ? null : spacePadding(row, col, padLane, barColor ? bar : 0, inward, isRailroad ? 0 : railCaption, isRailroad ? 0 : trainInset),
+              quarter && compact ? { overflow: 'visible' as const } : null,
               {
                 left: `${frame.x * 100}%`,
                 top: `${frame.y * 100}%`,
@@ -728,70 +790,88 @@ function BoardCanvas({
             ]}
           >
             {isCorner ? (
-              <View style={[styles.cornerFill, { pointerEvents: 'none' }]}>
-                <CornerArt index={space.index} cell={Math.max(48, cell)} detail={detail} />
+              <View style={[styles.cornerFill, { alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }]}>
+                <View
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transform: [{ rotate: cornerFacing(space.index) }, { scale: CORNER_FIT }],
+                  }}
+                >
+                  <CornerArt index={space.index} cell={Math.max(48, cell)} detail={detail} />
+                </View>
               </View>
             ) : (
               <>
-                {swatch ? (
+                {barColor ? (
                   <View
                     style={[
                       styles.swatch,
                       barEdge(row, col, bar),
                       {
-                        backgroundColor: swatch,
+                        backgroundColor: barColor,
                         alignItems: 'center',
                         justifyContent: 'center',
                         overflow: 'hidden',
                       },
                     ]}
                   >
-                    {barLabel && barTurn ? (
+                    <View
+                      style={
+                        quarter
+                          ? {
+                              position: 'absolute',
+                              width: along,
+                              height: bar,
+                              left: (bar - along) / 2,
+                              top: (along - bar) / 2,
+                              alignItems: 'center',
+                              justifyContent: 'flex-start',
+                              transform: [{ rotate: facing }],
+                            }
+                          : {
+                              width: '100%',
+                              height: '100%',
+                              alignItems: 'center',
+                              justifyContent: 'flex-start',
+                              transform: [{ rotate: facing }],
+                            }
+                      }
+                    >
                       <View
                         style={{
-                          position: 'absolute',
-                          width: along - 4,
-                          height: bar,
-                          left: (bar - (along - 4)) / 2,
-                          top: (along - bar) / 2,
+                          width: '100%',
+                          height: letterBand,
                           alignItems: 'center',
                           justifyContent: 'center',
-                          transform: [{ rotate: barTurn }],
                         }}
                       >
                         <Text
                           style={{
-                            color: inkOn(swatch),
+                            color: contrastInk(barColor),
                             fontFamily: fonts.body,
                             fontWeight: '800',
-                            fontSize: fitSize(barLabel, along - 8, Math.max(8, bar - 4)),
-                            lineHeight: Math.max(10, bar - 2),
-                            width: along - 8,
+                            fontSize: barNameSize,
+                            lineHeight: barNameSize,
+                            width: along - 2,
                             textAlign: 'center',
                           }}
                           numberOfLines={1}
                         >
-                          {barLabel}
+                          {shownName}
                         </Text>
                       </View>
-                    ) : barLabel ? (
-                      <Text
-                        style={{
-                          color: inkOn(swatch),
-                          fontFamily: fonts.body,
-                          fontWeight: '800',
-                          fontSize: fitSize(barLabel, along - 6, Math.max(8, bar - 4)),
-                          lineHeight: Math.max(10, bar - 2),
-                          textAlign: 'center',
-                        }}
-                        numberOfLines={1}
-                      >
-                        {barLabel}
-                      </Text>
-                    ) : null}
+                      {isRailroad && trainW > 0 ? (
+                        <View style={{ width: trainW, height: trainH, transform: [{ scaleX: -1 }] }}>
+                          <TrainSvg width={trainW} height={trainH} />
+                        </View>
+                      ) : null}
+                    </View>
                   </View>
                 ) : null}
-                {train && !compact ? (
+                {train && !compact && !isRailroad ? (
                   <TrainMark
                     row={row}
                     col={col}
@@ -801,9 +881,13 @@ function BoardCanvas({
                     beside={sidewaysRail ? { width: train.width, height: train.height, span: pxH } : undefined}
                   />
                 ) : null}
-                {railCaption > 0 && !compact ? (
+                {railCaption > 0 && !compact && !isRailroad ? (
                   <Text
-                    style={[styles.cellText, railName(row, cell, railCaption, space.short), { pointerEvents: 'none' }]}
+                    style={[
+                      styles.cellText,
+                      railName(row, cell, railCaption, space.short),
+                      { pointerEvents: 'none', transform: [{ rotate: facing }] },
+                    ]}
                     numberOfLines={1}
                   >
                     {space.short}
@@ -817,17 +901,13 @@ function BoardCanvas({
                 {compact && nameBox ? (
                   <View
                     style={[
-                      compact.vertical
+                      quarter
                         ? {
                             position: 'absolute',
                             width: nameBox.height,
                             height: nameBox.width,
                             left: nameBox.left + (nameBox.width - nameBox.height) / 2,
                             top: nameBox.top + (nameBox.height - nameBox.width) / 2,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            zIndex: 2,
-                            transform: [{ rotate: row === 0 ? '-90deg' : '90deg' }],
                           }
                         : {
                             position: 'absolute',
@@ -835,11 +915,14 @@ function BoardCanvas({
                             top: nameBox.top,
                             width: nameBox.width,
                             height: nameBox.height,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            zIndex: 2,
                           },
-                      { pointerEvents: 'none' },
+                      {
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 2,
+                        transform: [{ rotate: facing }],
+                        pointerEvents: 'none',
+                      },
                     ]}
                   >
                     <Text
@@ -848,7 +931,7 @@ function BoardCanvas({
                         {
                           fontSize: compact.fontSize,
                           lineHeight: compact.fontSize + 1,
-                          width: compact.vertical ? nameBox.height : nameBox.width,
+                          width: quarter ? nameBox.height : nameBox.width,
                           textAlign: 'center',
                         },
                       ]}
@@ -859,7 +942,7 @@ function BoardCanvas({
                   </View>
                 ) : null}
                 {fitted ? (
-                  <View style={styles.nameBlock}>
+                  <View style={[styles.nameBlock, { transform: [{ rotate: facing }] }]}>
                     {fitted.lines.map((line, index) => (
                       <Text
                         key={`${line}-${index}`}
@@ -896,7 +979,7 @@ function BoardCanvas({
                   <Text
                     style={[
                       styles.cellPrice,
-                      priceEdge(row, col, priceLine, priceBand),
+                      priceEdge(row, col, priceLine, priceBand, bar),
                       {
                         fontSize: fitSize(`$${amount}`, Math.max(24, priceBand - 6), Math.max(8, priceLine - 1)),
                         lineHeight: priceLine,
@@ -960,19 +1043,19 @@ function BoardCanvas({
                   { pointerEvents: 'none' },
                 ]}
               >
-                <Animated.View
+                <View
                   style={{
                     width: spot.size,
                     height: spot.size,
                     alignItems: 'center',
                     justifyContent: 'center',
-                    transform: [{ rotate: upright }],
+                    transform: [{ rotate: nameFacing(row, col) }],
                   }}
                 >
                   <Text style={[styles.ownerEmoji, { fontSize: Math.round(spot.size * 0.82), lineHeight: Math.round(spot.size * 0.92) }]}>
                     {glyph}
                   </Text>
-                </Animated.View>
+                </View>
               </View>
             );
           })
@@ -1009,7 +1092,6 @@ function BoardCanvas({
                 routeId={route?.id ?? 0}
                 routeSpaces={route?.spaces ?? null}
                 holdSpaces={route ? drawnCards.map((card) => card.space) : []}
-                upright={upright}
                 onCardStop={showDrawnCard}
                 onSettled={onTokenSettled}
                 onArrive={onArrive}
@@ -1028,12 +1110,19 @@ function BoardCanvas({
               : null
           }
           onAccept={cardOffer ? onAcceptCard : undefined}
+          turn={diceTurn}
         />
       ) : null}
       <MoneyBills flight={burst} boardSize={size} />
       {pinDice && diceRoll ? (
-        <View style={[styles.diceLayer, { pointerEvents: 'none' }]}>
-          <OpolyDice roll={diceRoll} view={diceView} boardSize={diceBoard > 0 ? diceBoard : size} />
+        <View style={[styles.diceLayer, preserve3d, { pointerEvents: 'none' }]}>
+          <OpolyDice
+            roll={diceRoll}
+            view={diceView}
+            boardSize={diceBoard > 0 ? diceBoard : size}
+            turn={diceTurn}
+            homeTurn={diceHomeTurn}
+          />
         </View>
       ) : null}
     </View>
@@ -1042,7 +1131,7 @@ function BoardCanvas({
 
 function spaceTint(name: string, kind?: string) {
   if (name === 'Chance') return '#f6e2cf';
-  if (name === 'Community Chest') return '#f3ead0';
+  if (name === 'Chest') return '#f3ead0';
   if (name === 'Income Tax' || name === 'Luxury Tax') return '#f6e0dc';
   if (kind === 'railroad') return '#e3ebf1';
   if (kind === 'utility') return '#f6f0d2';
@@ -1158,31 +1247,43 @@ function FreeParkingCorner({ cell, detail }: { cell: number; detail: boolean }) 
   );
 }
 
+/** Officer drawing, cropped to the hat, badge, and pointing arm. */
+const OFFICER_BOX = { x: 2, y: 12, width: 32, height: 22 };
+
+function OfficerSvg({ width, height }: { width: number; height: number }) {
+  return (
+    <Svg width={width} height={height} viewBox={`${OFFICER_BOX.x} ${OFFICER_BOX.y} ${OFFICER_BOX.width} ${OFFICER_BOX.height}`}>
+      <Path d="M10 12h20l-2 4H12z" fill="#1d4e89" />
+      <Rect x="6" y="15" width="28" height="3" rx="1" fill="#1d4e89" />
+      <Circle cx="20" cy="22" r="4.5" fill="#f0c9a0" />
+      <Path d="M11 30c1-5 4-7 9-7s8 2 9 7v4H11z" fill="#1d4e89" />
+      <Path d="M13 31 L2 27h11z" fill="#1d4e89" />
+      <Circle cx="24" cy="31" r="1.5" fill="#f2d36b" />
+    </Svg>
+  );
+}
+
 function GoToJailCorner({ cell, detail }: { cell: number; detail: boolean }) {
-  const pad = Math.round(cell * 0.04);
-  const width = cell - pad * 2;
-  const kicker = fitSize('GO TO', width, Math.round(cell * 0.13));
-  const title = displaySize('JAIL', width, Math.round(cell * (detail ? 0.28 : 0.4)));
-  const fine = fitSize('Do not collect $200', width, Math.round(cell * 0.09));
-  const icon = Math.round(cell * (detail ? 0.32 : 0.4));
+  const pad = Math.max(1, Math.round(cell * 0.03));
+  const inner = Math.max(8, cell - pad * 2);
+  const fine = detail ? fitSize('Do not collect $200', inner, Math.max(7, Math.round(inner * 0.075))) : 0;
+  const fineH = detail ? (fine + 1) * 2 : 0;
+  // "Go to" takes half a share. "Jail" and the officer split the rest, one share each.
+  const share = Math.max(8, Math.floor(Math.max(16, inner - fineH) / 2.5));
+  const kicker = fitSize('Go to', inner, Math.max(8, Math.round(share * 0.5)));
+  const widthCap = Math.floor((inner * OFFICER_BOX.height) / OFFICER_BOX.width);
+  const title = fitSize('Jail', inner, Math.min(share, widthCap));
+  const iconH = title;
+  const iconW = Math.max(8, Math.round((OFFICER_BOX.width / OFFICER_BOX.height) * iconH));
   return (
     <View style={[styles.corner, { padding: pad }]}>
-      {detail ? (
-        <Text style={[styles.cornerFine, { fontSize: kicker, lineHeight: kicker }]} numberOfLines={1}>
-          GO TO
-        </Text>
-      ) : null}
-      <Text style={[styles.cornerGo, { fontSize: title, lineHeight: title }]} numberOfLines={1}>
-        JAIL
+      <Text style={[styles.cornerTitle, { fontSize: kicker, lineHeight: kicker, maxWidth: inner }]} numberOfLines={1}>
+        Go to
       </Text>
-      <Svg width={icon} height={Math.round(icon * 0.9)} viewBox="0 0 40 36">
-        <Path d="M10 12h20l-2 4H12z" fill="#1d4e89" />
-        <Rect x="6" y="15" width="28" height="3" rx="1" fill="#1d4e89" />
-        <Circle cx="20" cy="22" r="4.5" fill="#f0c9a0" />
-        <Path d="M11 30c1-5 4-7 9-7s8 2 9 7v4H11z" fill="#1d4e89" />
-        <Path d="M13 31 L2 27h11z" fill="#1d4e89" />
-        <Circle cx="24" cy="31" r="1.5" fill="#f2d36b" />
-      </Svg>
+      <Text style={[styles.cornerGo, { fontSize: title, lineHeight: title, maxWidth: inner }]} numberOfLines={1}>
+        Jail
+      </Text>
+      <OfficerSvg width={iconW} height={iconH} />
       {detail ? (
         <>
           <Text style={[styles.cornerFine, { fontSize: fine, lineHeight: fine + 1 }]} numberOfLines={1}>
@@ -1195,15 +1296,6 @@ function GoToJailCorner({ cell, detail }: { cell: number; detail: boolean }) {
       ) : null}
     </View>
   );
-}
-
-function inkOn(swatch: string) {
-  const hex = swatch.replace('#', '');
-  const r = Number.parseInt(hex.slice(0, 2), 16);
-  const g = Number.parseInt(hex.slice(2, 4), 16);
-  const b = Number.parseInt(hex.slice(4, 6), 16);
-  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return lum > 0.62 ? '#1a1408' : '#f7f1e6';
 }
 
 function trainExtent(cell: number, col: number, detail: boolean) {
@@ -1243,11 +1335,11 @@ function utilityExtent(cell: number, detail: boolean) {
   return detail ? Math.max(22, Math.round(cell * 0.28)) : Math.max(16, Math.round(cell * 0.38));
 }
 
-function priceEdge(row: number, col: number, priceLine: number, band: number) {
-  if (row === 0) return { position: 'absolute' as const, left: 0, right: 0, bottom: 0, height: priceLine };
-  if (row === 10) return { position: 'absolute' as const, left: 0, right: 0, top: 0, height: priceLine };
-  if (col === 0) return { position: 'absolute' as const, right: 2, width: band - 4, top: '38%' as const };
-  return { position: 'absolute' as const, left: 2, width: band - 4, top: '38%' as const };
+function priceEdge(row: number, col: number, priceLine: number, band: number, bar: number) {
+  if (row === 10) return { position: 'absolute' as const, left: 0, right: 0, top: bar, height: priceLine };
+  if (row === 0) return { position: 'absolute' as const, left: 0, right: 0, bottom: bar, height: priceLine };
+  if (col === 0) return { position: 'absolute' as const, right: bar + 2, width: band - 4, top: '38%' as const };
+  return { position: 'absolute' as const, left: bar + 2, width: band - 4, top: '38%' as const };
 }
 
 function compactNameBox(row: number, col: number, pxW: number, pxH: number, bar: number, price: number) {
@@ -1403,20 +1495,22 @@ function ChanceMark({
 }) {
   const size = cardMarkSize(row, col, cell, detail);
   return (
-    <Text
-      style={{
-        fontFamily: fonts.display,
-        fontSize: size,
-        lineHeight: size,
-        fontWeight: '700',
-        color: '#c2410c',
-        textAlign: 'center',
-        width: '100%',
-        pointerEvents: 'none',
-      }}
-    >
-      ?
-    </Text>
+    <View style={[squareTop(row, col), { pointerEvents: 'none' }]}>
+      <Text
+        style={{
+          fontFamily: fonts.display,
+          fontSize: size,
+          lineHeight: size,
+          fontWeight: '700',
+          color: '#c2410c',
+          textAlign: 'center',
+          width: size,
+          transform: [{ rotate: nameFacing(row, col) }],
+        }}
+      >
+        ?
+      </Text>
+    </View>
   );
 }
 
@@ -1433,10 +1527,21 @@ function ChestMark({
 }) {
   const size = cardMarkSize(row, col, cell, detail);
   return (
-    <View style={{ width: size, height: size, pointerEvents: 'none' }}>
-      <ChestSvg size={size} />
+    <View style={[squareTop(row, col), { pointerEvents: 'none' }]}>
+      <View style={{ width: size, height: size, transform: [{ rotate: nameFacing(row, col) }] }}>
+        <ChestSvg size={size} />
+      </View>
     </View>
   );
+}
+
+/** The top of a square is the inner edge, opposite the outside its mark faces. */
+function squareTop(row: number, col: number) {
+  const gap = 2;
+  if (row === 10) return { position: 'absolute' as const, top: gap, left: 0, right: 0, alignItems: 'center' as const };
+  if (row === 0) return { position: 'absolute' as const, bottom: gap, left: 0, right: 0, alignItems: 'center' as const };
+  if (col === 0) return { position: 'absolute' as const, right: gap, top: 0, bottom: 0, justifyContent: 'center' as const };
+  return { position: 'absolute' as const, left: gap, top: 0, bottom: 0, justifyContent: 'center' as const };
 }
 
 function ChestSvg({ size }: { size: number }) {
@@ -1477,10 +1582,10 @@ function TrainSvg({ width, height }: { width: number; height: number }) {
 }
 
 function barEdge(row: number, col: number, bar: number) {
-  if (row === 10) return { bottom: 0, left: 0, right: 0, height: bar };
-  if (row === 0) return { top: 0, left: 0, right: 0, height: bar };
-  if (col === 0) return { left: 0, top: 0, bottom: 0, width: bar };
-  return { right: 0, top: 0, bottom: 0, width: bar };
+  if (row === 10) return { top: 0, left: 0, right: 0, height: bar };
+  if (row === 0) return { bottom: 0, left: 0, right: 0, height: bar };
+  if (col === 0) return { right: 0, top: 0, bottom: 0, width: bar };
+  return { left: 0, top: 0, bottom: 0, width: bar };
 }
 
 function tokenLane(cell: number) {
@@ -1507,15 +1612,15 @@ function spacePadding(row: number, col: number, lane: number, bar: number, cell:
   const edge = Math.min(bar + caption + art, inner);
   const room = Math.min(lane, Math.max(0, inner - edge));
   if (row === 10) {
-    return { paddingTop: room, paddingBottom: edge, paddingLeft: 2, paddingRight: 2, justifyContent: 'flex-end' as const };
+    return { paddingTop: edge, paddingBottom: room, paddingLeft: 2, paddingRight: 2, justifyContent: 'flex-end' as const };
   }
   if (row === 0) {
-    return { paddingBottom: room, paddingTop: edge, paddingLeft: 2, paddingRight: 2, justifyContent: 'flex-start' as const };
+    return { paddingBottom: edge, paddingTop: room, paddingLeft: 2, paddingRight: 2, justifyContent: 'flex-start' as const };
   }
   if (col === 0) {
     return {
-      paddingRight: room,
-      paddingLeft: edge,
+      paddingRight: edge,
+      paddingLeft: room,
       paddingTop: 2,
       paddingBottom: 2,
       alignItems: 'flex-start' as const,
@@ -1523,8 +1628,8 @@ function spacePadding(row: number, col: number, lane: number, bar: number, cell:
     };
   }
   return {
-    paddingLeft: room,
-    paddingRight: edge,
+    paddingLeft: edge,
+    paddingRight: room,
     paddingTop: 2,
     paddingBottom: 2,
     alignItems: 'flex-end' as const,
@@ -1563,16 +1668,16 @@ function pieceOffset(row: number, col: number, width: number, height: number, pi
       y = row === 0 ? height - piece - gap : gap;
     }
   } else if (row === 10) {
-    y = gap;
-    x += shift;
-  } else if (row === 0) {
     y = height - piece - gap;
     x += shift;
+  } else if (row === 0) {
+    y = gap;
+    x += shift;
   } else if (col === 0) {
-    x = width - piece - gap;
+    x = gap;
     y += shift;
   } else {
-    x = gap;
+    x = width - piece - gap;
     y += shift;
   }
   return {
@@ -1593,7 +1698,8 @@ function piecePlace(index: number, size: number, slot: number, count = 1, inJail
   if (index === 10) {
     const cell = Math.min(width, height);
     const spots = inJail ? layoutJailedTokens(cell, count) : layoutVisitingTokens(cell, count);
-    const spot = spots[Math.max(0, Math.min(slot, spots.length - 1))];
+    const raw = spots[Math.max(0, Math.min(slot, spots.length - 1))];
+    const spot = placeCornerToken(cell, raw, cornerFacing(10));
     return { left: frame.x * size + spot.x, top: frame.y * size + spot.y, piece: spot.piece };
   }
   if (count > 1) {
@@ -1645,7 +1751,6 @@ function Piece({
   routeId,
   routeSpaces,
   holdSpaces,
-  upright,
   onCardStop,
   onSettled,
   onArrive,
@@ -1662,7 +1767,6 @@ function Piece({
   routeId: number;
   routeSpaces: number[] | null;
   holdSpaces: number[];
-  upright: Animated.AnimatedInterpolation<string>;
   onCardStop: (space: number) => void;
   onSettled: (playerId: string) => void;
   onArrive?: (space: number, duration: number) => boolean;
@@ -1674,6 +1778,15 @@ function Piece({
   const liftX = useRef(new Animated.Value(0)).current;
   const liftY = useRef(new Animated.Value(0)).current;
   const bulge = useRef(new Animated.Value(1)).current;
+  const facingDeg = useRef(new Animated.Value(tokenFacingDegrees(spaceIndex))).current;
+  const facingNow = useRef(tokenFacingDegrees(spaceIndex));
+  const facingSpin = useMemo(
+    () => facingDeg.interpolate({
+      inputRange: [-2520, 2520],
+      outputRange: ['-2520deg', '2520deg'],
+    }),
+    [facingDeg],
+  );
   const settled = useRef(spaceIndex);
   const lastPath = useRef<number[] | null>(null);
   const flyingRef = useRef(false);
@@ -1708,6 +1821,11 @@ function Piece({
     const from = settled.current;
     const placeAt = (index: number, atSlot: number, atCount = 1) =>
       piecePlace(index, sizeRef.current, atSlot, atCount, index === 10 && jailedRef.current);
+    const parkFacing = (index: number) => {
+      const next = tokenFacingDegrees(index);
+      facingNow.current = next;
+      facingDeg.setValue(next);
+    };
     if (diceMotionMs() === 0) {
       settled.current = spaceIndex;
       lastPath.current = null;
@@ -1716,6 +1834,7 @@ function Piece({
       const place = placeAt(spaceIndex, slotRef.current, countRef.current);
       left.setValue(place.left);
       top.setValue(place.top);
+      parkFacing(spaceIndex);
       const holds = holdRef.current;
       if (holds.length > 0) cardNotice.current(holds[holds.length - 1]);
       arriveNotice.current?.(spaceIndex, 0);
@@ -1728,6 +1847,7 @@ function Piece({
       const place = placeAt(spaceIndex, slotRef.current, countRef.current);
       left.setValue(place.left);
       top.setValue(place.top);
+      parkFacing(spaceIndex);
       arriveNotice.current?.(spaceIndex, 0);
       settledNotice.current(playerId);
       return;
@@ -1769,10 +1889,13 @@ function Piece({
         const dir = along ? inwardHop(spaces[step - 1]) : { x: 0, y: 0 };
         const duration = along ? pace : Math.round(pace * 2.4);
         const half = duration / 2;
+        const turn = nearestTokenFacing(facingNow.current, index);
+        facingNow.current = turn;
         const done = await play(
           Animated.parallel([
             Animated.timing(left, { toValue: place.left, duration, easing: Easing.inOut(Easing.quad), useNativeDriver: false }),
             Animated.timing(top, { toValue: place.top, duration, easing: Easing.inOut(Easing.quad), useNativeDriver: false }),
+            Animated.timing(facingDeg, { toValue: turn, duration, easing: Easing.inOut(Easing.quad), useNativeDriver: false }),
             Animated.sequence([
               Animated.timing(liftX, { toValue: dir.x * hop, duration: half, useNativeDriver: false }),
               Animated.timing(liftX, { toValue: 0, duration: half, useNativeDriver: false }),
@@ -1788,11 +1911,6 @@ function Piece({
           ]),
         );
         if (cancelled || !done) return;
-        const turned = arriveNotice.current?.(index, TURN_MS) ?? false;
-        if (turned) {
-          await pause(TURN_MS);
-          if (cancelled) return;
-        }
         const holdAt = holds.indexOf(index);
         if (holdAt >= 0) {
           holds.splice(holdAt, 1);
@@ -1812,6 +1930,7 @@ function Piece({
       liftX.setValue(0);
       liftY.setValue(0);
       bulge.setValue(1);
+      parkFacing(settled.current);
       settledNotice.current(playerId);
     };
     void run();
@@ -1830,9 +1949,10 @@ function Piece({
         liftX.setValue(0);
         liftY.setValue(0);
         bulge.setValue(1);
+        parkFacing(from);
       }
     };
-  }, [bulge, left, liftX, liftY, playerId, routeId, spaceIndex, top]);
+  }, [bulge, facingDeg, left, liftX, liftY, playerId, routeId, spaceIndex, top]);
 
   const emoji = playerToken(token);
   const piece = resting.piece;
@@ -1848,7 +1968,7 @@ function Piece({
           width: piece,
           height: piece,
           zIndex: flying ? 30 : 10 + slot,
-          transform: [{ translateX: liftX }, { translateY: liftY }, { scale: bulge }, { rotate: upright }],
+          transform: [{ translateX: liftX }, { translateY: liftY }, { scale: bulge }, { rotate: facingSpin }],
         },
         { pointerEvents: 'none' },
       ]}

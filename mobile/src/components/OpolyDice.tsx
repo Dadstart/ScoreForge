@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, Easing, Platform, StyleSheet, View } from 'react-native';
-import { diceHopPoints, diceRollCurves, monopolyDieSize, type BoardView, type Point } from '../domain/opolyBoard';
+import { AccessibilityInfo, Animated, Easing, Platform, StyleSheet, View, type ViewStyle } from 'react-native';
+import { diceHopPoints, diceRollCurves, monopolyDieSize, pointHeldOnTurn, type BoardView, type Point } from '../domain/opolyBoard';
 
 const ROLL_MS = 1700;
+const STAGGER_MS = 160;
 
 const PIPS: Record<number, boolean[]> = {
   1: [false, false, false, false, true, false, false, false, false],
@@ -32,18 +33,30 @@ export function diceMotionMs(): number {
   return ROLL_MS;
 }
 
+/** How long both dice take to finish, including the second die's delay. */
+export function diceSettleMs(): number {
+  const roll = diceMotionMs();
+  return roll === 0 ? 0 : roll + STAGGER_MS;
+}
+
 type Roll = { id: number; faces: [number, number] };
 
 export function OpolyDice({
   roll,
   view,
   boardSize = 0,
+  turn = null,
+  homeTurn = 0,
 }: {
   roll: Roll;
   /** Null until the on-screen board rect for this roll is known. */
   view?: BoardView | null;
   /** Board canvas size. The visible rect uses this same coordinate space. */
   boardSize?: number;
+  /** Board spin, in degrees. Dice ride this so they stay on screen as the table turns. */
+  turn?: Animated.Value | null;
+  /** Board spin when this roll was placed. */
+  homeTurn?: number;
 }) {
   const [box, setBox] = useState({ width: 0, height: 0 });
   const flight = useRef<{
@@ -68,7 +81,7 @@ export function OpolyDice({
   const flightBoard = ready?.board ?? board;
   return (
     <View
-      style={[styles.layer, { pointerEvents: 'none' }]}
+      style={[styles.layer, preserve3d, { pointerEvents: 'none' }]}
       accessibilityLabel={`Dice showing ${roll.faces[0]} and ${roll.faces[1]}`}
       onLayout={(event) => {
         const { width, height } = event.nativeEvent.layout;
@@ -77,8 +90,8 @@ export function OpolyDice({
     >
       {curves ? (
         <>
-          <TravelDie face={roll.faces[0]} rollId={roll.id} board={flightBoard} curve={curves[0]} lane={0} delay={0} view={landedView} />
-          <TravelDie face={roll.faces[1]} rollId={roll.id} board={flightBoard} curve={curves[1]} lane={1} delay={160} view={landedView} />
+          <TravelDie face={roll.faces[0]} rollId={roll.id} board={flightBoard} curve={curves[0]} lane={0} delay={0} view={landedView} turn={turn} homeTurn={homeTurn} />
+          <TravelDie face={roll.faces[1]} rollId={roll.id} board={flightBoard} curve={curves[1]} lane={1} delay={STAGGER_MS} view={landedView} turn={turn} homeTurn={homeTurn} />
         </>
       ) : null}
     </View>
@@ -93,6 +106,8 @@ function TravelDie({
   lane,
   delay,
   view,
+  turn,
+  homeTurn,
 }: {
   face: number;
   rollId: number;
@@ -101,11 +116,20 @@ function TravelDie({
   lane: number;
   delay: number;
   view?: BoardView;
+  turn: Animated.Value | null;
+  homeTurn: number;
 }) {
   const progress = useRef(new Animated.Value(diceMotionMs() === 0 ? 1 : 0)).current;
-  const [shown, setShown] = useState(face);
   const size = monopolyDieSize(board);
   const points = diceHopPoints(curve, board, view);
+  const landed = points[points.length - 1] ?? curve[3];
+  const shiftX = useRef(new Animated.Value(0)).current;
+  const shiftY = useRef(new Animated.Value(0)).current;
+  const holdSpin = useRef(new Animated.Value(0)).current;
+  const holdAngle = holdSpin.interpolate({
+    inputRange: [-1, 1],
+    outputRange: ['-1deg', '1deg'],
+  });
   const input = points.map((_, index) => index / (points.length - 1));
   const travelX = progress.interpolate({
     inputRange: input,
@@ -115,67 +139,171 @@ function TravelDie({
     inputRange: input,
     outputRange: points.map((point) => point.y - size / 2),
   });
-  const spin = progress.interpolate({
+  const spin = (turns: string) => progress.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0deg', lane === 0 ? '1080deg' : '-1080deg'],
+    outputRange: ['0deg', turns],
+  });
+  // Whole turns, so the rolled face is up again when the spin ends.
+  const spinX = spin(lane === 0 ? '360deg' : '-360deg');
+  const spinY = spin(lane === 0 ? '-360deg' : '720deg');
+  const spinZ = spin(lane === 0 ? '720deg' : '-360deg');
+  const hopMarks = Array.from({ length: 25 }, (_, index) => index / 24);
+  const hop = progress.interpolate({
+    inputRange: hopMarks,
+    outputRange: hopMarks.map((mark) => Math.sin(Math.PI * mark) * size * 1.15),
   });
 
   useEffect(() => {
     if (diceMotionMs() === 0) {
-      setShown(face);
       progress.setValue(1);
       return;
     }
-    setShown(face);
     progress.setValue(0);
-    let ticks = 0;
-    const flicker = setInterval(() => {
-      ticks += 1;
-      if (ticks > 9) {
-        clearInterval(flicker);
-        setShown(face);
-        return;
-      }
-      setShown(((face + ticks * (lane === 0 ? 2 : 5) - 1) % 6) + 1);
-    }, 90);
     const animation = Animated.timing(progress, {
       toValue: 1,
       duration: ROLL_MS,
       delay,
-      easing: Easing.out(Easing.cubic),
+      easing: Easing.bezier(0.22, 0.8, 0.3, 1),
       isInteraction: false,
       useNativeDriver: false,
     });
     animation.start();
     return () => {
-      clearInterval(flicker);
       animation.stop();
     };
   }, [rollId, face, delay, lane, progress]);
 
-  const pips = PIPS[shown] ?? PIPS[1];
+  useEffect(() => {
+    const place = (value: number) => {
+      const held = pointHeldOnTurn(landed, homeTurn, value, board);
+      shiftX.setValue(held.x - landed.x);
+      shiftY.setValue(held.y - landed.y);
+      holdSpin.setValue(homeTurn - value);
+    };
+    if (!turn) {
+      place(homeTurn);
+      return;
+    }
+    place(animatedNow(turn));
+    const id = turn.addListener(({ value }) => place(value));
+    return () => {
+      turn.removeListener(id);
+    };
+  }, [turn, homeTurn, board, landed.x, landed.y, shiftX, shiftY, holdSpin]);
+
   return (
     <Animated.View
-      style={{
-        position: 'absolute',
-        left: 0,
-        top: 0,
-        width: size,
-        height: size,
-        transform: [{ translateX: travelX }, { translateY: travelY }, { rotate: spin }],
-      }}
+      style={[
+        {
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          width: size,
+          height: size,
+          transform: [
+            { translateX: Animated.add(travelX, shiftX) },
+            { translateY: Animated.add(travelY, shiftY) },
+            { rotateZ: holdAngle },
+          ],
+        },
+        preserve3d,
+      ]}
     >
       <View style={[styles.shadow, { borderRadius: size / 2 }]} />
-      <View style={[styles.die, { width: size, height: size, borderRadius: size * 0.22 }]}>
-        <View style={styles.pips}>
-          {pips.map((on, index) => (
-            <View key={index} style={styles.slot}>
-              {on ? <View style={styles.pip} /> : null}
-            </View>
-          ))}
-        </View>
-      </View>
+      <Animated.View
+        style={[
+          {
+            width: size,
+            height: size,
+            transform: cubeTransform([
+              { translateZ: hop },
+              { rotateX: spinX },
+              { rotateY: spinY },
+              { rotateZ: spinZ },
+            ]),
+          },
+          preserve3d,
+        ]}
+      >
+        <DieCube face={face} settled={face} size={size} />
+      </Animated.View>
     </Animated.View>
+  );
+}
+
+const preserve3d = { transformStyle: 'preserve-3d' } as ViewStyle;
+
+function animatedNow(value: Animated.Value): number {
+  return (value as unknown as { __getValue(): number }).__getValue();
+}
+
+/** The other four faces. Opposites sum to 7, so the hidden bottom is left out. */
+function neighborFaces(top: number): number[] {
+  const opposite = 7 - top;
+  return [1, 2, 3, 4, 5, 6].filter((value) => value !== top && value !== opposite);
+}
+
+function cubeTransform(transform: object[]): NonNullable<ViewStyle['transform']> {
+  return transform as unknown as NonNullable<ViewStyle['transform']>;
+}
+
+function DieCube({ face, settled, size }: { face: number; settled: number; size: number }) {
+  const half = size / 2;
+  const sides = neighborFaces(settled);
+  return (
+    <View
+      style={[
+        {
+          width: size,
+          height: size,
+          transform: cubeTransform([{ translateZ: half }]),
+        },
+        preserve3d,
+      ]}
+    >
+      <DieFace value={face} size={size} color="#f7f1e6" transform={cubeTransform([{ translateZ: half }])} />
+      <DieFace value={sides[0]} size={size} color="#e6d7be" transform={cubeTransform([{ rotateX: '90deg' }, { translateZ: half }])} />
+      <DieFace value={sides[1]} size={size} color="#efe6d4" transform={cubeTransform([{ rotateX: '-90deg' }, { translateZ: half }])} />
+      <DieFace value={sides[2]} size={size} color="#ddd0b6" transform={cubeTransform([{ rotateY: '90deg' }, { translateZ: half }])} />
+      <DieFace value={sides[3]} size={size} color="#e9dcc4" transform={cubeTransform([{ rotateY: '-90deg' }, { translateZ: half }])} />
+    </View>
+  );
+}
+
+function DieFace({
+  value,
+  size,
+  color,
+  transform,
+}: {
+  value: number;
+  size: number;
+  color: string;
+  transform: NonNullable<ViewStyle['transform']>;
+}) {
+  const pips = PIPS[value] ?? PIPS[1];
+  return (
+    <View
+      style={{
+        position: 'absolute',
+        width: size,
+        height: size,
+        borderRadius: size * 0.16,
+        backgroundColor: color,
+        borderWidth: 1,
+        borderColor: 'rgba(90, 64, 36, 0.4)',
+        backfaceVisibility: 'hidden',
+        transform,
+      }}
+    >
+      <View style={styles.pips}>
+        {pips.map((on, index) => (
+          <View key={index} style={styles.slot}>
+            {on ? <View style={styles.pip} /> : null}
+          </View>
+        ))}
+      </View>
+    </View>
   );
 }
 
@@ -186,11 +314,6 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     left: 0,
-  },
-  die: {
-    backgroundColor: '#f7f1e6',
-    borderWidth: 2,
-    borderColor: '#1a1408',
   },
   pips: {
     flex: 1,

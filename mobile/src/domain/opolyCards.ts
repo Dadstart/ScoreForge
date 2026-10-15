@@ -78,7 +78,7 @@ const CHEST_TEXT: Record<(typeof CHEST_CARD_IDS)[number], string> = {
 };
 
 export function cardCopy(deck: CardDeck, id: string): { name: string; text: string } {
-  const name = deck === 'chance' ? 'Chance' : 'Community Chest';
+  const name = deck === 'chance' ? 'Chance' : 'Chest';
   const text = deck === 'chance' ? CHANCE_TEXT[id as keyof typeof CHANCE_TEXT] : CHEST_TEXT[id as keyof typeof CHEST_TEXT];
   return { name, text: text ?? 'Follow the card.' };
 }

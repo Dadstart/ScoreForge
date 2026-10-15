@@ -277,11 +277,11 @@ describe('monopoly play', () => {
     assert.equal(accepted.play.chest.includes('jail-free'), false);
   });
 
-  it('has wording for every Chance and Community Chest card', () => {
+  it('has wording for every Chance and Chest card', () => {
     for (const id of CHANCE_CARD_IDS) assert.ok(cardCopy('chance', id).text.length > 8);
     for (const id of CHEST_CARD_IDS) assert.ok(cardCopy('chest', id).text.length > 8);
     assert.equal(cardCopy('chance', 'boardwalk').name, 'Chance');
-    assert.equal(cardCopy('chest', 'birthday').name, 'Community Chest');
+    assert.equal(cardCopy('chest', 'birthday').name, 'Chest');
   });
 
   it('returns a kept jail card to the deck when it is used', () => {

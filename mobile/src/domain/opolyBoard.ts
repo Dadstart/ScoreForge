@@ -23,7 +23,7 @@ const space = (
 export const boardSpaces: BoardSpace[] = [
   space(0, 'Go', 'GO'),
   space(1, 'A', 'A', { propertyId: 'mediterranean' }),
-  space(2, 'Community Chest', 'Chest'),
+  space(2, 'Chest', 'Chest'),
   space(3, 'B', 'B', { propertyId: 'baltic' }),
   space(4, 'Income Tax', 'Tax', { tax: INCOME_TAX }),
   space(5, '🚂 W', '🚂 W', { propertyId: 'reading' }),
@@ -33,12 +33,12 @@ export const boardSpaces: BoardSpace[] = [
   space(9, 'E', 'E', { propertyId: 'connecticut' }),
   space(10, 'Jail', 'Jail'),
   space(11, 'F', 'F', { propertyId: 'st-charles' }),
-  space(12, 'Electric Company', 'Electric', { propertyId: 'electric' }),
+  space(12, 'Power', 'Power', { propertyId: 'electric' }),
   space(13, 'G', 'G', { propertyId: 'states' }),
   space(14, 'H', 'H', { propertyId: 'virginia' }),
   space(15, '🚂 X', '🚂 X', { propertyId: 'pennsylvania-rr' }),
   space(16, 'I', 'I', { propertyId: 'st-james' }),
-  space(17, 'Community Chest', 'Chest'),
+  space(17, 'Chest', 'Chest'),
   space(18, 'J', 'J', { propertyId: 'tennessee' }),
   space(19, 'K', 'K', { propertyId: 'new-york' }),
   space(20, 'Free Parking', 'Free'),
@@ -49,12 +49,12 @@ export const boardSpaces: BoardSpace[] = [
   space(25, '🚂 Y', '🚂 Y', { propertyId: 'bo' }),
   space(26, 'O', 'O', { propertyId: 'atlantic' }),
   space(27, 'P', 'P', { propertyId: 'ventnor' }),
-  space(28, 'Water Works', 'Water', { propertyId: 'water' }),
+  space(28, 'Water', 'Water', { propertyId: 'water' }),
   space(29, 'Q', 'Q', { propertyId: 'marvin-gardens' }),
   space(30, 'Go to Jail', 'To Jail'),
   space(31, 'R', 'R', { propertyId: 'pacific' }),
   space(32, 'S', 'S', { propertyId: 'north-carolina' }),
-  space(33, 'Community Chest', 'Chest'),
+  space(33, 'Chest', 'Chest'),
   space(34, 'T', 'T', { propertyId: 'pennsylvania-ave' }),
   space(35, '🚂 Z', '🚂 Z', { propertyId: 'short-line' }),
   space(36, 'Chance', 'Chance'),
@@ -133,6 +133,25 @@ export function boardViewForTurn(view: BoardView, turn: number, board: number): 
   return { x: minX, y: minY, width: Math.max(...xs) - minX, height: Math.max(...ys) - minY };
 }
 
+/**
+ * Where `point` has to sit so it stays on the same spot on screen while the
+ * board spins from `home` degrees to `turn` degrees. Positive board turn is
+ * clockwise, matching the board's rotateZ.
+ */
+export function pointHeldOnTurn(point: Point, home: number, turn: number, board: number): Point {
+  const cx = board / 2;
+  const cy = board / 2;
+  const ox = point.x - cx;
+  const oy = point.y - cy;
+  const delta = ((home - turn) * Math.PI) / 180;
+  const cos = Math.cos(delta);
+  const sin = Math.sin(delta);
+  return {
+    x: cx + ox * cos - oy * sin,
+    y: cy + ox * sin + oy * cos,
+  };
+}
+
 /** How far each property runs in from the edge. Larger than a square cell, so the spaces are long rectangles. */
 export const TRACK_DEPTH = 0.16;
 
@@ -151,9 +170,14 @@ export function cellBox(row: number, col: number) {
 
 export type TokenSpot = { x: number; y: number; piece: number };
 
+/** Thickness of the color bar on the inner edge of a property. */
+export function colorBarThickness(inward: number) {
+  return Math.max(18, Math.round(Math.max(0, inward) * 0.4));
+}
+
 /**
  * Pack every token on one square into that square without their boxes touching.
- * Side spaces keep a strip on the outer edge for the color bar.
+ * Side spaces keep the inner strip clear for the color bar and its name.
  */
 export function layoutSharedTokens(
   width: number,
@@ -171,13 +195,11 @@ export function layoutSharedTokens(
   let y1 = Math.max(y0 + 1, height - edge);
   if (!corner) {
     const inward = row === 0 || row === 10 ? height : width;
-    const along = Math.min(width, height);
-    // A phone property cannot spare a color-bar strip and still show an emoji.
-    const reserve = Math.round(inward * (along < 40 ? 0.08 : 0.38));
-    if (row === 10) y1 = Math.max(y0 + 1, y1 - reserve);
-    else if (row === 0) y0 = Math.min(y1 - 1, y0 + reserve);
-    else if (col === 0) x0 = Math.min(x1 - 1, x0 + reserve);
-    else x1 = Math.max(x0 + 1, x1 - reserve);
+    const reserve = Math.min(colorBarThickness(inward), Math.round(inward * 0.45));
+    if (row === 10) y0 = Math.min(y1 - 1, y0 + reserve);
+    else if (row === 0) y1 = Math.max(y0 + 1, y1 - reserve);
+    else if (col === 0) x1 = Math.max(x0 + 1, x1 - reserve);
+    else x0 = Math.min(x1 - 1, x0 + reserve);
   }
   const bw = x1 - x0;
   const bh = y1 - y0;
@@ -273,6 +295,83 @@ export type OwnerMark = {
   /** Mirror left-right. Used on the side spaces, where rotation alone faces the emoji the wrong way. */
   flipX: boolean;
 };
+
+/**
+ * Turn a property name so the bottom of the letters faces that side of the board.
+ * Positive rotation is clockwise, which swings a baseline from down toward the left.
+ * Letters are not mirrored, so they still read from that side.
+ */
+export function nameFacing(row: number, col: number): '0deg' | '90deg' | '-90deg' | '180deg' {
+  if (row === 10) return '0deg';
+  if (row === 0) return '180deg';
+  if (col === 0) return '90deg';
+  return '-90deg';
+}
+
+/** Turn a corner so the bottom of its art faces the outer corner of the board. */
+export function cornerFacing(index: number): '-45deg' | '45deg' | '135deg' | '-135deg' {
+  const space = ((index % 40) + 40) % 40;
+  if (space === 0) return '-45deg';
+  if (space === 10) return '45deg';
+  if (space === 20) return '135deg';
+  return '-135deg';
+}
+
+/**
+ * Turn a player token so its bottom faces the outer edge of this space.
+ * Corners aim at the outer corner, the same way the corner art does.
+ */
+export function tokenFacing(index: number): ReturnType<typeof nameFacing> | ReturnType<typeof cornerFacing> {
+  const space = ((index % 40) + 40) % 40;
+  if (space % 10 === 0) return cornerFacing(space);
+  const { row, col } = spaceToCell(space);
+  return nameFacing(row, col);
+}
+
+const FACING_DEGREES: Record<ReturnType<typeof tokenFacing>, number> = {
+  '0deg': 0,
+  '45deg': 45,
+  '-45deg': -45,
+  '90deg': 90,
+  '-90deg': -90,
+  '135deg': 135,
+  '-135deg': -135,
+  '180deg': 180,
+};
+
+export function tokenFacingDegrees(index: number): number {
+  return FACING_DEGREES[tokenFacing(index)];
+}
+
+/** Degrees to turn from `current` so a token on `index` takes the short way. */
+export function nearestTokenFacing(current: number, index: number): number {
+  const target = tokenFacingDegrees(index);
+  const delta = ((target - current + 540) % 360) - 180;
+  return current + delta;
+}
+
+/** Shrink a corner so a 45° turn stays inside the square. */
+export const CORNER_FIT = Math.SQRT1_2;
+
+/** Move a token with the corner art: scale about the cell center, then rotate clockwise. */
+export function placeCornerToken(
+  cell: number,
+  spot: TokenSpot,
+  facing: ReturnType<typeof cornerFacing>,
+): TokenSpot {
+  const turn = facing === '45deg' ? 45 : facing === '-45deg' ? -45 : facing === '135deg' ? 135 : -135;
+  const rad = (turn * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const piece = spot.piece * CORNER_FIT;
+  const dx = (spot.x + spot.piece / 2 - cell / 2) * CORNER_FIT;
+  const dy = (spot.y + spot.piece / 2 - cell / 2) * CORNER_FIT;
+  return {
+    x: cell / 2 + dx * cos - dy * sin - piece / 2,
+    y: cell / 2 + dx * sin + dy * cos - piece / 2,
+    piece,
+  };
+}
 
 /**
  * Owner emoji just inside the board, above the property card.
@@ -447,7 +546,7 @@ function placeDeck(
 }
 
 /**
- * Community Chest and Chance sit under the title, inside the green,
+ * Chest and Chance sit under the title, inside the green,
  * clear of the word at every board size.
  */
 export function deckPileLayout(board: number): DeckPileLayout {
@@ -503,7 +602,7 @@ export type Point = { x: number; y: number };
 
 /** Die face size for a square board. */
 export function monopolyDieSize(board: number): number {
-  return Math.max(42, Math.min(68, Math.round(board * 0.12)));
+  return Math.max(24, Math.min(40, Math.round(board * 0.065)));
 }
 
 type DieBounds = { minX: number; maxX: number; minY: number; maxY: number };
@@ -691,14 +790,14 @@ export function diceRollCurves(
   });
 }
 
-/** Points along a die tumble, including the hop above the curve. */
+/** Points along a die tumble. The hop off the felt is drawn separately, so this curve stays smooth. */
 export function diceHopPoints(
   curve: readonly [Point, Point, Point, Point],
   board: number,
   view?: BoardView,
 ): Point[] {
   const [a, b, c, d] = curve;
-  const steps = 20;
+  const steps = 48;
   const points: Point[] = [];
   const seen = view && view.width > 0 && view.height > 0
     ? viewDieBounds(board, monopolyDieSize(board), view)
@@ -708,8 +807,6 @@ export function diceHopPoints(
     const u = 1 - t;
     let x = u * u * u * a.x + 3 * u * u * t * b.x + 3 * u * t * t * c.x + t * t * t * d.x;
     let y = u * u * u * a.y + 3 * u * u * t * b.y + 3 * u * t * t * c.y + t * t * t * d.y;
-    const bounce = Math.max(0, Math.sin(t * Math.PI * 4)) * (1 - t) * board * 0.07;
-    y -= bounce;
     if (seen) {
       x = Math.min(seen.maxX, Math.max(seen.minX, x));
       y = Math.min(seen.maxY, Math.max(seen.minY, y));

@@ -6,7 +6,7 @@ const GLYPH_WIDTH: Record<string, number> = {
   a: 9.94, b: 11.13, c: 10.3, d: 11.13, e: 10.23, f: 6.27, g: 10.13, h: 10.47, i: 4.64,
   j: 4.66, k: 9.83, l: 4.52, m: 16, n: 10.47, o: 10.37, p: 11.13, q: 11.13, r: 6.92,
   s: 9.03, t: 7.33, u: 10.47, v: 9.57, w: 13.89, x: 9.71, y: 10.27, z: 8.3,
-  '.': 4.27, '&': 13.26, ' ': 3.99,
+  '.': 4.27, '&': 13.26, ' ': 3.99, '🚂': 24,
 };
 
 /** Full name first, then shorter forms that still name the property. */
@@ -80,6 +80,26 @@ export type CompactLabel = {
 /** Largest type used for a property name. Bigger type forces names down to stubs. */
 const MAX_NAME_FONT = 14;
 const MIN_NAME_FONT = 8;
+
+/**
+ * Property name on one line, in the reading direction for its side.
+ * The board rotates this so the baseline faces that side.
+ */
+export function facingPropertyLabel(
+  name: string,
+  shortName: string,
+  width: number,
+  height: number,
+): { text: string; fontSize: number } | null {
+  if (width < 8 || height < 8) return null;
+  const choices = labelChoices(name, shortName);
+  for (const text of choices) {
+    const fontSize = fontThatFits(text, width, height);
+    if (fontSize != null) return { text, fontSize };
+  }
+  const text = choices.at(-1) ?? name;
+  return { text, fontSize: MIN_NAME_FONT };
+}
 
 /**
  * A property name that stays readable as the board shrinks.

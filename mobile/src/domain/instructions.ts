@@ -58,7 +58,7 @@ const INSTRUCTIONS: Record<string, GameInstructions> = {
       'An unowned property can be bought or passed. Landing on someone else’s property pays them rent. A full color group with no houses charges double rent.',
       'Build houses evenly on a color you own. Mortgage a property for half its price after the houses on that color are sold.',
       'In jail, roll doubles to leave, pay $50, or use a Get Out of Jail Free card. The third miss makes you pay $50 and move.',
-      'Chance and Community Chest play themselves. Adjust cash covers a trade or any other payment.',
+      'Chance and Chest play themselves. Adjust cash covers a trade or any other payment.',
       'The richest player wins when the game is marked complete.',
     ],
   },
