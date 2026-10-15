@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AddPlayerModal } from '../components/AddPlayerModal';
-import { COMPACT_SCREEN, OpolyBoard, type TokenRouteView } from '../components/OpolyBoard';
+import { OpolyBoard, type TokenRouteView } from '../components/OpolyBoard';
 import { type MoneyFlight } from '../components/MoneyBills';
 import { FireworksOverlay } from '../components/FireworksOverlay';
 import { PlaySpark } from '../components/PlaySpark';
@@ -118,7 +118,6 @@ export function OpolyScreen({ navigation, route }: Props) {
   const [rollingDice, setRollingDice] = useState(false);
   const rollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [boardZoomed, setBoardZoomed] = useState(false);
-  const narrow = useWindowDimensions().width < COMPACT_SCREEN;
   useEffect(() => {
     navigation.setOptions({
       gestureEnabled: !boardZoomed,
@@ -532,8 +531,8 @@ export function OpolyScreen({ navigation, route }: Props) {
           <PropertyMentions text={banner} style={styles.bannerText} />
           {landNote ? <PropertyMentions text={landNote} style={styles.bannerNote} /> : null}
         </View>
-        {narrow ? null : tableActions}
         <OpolyBoard
+          footer={tableActions}
           players={game.players}
           owned={play.owned}
           tokenSpaces={game.tokenSpaces}
@@ -551,10 +550,9 @@ export function OpolyScreen({ navigation, route }: Props) {
           moneyFlight={moneyFlight}
           onDragging={() => {}}
           onZoomed={setBoardZoomed}
-          dockControls={narrow}
           focusSpace={game.tokenSpaces?.[turnId] ?? 0}
-          roll={(docked) => (
-            <View style={[docked ? styles.rollRow : styles.rollStack, { pointerEvents: 'box-none' }]}>
+          roll={(
+            <View style={[styles.rollRow, { pointerEvents: 'box-none' }]}>
               <Button
                 label={
                   rollingDice
@@ -596,7 +594,6 @@ export function OpolyScreen({ navigation, route }: Props) {
           )}
           diceRoll={diceRoll}
         />
-        {narrow ? tableActions : null}
 
         {landedProperty ? (
           <RentLookup
@@ -1104,7 +1101,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
   },
-  rollStack: { alignItems: 'center', gap: 8 },
   rollRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',

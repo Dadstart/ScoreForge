@@ -3,7 +3,6 @@ import {
   Animated,
   Dimensions,
   Easing,
-  useWindowDimensions,
   PanResponder,
   Platform,
   Pressable,
@@ -78,12 +77,11 @@ type Props = {
   onZoomed?: (zoomed: boolean) => void;
   diceRoll?: DiceRollView | null;
   /**
-   * Roll, pay, and buy controls. On a large board they sit on the green.
-   * `docked` is true on a small screen, where they sit in a row under the board.
+   * Roll, pay, and buy controls. They sit in a row just under the board.
    */
   roll?: ReactNode | ((docked: boolean) => ReactNode);
-  /** Place roll, pay, buy, and zoom under the board instead of on the green. */
-  dockControls?: boolean;
+  /** Controls that sit just under the near edge of the tilted board. */
+  footer?: ReactNode;
   /** Space to face when nothing is moving. The side this space is on becomes the near edge. */
   focusSpace?: number;
 };
@@ -157,58 +155,12 @@ export function OpolyBoard(props: Props) {
   return <PhoneBoard {...props} />;
 }
 
-const ZOOM_BTN = 44;
-const ZOOM_GAP = 8;
-const ZOOM_INSET = 12;
-  /** Below this board width, the tilted green cannot hold the roll and zoom controls. */
-const COMPACT_BOARD = 560;
-/** Phone-width windows keep roll, zoom, and actions under the board. */
-export const COMPACT_SCREEN = 640;
-
 function renderRoll(roll: Props['roll'], docked: boolean) {
   if (!roll) return null;
   return typeof roll === 'function' ? roll(docked) : roll;
 }
 
-/** How far owner marks hang into the green from the track. */
-function ownerClearance(board: number) {
-  const along = (board * (1 - 2 * TRACK_DEPTH)) / 9;
-  return Math.round(along * 0.62 + board * TRACK_DEPTH * 0.04) + 10;
-}
-
-/** Where the controls sit on the green, just inside the far edge, after the tilt. */
-function feltControlPoint(board: number, xFromLeft: number) {
-  const y = TRACK_DEPTH * board + ownerClearance(board);
-  return projectTablePoint(xFromLeft - board / 2, y - board / 2, board);
-}
-
-/** Keep + and − on the green, clear of the corner squares. */
-function zoomDockSpot(pan: { x: number; y: number }, zoom: number, viewport: number) {
-  const board = viewport * zoom;
-  const stack = ZOOM_BTN * 2 + ZOOM_GAP;
-  const x = board - TRACK_DEPTH * board - ownerClearance(board) - ZOOM_BTN;
-  const projected = feltControlPoint(board, x);
-  let top = pan.y + board / 2 + projected.y;
-  let right = viewport - (pan.x + board / 2 + projected.x + ZOOM_BTN);
-  top = Math.min(Math.max(ZOOM_INSET, top), Math.max(ZOOM_INSET, viewport - stack - ZOOM_INSET));
-  right = Math.min(Math.max(ZOOM_INSET, right), Math.max(ZOOM_INSET, viewport - ZOOM_BTN - ZOOM_INSET));
-  return { top, right };
-}
-
-/** Top middle of the green, below the far row, in the tilted view. */
-function rollDockBox(pan: { x: number; y: number }, zoom: number, viewport: number) {
-  const board = viewport * zoom;
-  const projected = feltControlPoint(board, board / 2);
-  const top = pan.y + board / 2 + projected.y;
-  return {
-    left: pan.x,
-    top: Math.min(Math.max(8, top), Math.max(8, viewport - 56)),
-    width: board,
-  };
-}
-
-function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false, focusSpace = 0, tokenRoute, ...props }: Props) {
-  const windowWidth = useWindowDimensions().width;
+function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, tokenRoute, footer, ...props }: Props) {
   const viewportRef = useRef<View>(null);
   const [viewport, setViewport] = useState(0);
   const [zoom, setZoom] = useState(1);
@@ -505,10 +457,8 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
     };
   }, [diceRoll?.id, viewport > 0]);
 
-  const frameWidth = viewport > 0 ? viewport : windowWidth;
-  const docked = dockControls || (frameWidth > 0 && frameWidth < COMPACT_BOARD);
   const frameHeight = zoom < 1 ? boardSize : viewport;
-  const lift = docked ? dockLift(boardSize, pan.y, frameHeight) : 0;
+  const lift = dockLift(boardSize, pan.y, frameHeight);
   const zoomPair = (
     <>
       <Pressable
@@ -588,25 +538,12 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
             />
           </Animated.View>
         ) : null}
-        {!docked && viewport > 0 && roll ? (
-          <View style={[styles.rollDock, rollDockBox(pan, zoom, viewport), { pointerEvents: 'box-none' }]}>
-            {renderRoll(roll, false)}
-          </View>
-        ) : null}
-        {!docked ? (
-          <View
-            style={[styles.zoomDock, zoomDockSpot(pan, zoom, viewport), { pointerEvents: 'box-none' }]}
-          >
-            {zoomPair}
-          </View>
-        ) : null}
       </View>
-      {docked ? (
-        <View style={[styles.actionBar, lift > 0 && { marginTop: -lift }, { pointerEvents: 'box-none' }]}>
-          {renderRoll(roll, true)}
-          <View style={styles.zoomRow}>{zoomPair}</View>
-        </View>
-      ) : null}
+      <View style={[styles.actionBar, lift > 0 && { marginTop: -lift }, { pointerEvents: 'box-none' }]}>
+        {renderRoll(roll, true)}
+        <View style={styles.zoomRow}>{zoomPair}</View>
+        {footer}
+      </View>
       {zoom > 1 ? (
         <Text style={styles.phoneHint}>Drag the board to look around. Pinch, or use + and −, to zoom.</Text>
       ) : null}
@@ -2009,16 +1946,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  zoomDock: {
-    position: 'absolute',
-    gap: 8,
-    zIndex: 40,
-  },
-  rollDock: {
-    position: 'absolute',
-    zIndex: 32,
-    alignItems: 'center',
   },
   diceLayer: {
     position: 'absolute',
