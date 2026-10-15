@@ -583,7 +583,7 @@ export type Point = { x: number; y: number };
 
 /** Die face size for a square board. */
 export function monopolyDieSize(board: number): number {
-  return Math.max(42, Math.min(68, Math.round(board * 0.12)));
+  return Math.max(24, Math.min(40, Math.round(board * 0.065)));
 }
 
 type DieBounds = { minX: number; maxX: number; minY: number; maxY: number };
@@ -771,14 +771,14 @@ export function diceRollCurves(
   });
 }
 
-/** Points along a die tumble, including the hop above the curve. */
+/** Points along a die tumble. The hop off the felt is drawn separately, so this curve stays smooth. */
 export function diceHopPoints(
   curve: readonly [Point, Point, Point, Point],
   board: number,
   view?: BoardView,
 ): Point[] {
   const [a, b, c, d] = curve;
-  const steps = 20;
+  const steps = 48;
   const points: Point[] = [];
   const seen = view && view.width > 0 && view.height > 0
     ? viewDieBounds(board, monopolyDieSize(board), view)
@@ -788,8 +788,6 @@ export function diceHopPoints(
     const u = 1 - t;
     let x = u * u * u * a.x + 3 * u * u * t * b.x + 3 * u * t * t * c.x + t * t * t * d.x;
     let y = u * u * u * a.y + 3 * u * u * t * b.y + 3 * u * t * t * c.y + t * t * t * d.y;
-    const bounce = Math.max(0, Math.sin(t * Math.PI * 4)) * (1 - t) * board * 0.07;
-    y -= bounce;
     if (seen) {
       x = Math.min(seen.maxX, Math.max(seen.minX, x));
       y = Math.min(seen.maxY, Math.max(seen.minY, y));

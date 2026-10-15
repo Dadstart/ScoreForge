@@ -92,6 +92,8 @@ type Props = {
 const BOARD_TILT = '50deg';
 const BOARD_TILT_RAD = (50 * Math.PI) / 180;
 const TURN_MS = 420;
+/** Lets dice cubes share the board's camera instead of being flattened first. */
+const preserve3d = { transformStyle: 'preserve-3d' } as ViewStyle;
 
 /**
  * Shrink the tilted board so the near corners, which perspective enlarges,
@@ -510,21 +512,24 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
       >
         {viewport > 0 ? (
           <Animated.View
-            style={{
-              position: 'absolute',
-              width: boardSize,
-              height: boardSize,
-              left: pan.x,
-              top: pan.y,
-              transform: [
-                { translateY: -boardSize * 0.04 },
-                { perspective: boardPerspective(boardSize) },
-                { rotateX: BOARD_TILT },
-                { rotateZ: boardSpin },
-                { scale: boardFitScale(boardSize) },
-              ],
-              pointerEvents: 'box-none',
-            }}
+            style={[
+              {
+                position: 'absolute',
+                width: boardSize,
+                height: boardSize,
+                left: pan.x,
+                top: pan.y,
+                transform: [
+                  { translateY: -boardSize * 0.04 },
+                  { perspective: boardPerspective(boardSize) },
+                  { rotateX: BOARD_TILT },
+                  { rotateZ: boardSpin },
+                  { scale: boardFitScale(boardSize) },
+                ],
+                pointerEvents: 'box-none',
+              },
+              preserve3d,
+            ]}
           >
             <BoardCanvas
               {...props}
@@ -641,7 +646,7 @@ function BoardCanvas({
         const width = event.nativeEvent.layout.width;
         setSize((current) => (current === width ? current : width));
       }}
-      style={[styles.board, style]}
+      style={[styles.board, preserve3d, style]}
       accessibilityLabel="Opoly board"
     >
       {boardSpaces.map((space) => {
@@ -1061,7 +1066,7 @@ function BoardCanvas({
       ) : null}
       <MoneyBills flight={burst} boardSize={size} />
       {pinDice && diceRoll ? (
-        <View style={[styles.diceLayer, { pointerEvents: 'none' }]}>
+        <View style={[styles.diceLayer, preserve3d, { pointerEvents: 'none' }]}>
           <OpolyDice roll={diceRoll} view={diceView} boardSize={diceBoard > 0 ? diceBoard : size} />
         </View>
       ) : null}
