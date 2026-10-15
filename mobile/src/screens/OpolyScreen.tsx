@@ -34,7 +34,7 @@ import {
   withoutLastCashAction,
   type BoardProperty,
 } from '../domain/opoly';
-import { diceMotionMs } from '../components/OpolyDice';
+import { diceSettleMs } from '../components/OpolyDice';
 import { rollOpolyDice, type DiceRoll } from '../domain/opolyDice';
 import {
   buildHouse,
@@ -343,7 +343,7 @@ export function OpolyScreen({ navigation, route }: Props) {
     rollTimer.current = setTimeout(() => {
       rollRef.current(rolled);
       setRollingDice(false);
-    }, diceMotionMs());
+    }, diceSettleMs());
   };
 
   const beginPlayerEdit = (playerId: string, name: string, cash: number, token?: string | null) => {

@@ -92,6 +92,9 @@ type Props = {
 const BOARD_TILT = '50deg';
 const BOARD_TILT_RAD = (50 * Math.PI) / 180;
 const TURN_MS = 420;
+/** Spin back to the player whose turn it is, slow enough to keep the dice in view. */
+const RETURN_MS = 1200;
+const RETURN_EASE = Easing.bezier(0.42, 0.02, 0.18, 1);
 /** Lets dice cubes share the board's camera instead of being flattened first. */
 const preserve3d = { transformStyle: 'preserve-3d' } as ViewStyle;
 
@@ -371,7 +374,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
     setPan(nextPan);
   };
 
-  const faceSpace = (space: number, duration: number) => {
+  const faceSpace = (space: number, duration: number, easing: (value: number) => number = Easing.inOut(Easing.quad)) => {
     const next = nearestBoardTurn(boardTurnRef.current, space);
     if (Math.abs(next - boardTurnRef.current) < 1) return false;
     boardTurnRef.current = next;
@@ -383,7 +386,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
     const anim = Animated.timing(boardTurn, {
       toValue: next,
       duration,
-      easing: Easing.inOut(Easing.quad),
+      easing,
       useNativeDriver: false,
     });
     boardTurnAnim.current = anim;
@@ -403,22 +406,32 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
   if ((tokenRoute?.id ?? 0) !== finishedHop.current) hopping.current = tokenRoute?.id ?? 0;
   const hasFaced = useRef(false);
 
+  const faceCurrent = (space: number) => {
+    const motion = diceMotionMs() > 0;
+    faceSpaceRef.current(space, motion ? RETURN_MS : 0, motion ? RETURN_EASE : Easing.linear);
+  };
+
   useEffect(() => {
     if (hopping.current !== 0) return;
-    const duration = hasFaced.current && diceMotionMs() > 0 ? TURN_MS : 0;
+    const first = !hasFaced.current;
     hasFaced.current = true;
-    faceSpaceRef.current(focusSpace, duration);
+    if (first) {
+      faceSpaceRef.current(focusSpace, 0);
+      return;
+    }
+    faceCurrent(focusSpace);
   }, [focusSpace]);
 
   const onWalkEnd = () => {
     finishedHop.current = routeIdRef.current;
     hopping.current = 0;
-    faceSpaceRef.current(focusRef.current, diceMotionMs() > 0 ? TURN_MS : 0);
+    faceCurrent(focusRef.current);
   };
 
   const boardSize = viewport * zoom;
-  const [diceWindow, setDiceWindow] = useState<{ id: number; view: BoardView } | null>(null);
+  const [diceWindow, setDiceWindow] = useState<{ id: number; view: BoardView; turn: number } | null>(null);
   const diceView = diceRoll && diceWindow?.id === diceRoll.id ? diceWindow.view : null;
+  const diceHomeTurn = diceRoll && diceWindow?.id === diceRoll.id ? diceWindow.turn : 0;
 
   useLayoutEffect(() => {
     const id = diceRoll?.id;
@@ -436,7 +449,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
     const fallback = seen(visibleBoardRect({ pan: panNow, viewport: viewportBox }));
     const node = viewportRef.current;
     if (!node || typeof node.measureInWindow !== 'function') {
-      setDiceWindow({ id, view: fallback });
+      setDiceWindow({ id, view: fallback, turn: boardTurnRef.current });
       return;
     }
     let cancelled = false;
@@ -456,6 +469,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
       setDiceWindow({
         id,
         view: oriented.width > 1 && oriented.height > 1 ? oriented : fallback,
+        turn: boardTurnRef.current,
       });
     });
     return () => {
@@ -540,6 +554,8 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
               pinDice
               diceBoard={boardSize}
               diceView={diceView}
+              diceTurn={boardTurn}
+              diceHomeTurn={diceHomeTurn}
               style={{ width: boardSize, height: boardSize }}
             />
           </Animated.View>
@@ -587,6 +603,8 @@ function BoardCanvas({
   pinDice = false,
   diceView = null,
   diceBoard = 0,
+  diceTurn = null,
+  diceHomeTurn = 0,
   onArrive,
   onWalkEnd,
 }: Omit<Props, 'onDragging' | 'onZoomed' | 'focusSpace'> & {
@@ -594,6 +612,8 @@ function BoardCanvas({
   pinDice?: boolean;
   diceView?: BoardView | null;
   diceBoard?: number;
+  diceTurn?: Animated.Value | null;
+  diceHomeTurn?: number;
   onArrive?: (space: number, duration: number) => boolean;
   onWalkEnd?: () => void;
 }) {
@@ -1067,7 +1087,13 @@ function BoardCanvas({
       <MoneyBills flight={burst} boardSize={size} />
       {pinDice && diceRoll ? (
         <View style={[styles.diceLayer, preserve3d, { pointerEvents: 'none' }]}>
-          <OpolyDice roll={diceRoll} view={diceView} boardSize={diceBoard > 0 ? diceBoard : size} />
+          <OpolyDice
+            roll={diceRoll}
+            view={diceView}
+            boardSize={diceBoard > 0 ? diceBoard : size}
+            turn={diceTurn}
+            homeTurn={diceHomeTurn}
+          />
         </View>
       ) : null}
     </View>

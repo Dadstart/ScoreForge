@@ -16,6 +16,7 @@ import {
   monopolyDieSize,
   ownerMarkPlacement,
   boardTurnForSpace,
+  pointHeldOnTurn,
   nameFacing,
   cornerFacing,
   tokenFacing,
@@ -380,6 +381,18 @@ describe('board facing', () => {
     assert.equal(nearestBoardTurn(-270, 0), -360);
     assert.equal(nearestBoardTurn(0, 30), 90);
     assert.equal(nearestBoardTurn(-90, 15), -90);
+  });
+
+  it('keeps a landed die on the same spot on screen when the board turns', () => {
+    const board = 200;
+    const bottom = { x: 100, y: 180 };
+    assert.deepEqual(pointHeldOnTurn(bottom, 0, 0, board), bottom);
+    const quarter = pointHeldOnTurn(bottom, 0, -90, board);
+    assert.ok(Math.abs(quarter.x - 20) < 1e-9);
+    assert.ok(Math.abs(quarter.y - 100) < 1e-9);
+    const half = pointHeldOnTurn(bottom, -90, 90, board);
+    assert.ok(Math.abs(half.x - 100) < 1e-9);
+    assert.ok(Math.abs(half.y - 20) < 1e-9);
   });
 
   it('maps the on-screen window back through a quarter turn', () => {

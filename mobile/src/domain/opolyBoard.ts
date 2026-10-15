@@ -133,6 +133,25 @@ export function boardViewForTurn(view: BoardView, turn: number, board: number): 
   return { x: minX, y: minY, width: Math.max(...xs) - minX, height: Math.max(...ys) - minY };
 }
 
+/**
+ * Where `point` has to sit so it stays on the same spot on screen while the
+ * board spins from `home` degrees to `turn` degrees. Positive board turn is
+ * clockwise, matching the board's rotateZ.
+ */
+export function pointHeldOnTurn(point: Point, home: number, turn: number, board: number): Point {
+  const cx = board / 2;
+  const cy = board / 2;
+  const ox = point.x - cx;
+  const oy = point.y - cy;
+  const delta = ((home - turn) * Math.PI) / 180;
+  const cos = Math.cos(delta);
+  const sin = Math.sin(delta);
+  return {
+    x: cx + ox * cos - oy * sin,
+    y: cy + ox * sin + oy * cos,
+  };
+}
+
 /** How far each property runs in from the edge. Larger than a square cell, so the spaces are long rectangles. */
 export const TRACK_DEPTH = 0.16;
 
