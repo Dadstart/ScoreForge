@@ -409,9 +409,8 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
   };
 
   const boardSize = viewport * zoom;
-  const [diceWindow, setDiceWindow] = useState<{ id: number; view: BoardView; turn: number } | null>(null);
+  const [diceWindow, setDiceWindow] = useState<{ id: number; view: BoardView } | null>(null);
   const diceView = diceRoll && diceWindow?.id === diceRoll.id ? diceWindow.view : null;
-  const diceHomeTurn = diceRoll && diceWindow?.id === diceRoll.id ? diceWindow.turn : 0;
 
   useLayoutEffect(() => {
     const id = diceRoll?.id;
@@ -429,7 +428,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
     const fallback = seen(visibleBoardRect({ pan: panNow, viewport: viewportBox }));
     const node = viewportRef.current;
     if (!node || typeof node.measureInWindow !== 'function') {
-      setDiceWindow({ id, view: fallback, turn: boardTurnRef.current });
+      setDiceWindow({ id, view: fallback });
       return;
     }
     let cancelled = false;
@@ -449,7 +448,6 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
       setDiceWindow({
         id,
         view: oriented.width > 1 && oriented.height > 1 ? oriented : fallback,
-        turn: boardTurnRef.current,
       });
     });
     return () => {
@@ -533,7 +531,6 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
               diceBoard={boardSize}
               diceView={diceView}
               diceTurn={boardTurn}
-              diceHomeTurn={diceHomeTurn}
               style={{ width: boardSize, height: boardSize }}
             />
           </Animated.View>
@@ -569,7 +566,6 @@ function BoardCanvas({
   diceView = null,
   diceBoard = 0,
   diceTurn = null,
-  diceHomeTurn = 0,
   onArrive,
   onWalkEnd,
 }: Omit<Props, 'onDragging' | 'onZoomed' | 'focusSpace'> & {
@@ -578,7 +574,6 @@ function BoardCanvas({
   diceView?: BoardView | null;
   diceBoard?: number;
   diceTurn?: Animated.Value | null;
-  diceHomeTurn?: number;
   onArrive?: (space: number, duration: number) => boolean;
   onWalkEnd?: () => void;
 }) {
@@ -1057,8 +1052,6 @@ function BoardCanvas({
             roll={diceRoll}
             view={diceView}
             boardSize={diceBoard > 0 ? diceBoard : size}
-            turn={diceTurn}
-            homeTurn={diceHomeTurn}
           />
         </View>
       ) : null}

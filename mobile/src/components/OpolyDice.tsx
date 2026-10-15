@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, Platform, StyleSheet, View, type ViewStyle } from 'react-native';
-import { diceHopPoints, diceRollCurves, monopolyDieSize, pointHeldOnTurn, type BoardView, type Point } from '../domain/opolyBoard';
+import { diceHopPoints, diceRollCurves, monopolyDieSize, type BoardView, type Point } from '../domain/opolyBoard';
 
 const ROLL_MS = 1700;
 const STAGGER_MS = 160;
@@ -45,18 +45,12 @@ export function OpolyDice({
   roll,
   view,
   boardSize = 0,
-  turn = null,
-  homeTurn = 0,
 }: {
   roll: Roll;
   /** Null until the on-screen board rect for this roll is known. */
   view?: BoardView | null;
   /** Board canvas size. The visible rect uses this same coordinate space. */
   boardSize?: number;
-  /** Board spin, in degrees. Dice ride this so they stay on screen as the table turns. */
-  turn?: Animated.Value | null;
-  /** Board spin when this roll was placed. */
-  homeTurn?: number;
 }) {
   const [box, setBox] = useState({ width: 0, height: 0 });
   const flight = useRef<{
@@ -90,8 +84,8 @@ export function OpolyDice({
     >
       {curves ? (
         <>
-          <TravelDie face={roll.faces[0]} rollId={roll.id} board={flightBoard} curve={curves[0]} lane={0} delay={0} view={landedView} turn={turn} homeTurn={homeTurn} />
-          <TravelDie face={roll.faces[1]} rollId={roll.id} board={flightBoard} curve={curves[1]} lane={1} delay={STAGGER_MS} view={landedView} turn={turn} homeTurn={homeTurn} />
+          <TravelDie face={roll.faces[0]} rollId={roll.id} board={flightBoard} curve={curves[0]} lane={0} delay={0} view={landedView} />
+          <TravelDie face={roll.faces[1]} rollId={roll.id} board={flightBoard} curve={curves[1]} lane={1} delay={STAGGER_MS} view={landedView} />
         </>
       ) : null}
     </View>
@@ -106,8 +100,6 @@ function TravelDie({
   lane,
   delay,
   view,
-  turn,
-  homeTurn,
 }: {
   face: number;
   rollId: number;
@@ -116,20 +108,10 @@ function TravelDie({
   lane: number;
   delay: number;
   view?: BoardView;
-  turn: Animated.Value | null;
-  homeTurn: number;
 }) {
   const progress = useRef(new Animated.Value(diceMotionMs() === 0 ? 1 : 0)).current;
   const size = monopolyDieSize(board);
   const points = diceHopPoints(curve, board, view);
-  const landed = points[points.length - 1] ?? curve[3];
-  const shiftX = useRef(new Animated.Value(0)).current;
-  const shiftY = useRef(new Animated.Value(0)).current;
-  const holdSpin = useRef(new Animated.Value(0)).current;
-  const holdAngle = holdSpin.interpolate({
-    inputRange: [-1, 1],
-    outputRange: ['-1deg', '1deg'],
-  });
   const input = points.map((_, index) => index / (points.length - 1));
   const travelX = progress.interpolate({
     inputRange: input,
@@ -173,24 +155,6 @@ function TravelDie({
     };
   }, [rollId, face, delay, lane, progress]);
 
-  useEffect(() => {
-    const place = (value: number) => {
-      const held = pointHeldOnTurn(landed, homeTurn, value, board);
-      shiftX.setValue(held.x - landed.x);
-      shiftY.setValue(held.y - landed.y);
-      holdSpin.setValue(homeTurn - value);
-    };
-    if (!turn) {
-      place(homeTurn);
-      return;
-    }
-    place(animatedNow(turn));
-    const id = turn.addListener(({ value }) => place(value));
-    return () => {
-      turn.removeListener(id);
-    };
-  }, [turn, homeTurn, board, landed.x, landed.y, shiftX, shiftY, holdSpin]);
-
   return (
     <Animated.View
       style={[
@@ -201,9 +165,8 @@ function TravelDie({
           width: size,
           height: size,
           transform: [
-            { translateX: Animated.add(travelX, shiftX) },
-            { translateY: Animated.add(travelY, shiftY) },
-            { rotateZ: holdAngle },
+            { translateX: travelX },
+            { translateY: travelY },
           ],
         },
         preserve3d,
@@ -232,10 +195,6 @@ function TravelDie({
 }
 
 const preserve3d = { transformStyle: 'preserve-3d' } as ViewStyle;
-
-function animatedNow(value: Animated.Value): number {
-  return (value as unknown as { __getValue(): number }).__getValue();
-}
 
 /** The other four faces. Opposites sum to 7, so the hidden bottom is left out. */
 function neighborFaces(top: number): number[] {
