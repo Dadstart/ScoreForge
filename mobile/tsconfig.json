@@ -6,7 +6,8 @@
   },
   "include": [
     "**/*.ts",
-    "**/*.tsx"
+    "**/*.tsx",
+    "src/types/assets.d.ts"
   ],
   "exclude": [
     "src/**/*.test.ts"

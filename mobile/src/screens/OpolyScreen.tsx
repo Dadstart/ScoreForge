@@ -36,6 +36,7 @@ import {
   type BoardProperty,
 } from '../domain/opoly';
 import { diceSettleMs } from '../components/OpolyDice';
+import { playDiceRoll, prepareDiceRoll } from '../audio/diceRollSound';
 import { rollOpolyDice, type DiceRoll } from '../domain/opolyDice';
 import {
   buildHouse,
@@ -117,6 +118,9 @@ export function OpolyScreen({ navigation, route }: Props) {
   const billSerial = useRef(0);
   const [rollingDice, setRollingDice] = useState(false);
   const rollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    prepareDiceRoll();
+  }, []);
   const [boardZoomed, setBoardZoomed] = useState(false);
   useEffect(() => {
     navigation.setOptions({
@@ -335,6 +339,7 @@ export function OpolyScreen({ navigation, route }: Props) {
   const rollForPlayer = () => {
     if (!canBank || rollingDice || !play || play.pending || !turnPlayer) return;
     const rolled = rollOpolyDice();
+    playDiceRoll();
     setDice(String(rolled.total));
     setDiceRoll({ id: Date.now(), faces: rolled.faces });
     setRollingDice(true);

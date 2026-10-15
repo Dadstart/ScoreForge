@@ -194,7 +194,13 @@ function TravelDie({
   );
 }
 
-const preserve3d = { transformStyle: 'preserve-3d' } as ViewStyle;
+const preserve3d = {
+  transformStyle: 'preserve-3d',
+  ...(Platform.OS === 'web' ? { WebkitTransformStyle: 'preserve-3d' } : null),
+} as ViewStyle;
+/** iOS drops children of a 3D face unless those children have their own transform. */
+const pipPaint =
+  Platform.OS === 'web' ? ({ transform: [{ translateZ: 1 }] } as unknown as ViewStyle) : null;
 
 /** The other four faces. Opposites sum to 7, so the hidden bottom is left out. */
 function neighborFaces(top: number): number[] {
@@ -241,26 +247,43 @@ function DieFace({
   transform: NonNullable<ViewStyle['transform']>;
 }) {
   const pips = PIPS[value] ?? PIPS[1];
+  const cell = size / 3;
+  const pip = Math.max(3, Math.round(cell * 0.58));
   return (
     <View
-      style={{
-        position: 'absolute',
-        width: size,
-        height: size,
-        borderRadius: size * 0.16,
-        backgroundColor: color,
-        borderWidth: 1,
-        borderColor: 'rgba(90, 64, 36, 0.4)',
-        backfaceVisibility: 'hidden',
-        transform,
-      }}
+      style={[
+        {
+          position: 'absolute',
+          width: size,
+          height: size,
+          borderRadius: size * 0.16,
+          backgroundColor: color,
+          borderWidth: 1,
+          borderColor: 'rgba(90, 64, 36, 0.4)',
+          backfaceVisibility: 'hidden',
+          transform,
+        },
+        Platform.OS === 'web' ? ({ WebkitBackfaceVisibility: 'hidden' } as ViewStyle) : null,
+        preserve3d,
+      ]}
     >
-      <View style={styles.pips}>
-        {pips.map((on, index) => (
-          <View key={index} style={styles.slot}>
-            {on ? <View style={styles.pip} /> : null}
-          </View>
-        ))}
+      <View style={[styles.pipLayer, pipPaint]} pointerEvents="none">
+        {pips.map((on, index) =>
+          on ? (
+            <View
+              key={index}
+              style={{
+                position: 'absolute',
+                width: pip,
+                height: pip,
+                borderRadius: pip / 2,
+                backgroundColor: '#1a1408',
+                left: (index % 3) * cell + (cell - pip) / 2,
+                top: Math.floor(index / 3) * cell + (cell - pip) / 2,
+              }}
+            />
+          ) : null,
+        )}
       </View>
     </View>
   );
@@ -274,22 +297,12 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
   },
-  pips: {
-    flex: 1,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  slot: {
-    width: '33.33%',
-    height: '33.33%',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pip: {
-    width: '58%',
-    height: '58%',
-    borderRadius: 99,
-    backgroundColor: '#1a1408',
+  pipLayer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
   },
   shadow: {
     position: 'absolute',
