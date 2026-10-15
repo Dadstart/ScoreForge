@@ -91,7 +91,6 @@ type Props = {
 /** Table angle. The near edge, where the piece is walking, is the large one. */
 const BOARD_TILT = '50deg';
 const BOARD_TILT_RAD = (50 * Math.PI) / 180;
-const TURN_MS = 420;
 /** Spin back to the player whose turn it is, slow enough to keep the dice in view. */
 const RETURN_MS = 1200;
 const RETURN_EASE = Easing.bezier(0.42, 0.02, 0.18, 1);
@@ -1912,11 +1911,6 @@ function Piece({
           ]),
         );
         if (cancelled || !done) return;
-        const turned = arriveNotice.current?.(index, TURN_MS) ?? false;
-        if (turned) {
-          await pause(TURN_MS);
-          if (cancelled) return;
-        }
         const holdAt = holds.indexOf(index);
         if (holdAt >= 0) {
           holds.splice(holdAt, 1);
