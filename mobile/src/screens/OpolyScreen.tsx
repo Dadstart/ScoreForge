@@ -12,6 +12,7 @@ import { OptionSelect } from '../components/OptionSelect';
 import { PropertyMentions, PropertyName } from '../components/PropertyMention';
 import { TokenPicker } from '../components/TokenPicker';
 import { GameHelp } from '../components/GameHelp';
+import { OptionsMenu } from '../components/OptionsMenu';
 import { HomeButton } from '../components/HomeButton';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Card, Field, Screen } from '../components/ui';
@@ -539,6 +540,7 @@ export function OpolyScreen({ navigation, route }: Props) {
           </View>
           <View style={styles.headerTools}>
             <GameHelp templateId="monopoly" />
+            <OptionsMenu />
             <ShareCodePanel shareCode={game.shareCode} />
             <HomeButton onPress={() => navigation.navigate('Home')} />
           </View>

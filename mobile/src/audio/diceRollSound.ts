@@ -1,6 +1,7 @@
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import { Platform } from 'react-native';
 import diceRollWav from '../../assets/sounds/dice-roll.wav';
+import { getSettings } from '../storage/settingsStore';
 
 let player: AudioPlayer | null = null;
 let modeSet = false;
@@ -31,11 +32,21 @@ export function prepareDiceRoll(): void {
 
 /** Play the dice rattle. Call this from the roll tap so iPhone allows the sound. */
 export function playDiceRoll(): void {
+  if (!getSettings().soundEffects) return;
   try {
     const current = playerForRoll();
     void current.seekTo(0);
     current.play();
   } catch {
     // The roll still happens if the sound cannot start.
+  }
+}
+
+/** Stop a rattle that is already playing. */
+export function stopDiceRoll(): void {
+  try {
+    player?.pause();
+  } catch {
+    // The player is already quiet.
   }
 }
