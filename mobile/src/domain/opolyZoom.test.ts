@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { boardTurnForSpace } from './opolyBoard';
-import { frameToken, panForWheel, panForZoom, pieceScreen, readingZoom, spaceScreen, stepZoom } from './opolyZoom';
+import { frameToken, panForWheel, panForZoom, pieceScreen, readingZoom, spaceScreen, stepZoom, twistStep } from './opolyZoom';
 
 const viewport = 100;
 const track = 10 / 11;
@@ -100,6 +100,17 @@ describe('monopoly zoom', () => {
     assert.equal(stepZoom(zoom, -1, phone), 1);
     assert.equal(stepZoom(zoom, 1, phone), zoom);
     assert.equal(readingZoom(1100), 1);
+  });
+});
+
+describe('two-finger twist', () => {
+  it('turns clockwise and counter-clockwise, including across the wrap', () => {
+    assert.equal(twistStep(0, 20), 20);
+    assert.equal(twistStep(20, 0), -20);
+    assert.equal(twistStep(170, -170), 20);
+    assert.equal(twistStep(-170, 170), -20);
+    assert.equal(twistStep(0, 0), 0);
+    assert.equal(twistStep(10, 190), 180);
   });
 });
 

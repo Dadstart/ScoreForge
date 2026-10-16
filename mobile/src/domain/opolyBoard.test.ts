@@ -381,6 +381,7 @@ describe('board facing', () => {
     assert.equal(nearestBoardTurn(-270, 0), -360);
     assert.equal(nearestBoardTurn(0, 30), 90);
     assert.equal(nearestBoardTurn(-90, 15), -90);
+    assert.equal(nearestBoardTurn(3000, 0), 2880);
   });
 
   it('keeps a landed die on the same spot on screen when the board turns', () => {

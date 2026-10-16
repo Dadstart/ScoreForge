@@ -44,7 +44,7 @@ import {
 } from '../domain/opolyBoard';
 import { contrastInk, getProperty, playerLabel, playerToken } from '../domain/opoly';
 import { facingPropertyLabel, fitBoardLabel, fitSize } from '../domain/opolyLabel';
-import { cameraAlong, clampPan, clampZoom, frameToken, panForZoom, stepZoom } from '../domain/opolyZoom';
+import { cameraAlong, clampPan, clampZoom, frameToken, panForZoom, stepZoom, twistStep } from '../domain/opolyZoom';
 import { diceMotionMs, diceUseFlatCamera, FlatDice, OpolyDice } from './OpolyDice';
 import { CARD_REVEAL_MS, OpolyCardTable } from './OpolyCards';
 import { MoneyBills, type MoneyFlight } from './MoneyBills';
@@ -156,7 +156,25 @@ function touchDistance(a: { pageX: number; pageY: number }, b: { pageX: number; 
   return Math.hypot(a.pageX - b.pageX, a.pageY - b.pageY);
 }
 
-/** A zoomed-in drag pans the board. A pinch does too, so the page and the back swipe do not take it. */
+/** Screen angle of the line between two fingers. Clockwise is positive, matching rotateZ. */
+function touchAngle(a: { pageX: number; pageY: number }, b: { pageX: number; pageY: number }) {
+  return (Math.atan2(b.pageY - a.pageY, b.pageX - a.pageX) * 180) / Math.PI;
+}
+
+type Finger = { pageX: number; pageY: number; identifier?: string | number };
+
+/** Keep the same two fingers when the touch list swaps their order. */
+function pairFingers(touches: readonly Finger[], ids: [string | number, string | number] | null): [Finger, Finger] | null {
+  if (touches.length < 2) return null;
+  if (ids) {
+    const a = touches.find((touch) => touch.identifier === ids[0]);
+    const b = touches.find((touch) => touch.identifier === ids[1]);
+    if (a && b) return [a, b];
+  }
+  return [touches[0], touches[1]];
+}
+
+/** A zoomed-in drag pans the board. Two fingers pinch and turn it, so the page does not take them. */
 function claimsBoardGesture(
   zoom: number,
   evt: GestureResponderEvent,
@@ -216,7 +234,16 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
     pan: { x: 0, y: 0 },
     dx: 0,
     dy: 0,
-    pinch: null as null | { dist: number; zoom: number; pan: { x: number; y: number }; x: number; y: number },
+    pinch: null as null | {
+      dist: number;
+      zoom: number;
+      pan: { x: number; y: number };
+      x: number;
+      y: number;
+      angle: number;
+      turn: number;
+      ids: [string | number, string | number] | null;
+    },
     origin: { x: 0, y: 0 },
   });
 
@@ -253,7 +280,10 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (evt, g) => claimsBoardGesture(zoomRef.current, evt, g.dx, g.dy),
       onMoveShouldSetPanResponderCapture: (evt, g) => claimsBoardGesture(zoomRef.current, evt, g.dx, g.dy),
-      onPanResponderTerminationRequest: () => zoomRef.current <= 1,
+      onPanResponderTerminationRequest: (evt) => {
+        if ((evt.nativeEvent.touches?.length ?? 0) >= 2) return false;
+        return zoomRef.current <= 1;
+      },
       onPanResponderGrant: (evt) => {
         stopCamera();
         onDraggingRef.current(true);
@@ -345,23 +375,36 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
 
   const beginPinch = (evt: GestureResponderEvent) => {
     const touches = evt.nativeEvent.touches ?? [];
-    if (touches.length < 2) return;
-    const [a, b] = touches;
+    const pair = pairFingers(touches, null);
+    if (!pair) return;
+    const [a, b] = pair;
     const midX = (a.pageX + b.pageX) / 2 - gesture.current.origin.x;
     const midY = (a.pageY + b.pageY) / 2 - gesture.current.origin.y;
+    const ids: [string | number, string | number] | null =
+      a.identifier == null || b.identifier == null ? null : [a.identifier, b.identifier];
     gesture.current.pinch = {
       dist: Math.max(1, touchDistance(a, b)),
       zoom: zoomRef.current,
       pan: panRef.current,
       x: midX,
       y: midY,
+      angle: touchAngle(a, b),
+      turn: boardTurnRef.current,
+      ids,
     };
   };
 
-  const applyPinch = (touches: ReadonlyArray<{ pageX: number; pageY: number }>) => {
+  const applyPinch = (touches: ReadonlyArray<Finger>) => {
     const pinch = gesture.current.pinch;
-    const [a, b] = touches;
-    if (!pinch || !a || !b) return;
+    const pair = pairFingers(touches, pinch?.ids ?? null);
+    if (!pinch || !pair) return;
+    const [a, b] = pair;
+    const angle = touchAngle(a, b);
+    const nextTurn = pinch.turn + twistStep(pinch.angle, angle);
+    pinch.angle = angle;
+    pinch.turn = nextTurn;
+    boardTurnRef.current = nextTurn;
+    boardTurn.setValue(nextTurn);
     const nextZoom = clampZoom((touchDistance(a, b) / pinch.dist) * pinch.zoom);
     const midX = (a.pageX + b.pageX) / 2 - gesture.current.origin.x;
     const midY = (a.pageY + b.pageY) / 2 - gesture.current.origin.y;
@@ -638,8 +681,9 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
           viewportRefSize.current = width;
           setViewport(width);
         }}
-        onTouchStart={() => {
-          if (zoomRef.current > 1) setPageScrollRef.current(false);
+        onTouchStart={(event) => {
+          const fingers = event.nativeEvent.touches?.length ?? 0;
+          if (zoomRef.current > 1 || fingers >= 2) setPageScrollRef.current(false);
         }}
         onTouchEnd={() => setPageScrollRef.current(true)}
         onTouchCancel={() => setPageScrollRef.current(true)}
@@ -710,9 +754,11 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
         <View style={styles.zoomRow}>{zoomPair}</View>
         {footer}
       </Animated.View>
-      {zoom > 1 ? (
-        <Text style={styles.phoneHint}>Drag the board to look around. Pinch, or use + and −, to zoom.</Text>
-      ) : null}
+      <Text style={styles.phoneHint}>
+        {zoom > 1
+          ? 'Drag the board to look around. Pinch to zoom, or twist with two fingers to turn it.'
+          : 'Twist with two fingers to turn the board.'}
+      </Text>
     </View>
   );
 }

@@ -16,6 +16,15 @@ const READABLE_BOARD = READABLE_EDGE / ((1 - 2 * TRACK_DEPTH) / 9);
 const PAGE_STOPS = [0.5, 0.75, 1];
 const TRACK = TRACK_DEPTH;
 
+/**
+ * Shortest clockwise step from one two-finger angle to the next, in degrees.
+ * Both angles are screen degrees, where clockwise is positive.
+ */
+export function twistStep(previous: number, next: number): number {
+  const diff = ((next - previous) % 360 + 360) % 360;
+  return diff > 180 ? diff - 360 : diff;
+}
+
 export function clampZoom(zoom: number) {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
 }

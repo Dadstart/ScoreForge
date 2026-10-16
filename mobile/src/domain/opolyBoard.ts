@@ -91,17 +91,9 @@ export function boardTurnForSpace(space: number): number {
 /** Same facing as `boardTurnForSpace`, choosing the turn closest to `current`. */
 export function nearestBoardTurn(current: number, space: number): number {
   const base = boardTurnForSpace(space);
-  let best = base;
-  let bestDist = Infinity;
-  for (let lap = -2; lap <= 2; lap += 1) {
-    const next = base + lap * 360;
-    const dist = Math.abs(next - current);
-    if (dist < bestDist) {
-      bestDist = dist;
-      best = next;
-    }
-  }
-  return best;
+  const diff = (((base - current) % 360) + 360) % 360;
+  const delta = diff > 180 ? diff - 360 : diff;
+  return current + delta;
 }
 
 /** Board-space rect shown in `view` after the board has rotated `turn` degrees around its center. */
