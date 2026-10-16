@@ -1126,20 +1126,30 @@ function BoardCanvas({
                       },
                     ]}
                   >
-                    <Text
-                      style={[
-                        styles.cellText,
-                        {
-                          fontSize: compact.fontSize,
-                          lineHeight: compact.fontSize + 1,
-                          width: quarter ? nameBox.height : nameBox.width,
-                          textAlign: 'center',
-                        },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {compact.text}
-                    </Text>
+                    {isUtility ? (
+                      <UtilityMark
+                        kind={property?.id === 'water' ? 'water' : 'electric'}
+                        size={Math.max(
+                          14,
+                          Math.min(quarter ? nameBox.height : nameBox.width, quarter ? nameBox.width : nameBox.height) - 2,
+                        )}
+                      />
+                    ) : (
+                      <Text
+                        style={[
+                          styles.cellText,
+                          {
+                            fontSize: compact.fontSize,
+                            lineHeight: compact.fontSize + 1,
+                            width: quarter ? nameBox.height : nameBox.width,
+                            textAlign: 'center',
+                          },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {compact.text}
+                      </Text>
+                    )}
                   </View>
                 ) : null}
                 {fitted ? (
@@ -1652,31 +1662,36 @@ function cardMarkSize(row: number, col: number, cell: number, detail: boolean) {
 function UtilityMark({ kind, size }: { kind: 'electric' | 'water'; size: number }) {
   return (
     <View style={{ width: size, height: size, pointerEvents: 'none' }}>
-      {kind === 'water' ? <WaterSvg size={size} /> : <BulbSvg size={size} />}
+      {kind === 'water' ? <SpigotSvg size={size} /> : <BoltSvg size={size} />}
     </View>
   );
 }
 
-function BulbSvg({ size }: { size: number }) {
+function BoltSvg({ size }: { size: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 32 32">
       <Path
-        d="M16 1.5c-5.4 0-9.2 4.1-9.2 9.4 0 3.3 1.7 5.8 3.6 7.6.9.9 1.4 1.9 1.4 3v1.3h8.4v-1.3c0-1.1.5-2.1 1.4-3 1.9-1.8 3.6-4.3 3.6-7.6 0-5.3-3.8-9.4-9.2-9.4z"
-        fill="#f2c14b"
+        d="M18.2 1.2 6.2 17.4h7.4L11.2 30.8 26.4 13h-7.8L20.6 1.2z"
+        fill="#f5c400"
+        stroke="#8a5a00"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
       />
-      <Path d="M11.2 9.2c1-2.4 2.8-3.8 4.8-3.8" fill="none" stroke="#fff6d4" strokeWidth="1.6" strokeLinecap="round" />
-      <Rect x="11.6" y="23.2" width="8.8" height="2.1" rx="0.4" fill="#7a5a22" />
-      <Rect x="12.2" y="26" width="7.6" height="1.8" rx="0.4" fill="#7a5a22" />
-      <Rect x="13" y="28.4" width="6" height="2.2" rx="0.7" fill="#4e3912" />
     </Svg>
   );
 }
 
-function WaterSvg({ size }: { size: number }) {
+function SpigotSvg({ size }: { size: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 32 32">
-      <Path d="M16 2c5.2 7.2 11 12.2 11 18.2a11 11 0 1 1-22 0C5 14.2 10.8 9.2 16 2z" fill="#2b86c4" />
-      <Path d="M11.5 18.5c1.2 4 3.4 6 6.8 6.8" fill="none" stroke="#d7f1fb" strokeWidth="1.8" strokeLinecap="round" />
+      <Circle cx="8.5" cy="7.2" r="4.6" fill="#e8eef3" stroke="#2f3d4a" strokeWidth="1.7" />
+      <Path d="M8.5 3.8v6.8M5.4 7.2h6.2" stroke="#2f3d4a" strokeWidth="1.4" strokeLinecap="round" />
+      <Rect x="7.2" y="11.2" width="2.6" height="3.2" fill="#4b5966" />
+      <Rect x="2.4" y="14" width="17.4" height="6.2" rx="1.6" fill="#7f8d9c" />
+      <Rect x="3.4" y="15" width="15" height="1.6" rx="0.7" fill="#f4f7fa" />
+      <Path d="M18.2 14.4h6.4c1.2 0 2.2 1 2.2 2.2V23h-3.8v-5.2h-4.8z" fill="#4b5966" />
+      <Rect x="22.2" y="22.6" width="4.4" height="2.2" rx="0.5" fill="#2f3d4a" />
+      <Path d="M24.4 25.6c0 0 2.1 1.9 2.1 3.3a2.1 2.1 0 1 1-4.2 0c0-1.4 2.1-3.3 2.1-3.3z" fill="#2b86c4" />
     </Svg>
   );
 }
