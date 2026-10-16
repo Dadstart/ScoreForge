@@ -53,6 +53,7 @@ import { useSetPageScroll } from './ui';
 import type { DrawnCard } from '../domain/opolyPlay';
 
 const TOKEN_COLORS = ['#e86a5c', '#6fbf8a', '#7eb6ff', '#d4a84b', '#d93a96', '#f7941d', '#c5d0c9', '#f2e3a0'];
+const NO_FLIGHTS: MoneyFlight[] = [];
 /** Cells at least this wide show names and prices. Smaller cells are a color map. */
 const CLOSE_CELL = 96;
 
@@ -73,7 +74,7 @@ type Props = {
   onAcceptCard?: () => void;
   chanceCount?: number;
   chestCount?: number;
-  moneyFlight?: MoneyFlight | null;
+  moneyFlights?: MoneyFlight[];
   onDragging: (dragging: boolean) => void;
   /** True while the board is enlarged and a drag should pan it instead of the page. */
   onZoomed?: (zoomed: boolean) => void;
@@ -828,7 +829,7 @@ function BoardCanvas({
   onAcceptCard,
   chanceCount = 16,
   chestCount = 16,
-  moneyFlight = null,
+  moneyFlights = NO_FLIGHTS,
   style,
   diceRoll = null,
   pinDice = false,
@@ -846,9 +847,19 @@ function BoardCanvas({
   onArrive?: (from: number, to: number, duration: number) => boolean;
   onWalkEnd?: () => void;
 }) {
-  const flightRef = useRef(moneyFlight);
-  flightRef.current = moneyFlight;
-  const [burst, setBurst] = useState<{ id: number; space: number } | null>(null);
+  const flightRef = useRef(moneyFlights);
+  flightRef.current = moneyFlights;
+  const flightKey = moneyFlights.map((flight) => flight.id).join('|');
+  const [flightKeySeen, setFlightKeySeen] = useState(flightKey);
+  const [landed, setLanded] = useState<MoneyFlight[]>([]);
+  if (flightKeySeen !== flightKey) {
+    setFlightKeySeen(flightKey);
+    setLanded([]);
+  }
+  const bursts =
+    flightKeySeen === flightKey
+      ? [...moneyFlights.filter((flight) => flight.routeId == null), ...landed]
+      : moneyFlights.filter((flight) => flight.routeId == null);
   const [size, setSize] = useState(0);
   const drawnRef = useRef(drawnCards);
   drawnRef.current = drawnCards;
@@ -870,20 +881,15 @@ function BoardCanvas({
     drawCursor.current = index + 1;
   };
 
-  useEffect(() => {
-    if (!moneyFlight) {
-      setBurst(null);
-      return;
-    }
-    if (moneyFlight.routeId != null) return;
-    setBurst({ id: moneyFlight.id, space: moneyFlight.space });
-  }, [moneyFlight]);
-
   const onTokenSettled = (playerId: string) => {
     onWalkEnd?.();
-    const flight = flightRef.current;
-    if (!flight || flight.routeId == null || flight.playerId !== playerId) return;
-    setBurst({ id: flight.id, space: flight.space });
+    const waiting = flightRef.current.filter((flight) => flight.routeId != null && flight.playerId === playerId);
+    if (waiting.length === 0) return;
+    setLanded((current) => {
+      const seen = new Set(current.map((flight) => flight.id));
+      const added = waiting.filter((flight) => !seen.has(flight.id));
+      return added.length > 0 ? [...current, ...added] : current;
+    });
   };
 
   const cell = size > 0 ? size * TRACK_DEPTH : 48;
@@ -1324,7 +1330,7 @@ function BoardCanvas({
           turn={diceTurn}
         />
       ) : null}
-      <MoneyBills flight={burst} boardSize={size} />
+      <MoneyBills flights={bursts} boardSize={size} />
       {pinDice && diceRoll ? (
         <View style={[styles.diceLayer, preserve3d, { pointerEvents: 'none' }]}>
           <OpolyDice

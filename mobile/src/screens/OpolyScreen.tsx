@@ -5,7 +5,7 @@ import Svg, { Path } from 'react-native-svg';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AddPlayerModal } from '../components/AddPlayerModal';
 import { OpolyBoard, type TokenRouteView } from '../components/OpolyBoard';
-import { type MoneyFlight } from '../components/MoneyBills';
+import { CashAmount, type MoneyFlight } from '../components/MoneyBills';
 import { FireworksOverlay } from '../components/FireworksOverlay';
 import { PlaySpark } from '../components/PlaySpark';
 import { OptionSelect } from '../components/OptionSelect';
@@ -53,7 +53,7 @@ import {
   createOpolyPlay,
   declineProperty,
   landedPropertyId,
-  moneyFromSquare,
+  cashSplashes,
   mortgageProperty,
   mortgageValue,
   ownsOpoly,
@@ -98,6 +98,17 @@ function parseDice(raw: string): number | null {
   return value;
 }
 
+function netCash(events: { playerId: string; points: number }[]) {
+  const totals = new Map<string, number>();
+  for (const event of events) {
+    if (!event.playerId || event.points === 0) continue;
+    totals.set(event.playerId, (totals.get(event.playerId) ?? 0) + event.points);
+  }
+  return [...totals.entries()]
+    .filter(([, delta]) => delta !== 0)
+    .map(([playerId, delta]) => ({ playerId, delta }));
+}
+
 function isPlay(result: PlayOutcome | { error: string }): result is PlayOutcome {
   return !('error' in result);
 }
@@ -116,7 +127,8 @@ export function OpolyScreen({ navigation, route }: Props) {
   const [diceRoll, setDiceRoll] = useState<{ id: number; faces: [number, number] } | null>(null);
   const [tokenRoute, setTokenRoute] = useState<TokenRouteView | null>(null);
   const [drawnCards, setDrawnCards] = useState<DrawnCard[]>([]);
-  const [moneyFlight, setMoneyFlight] = useState<MoneyFlight | null>(null);
+  const [moneyFlights, setMoneyFlights] = useState<MoneyFlight[]>([]);
+  const [cashPulses, setCashPulses] = useState<{ id: number; playerId: string; delta: number }[]>([]);
   const routeSerial = useRef(0);
   const billSerial = useRef(0);
   const [rollingDice, setRollingDice] = useState(false);
@@ -282,6 +294,33 @@ export function OpolyScreen({ navigation, route }: Props) {
     return player ? playerLabel(player.name, player.token) : 'Player';
   };
 
+  const showCash = (
+    events: { playerId: string; points: number }[],
+    tokens: Record<string, number>,
+    cashRoute: { playerId: string; spaces: number[] } | null,
+    routeId: number | null,
+  ) => {
+    setCashPulses(
+      netCash(events).map((pulse) => {
+        billSerial.current += 1;
+        return { ...pulse, id: billSerial.current };
+      }),
+    );
+    setMoneyFlights(
+      cashSplashes(events, tokens, cashRoute).map((splash) => {
+        billSerial.current += 1;
+        return {
+          id: billSerial.current,
+          playerId: splash.playerId,
+          space: splash.space,
+          routeId: splash.wait ? routeId : null,
+          flow: splash.flow,
+          amount: splash.amount,
+        };
+      }),
+    );
+  };
+
   const transfer = async (value: number) => {
     if (!canBank || value <= 0) return;
     if (sameParty) {
@@ -290,6 +329,7 @@ export function OpolyScreen({ navigation, route }: Props) {
     }
     const legs = transferEvents(resolvedPayer, resolvedReceiver, value);
     if (legs.length === 0) return;
+    showCash(legs, game.tokenSpaces ?? {}, null, null);
     await applyGame((g) => {
       g.events.push(...legs);
       if (g.monopoly) g.monopoly = undoForCash(g.monopoly, g.tokenSpaces ?? {}, legs.length);
@@ -321,12 +361,7 @@ export function OpolyScreen({ navigation, route }: Props) {
       routeId = routeSerial.current;
       setTokenRoute({ id: routeId, playerId: result.route.playerId, spaces: result.route.spaces });
     }
-    const paidSpace = moneyFromSquare(play, result);
-    if (paidSpace != null) {
-      billSerial.current += 1;
-      const payer = result.events.find((event) => event.points < 0)?.playerId ?? play.turn;
-      setMoneyFlight({ id: billSerial.current, playerId: payer, space: paidSpace, routeId });
-    }
+    showCash(result.events, { ...(game.tokenSpaces ?? {}), ...result.tokens }, result.route ?? null, routeId);
     await applyGame(
       (g) => {
         g.monopoly = result.play;
@@ -468,7 +503,8 @@ export function OpolyScreen({ navigation, route }: Props) {
       <Button
         label="Undo"
         onPress={() => {
-          setMoneyFlight(null);
+          setMoneyFlights([]);
+          setCashPulses([]);
           setDrawnCards([]);
           void applyGame(
             (g) => {
@@ -568,7 +604,7 @@ export function OpolyScreen({ navigation, route }: Props) {
           }
           chanceCount={play.chance.length}
           chestCount={play.chest.length}
-          moneyFlight={moneyFlight}
+          moneyFlights={moneyFlights}
           onDragging={() => {}}
           onZoomed={setBoardZoomed}
           focusSpace={game.tokenSpaces?.[turnId] ?? 0}
@@ -676,7 +712,12 @@ export function OpolyScreen({ navigation, route }: Props) {
                     style={[styles.editField, styles.editCash]}
                   />
                 ) : (
-                  <Text style={[styles.cash, broke && { color: colors.danger }]}>{formatMoney(cash)}</Text>
+                  <CashAmount
+                    label={formatMoney(cash)}
+                    broke={broke}
+                    pulse={editing ? null : cashPulses.find((pulse) => pulse.playerId === standing.playerId)}
+                    style={styles.cash}
+                  />
                 )}
                 <View
                   style={styles.holdings}

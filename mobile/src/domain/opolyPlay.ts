@@ -843,6 +843,66 @@ export function payDue(
   );
 }
 
+export type CashSplash = {
+  playerId: string;
+  space: number;
+  amount: number;
+  flow: 'pay' | 'receive';
+  /** Hold the bills until this player's token finishes walking. */
+  wait: boolean;
+};
+
+function passedGo(spaces: number[] | undefined): boolean {
+  if (!spaces || spaces.length < 2) return false;
+  for (let index = 1; index < spaces.length; index += 1) {
+    if (spaces[index] === 0 && spaces[index - 1] !== 0) return true;
+  }
+  return false;
+}
+
+/** Where bills should fly for each player who paid or collected. */
+export function cashSplashes(
+  events: { playerId: string; points: number }[],
+  tokens: Record<string, number>,
+  route?: { playerId: string; spaces: number[] } | null,
+): CashSplash[] {
+  const totals = new Map<string, { pay: number; receive: number }>();
+  for (const event of events) {
+    if (!event.playerId || event.points === 0) continue;
+    const row = totals.get(event.playerId) ?? { pay: 0, receive: 0 };
+    if (event.points < 0) row.pay += -event.points;
+    else row.receive += event.points;
+    totals.set(event.playerId, row);
+  }
+  const moving = route && route.spaces.length > 1 ? route.playerId : null;
+  const collectsGo = moving != null && passedGo(route?.spaces);
+  const splashes: CashSplash[] = [];
+  for (const [playerId, row] of totals) {
+    const space = tokens[playerId];
+    if (typeof space !== 'number') continue;
+    const walking = playerId === moving;
+    let receive = row.receive;
+    if (collectsGo && walking && receive >= GO_PAYOUT) {
+      splashes.push({ playerId, space: 0, amount: GO_PAYOUT, flow: 'receive', wait: false });
+      receive -= GO_PAYOUT;
+    }
+    if (receive > 0) {
+      splashes.push({ playerId, space, amount: receive, flow: 'receive', wait: walking });
+    }
+    if (row.pay > 0) {
+      const leftFrom = walking && route && route.spaces[0] !== space ? route.spaces[0] : null;
+      splashes.push({
+        playerId,
+        space: leftFrom ?? space,
+        amount: row.pay,
+        flow: 'pay',
+        wait: walking && leftFrom == null,
+      });
+    }
+  }
+  return splashes;
+}
+
 export function moneyFromSquare(prior: OpolyPlay, result: PlayOutcome): number | null {
   const paid = result.events.find((event) => event.points < 0);
   if (!paid) return null;

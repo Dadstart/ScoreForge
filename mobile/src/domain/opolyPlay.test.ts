@@ -7,6 +7,7 @@ import {
   canBuild,
   createOpolyPlay,
   declineProperty,
+  cashSplashes,
   moneyFromSquare,
   mortgageProperty,
   acceptCard,
@@ -58,6 +59,12 @@ describe('monopoly play', () => {
     assert.equal(bought.events[0]?.points, -60);
     assert.match(bought.note, /Roll again/);
     assert.equal(moneyFromSquare(moved.play, bought), 1);
+    assert.deepEqual(cashSplashes(moved.events, moved.tokens, moved.route), [
+      { playerId: 'ada', space: 0, amount: 200, flow: 'receive', wait: false },
+    ]);
+    assert.deepEqual(cashSplashes(bought.events, bought.tokens, bought.route), [
+      { playerId: 'ada', space: 1, amount: 60, flow: 'pay', wait: false },
+    ]);
   });
 
   it('charges rent, doubles it for a monopoly, and scales railroads', () => {
@@ -81,6 +88,10 @@ describe('monopoly play', () => {
     assert.equal(paid.play.turn, 'bea');
     assert.equal(paid.play.pending, null);
     assert.equal(moneyFromSquare(landed.play, paid), 3);
+    assert.deepEqual(cashSplashes(paid.events, { ada: 3, bea: 1 }, paid.route), [
+      { playerId: 'ada', space: 3, amount: 8, flow: 'pay', wait: false },
+      { playerId: 'bea', space: 1, amount: 8, flow: 'receive', wait: false },
+    ]);
   });
 
   it('gives another roll after doubles and jails the third doubles', () => {
@@ -130,6 +141,9 @@ describe('monopoly play', () => {
     assert.equal(stuck.play.jail.ada, undefined);
     assert.equal(stuck.events.some((event) => event.points === -50), true);
     assert.equal(stuck.tokens.ada, 15);
+    assert.deepEqual(cashSplashes(stuck.events, stuck.tokens, stuck.route), [
+      { playerId: 'ada', space: 10, amount: 50, flow: 'pay', wait: false },
+    ]);
   });
 
   it('follows a Chance card onto a property', () => {
@@ -164,6 +178,9 @@ describe('monopoly play', () => {
     assert.equal(canBuild(built.play, 'mediterranean'), false);
     assert.equal(rentDue(built.play, 'mediterranean', 4), 10);
     assert.equal(moneyFromSquare(owned, built), null);
+    assert.deepEqual(cashSplashes(built.events, built.tokens), [
+      { playerId: 'ada', space: 1, amount: 50, flow: 'pay', wait: false },
+    ]);
 
     const mortgaged = mortgageProperty(table({ owned: { reading: 'ada' } }), {}, players, 'reading');
     assert.ok(!('error' in mortgaged));
@@ -264,6 +281,9 @@ describe('monopoly play', () => {
     if ('error' in accepted) return;
     assert.equal(accepted.events.find((event) => event.playerId === 'ada')?.points, 50);
     assert.equal(accepted.play.turn, 'bea');
+    assert.deepEqual(cashSplashes(accepted.events, accepted.tokens, accepted.route), [
+      { playerId: 'ada', space: 7, amount: 50, flow: 'receive', wait: false },
+    ]);
   });
 
   it('keeps a Get Out of Jail Free card when it is accepted', () => {
