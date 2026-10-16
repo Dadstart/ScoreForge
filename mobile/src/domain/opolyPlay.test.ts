@@ -2,26 +2,37 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { DiceRoll } from './opolyDice';
 import {
+  applyTrade,
+  bidAuction,
   buildHouse,
   buyProperty,
   canBuild,
+  chooseIncomeTax,
   createOpolyPlay,
   declineProperty,
+  declareBankruptcy,
+  cashSplashes,
   moneyFromSquare,
   mortgageProperty,
   acceptCard,
   landedPropertyId,
+  netWorth,
   normalizeOpolyPlay,
+  passAuction,
   payDue,
   rentDue,
   resolveRoll,
+  skipBankruptTurn,
   turnPrompt,
   undoOpoly,
   useJailCard,
+  withoutOpolyPlayer,
   type OpolyPlay,
   type PlayPlayer,
 } from './opolyPlay';
 import { CHANCE_CARD_IDS, CHEST_CARD_IDS, cardCopy } from './opolyCards';
+import { backwardSpaces, forwardSpaces } from './opolyBoard';
+import { createScoreEvent } from './models';
 
 const players: PlayPlayer[] = [
   { id: 'ada', name: 'Ada' },
@@ -58,6 +69,12 @@ describe('monopoly play', () => {
     assert.equal(bought.events[0]?.points, -60);
     assert.match(bought.note, /Roll again/);
     assert.equal(moneyFromSquare(moved.play, bought), 1);
+    assert.deepEqual(cashSplashes(moved.events, moved.tokens, moved.route), [
+      { playerId: 'ada', space: 0, amount: 200, flow: 'receive', wait: false },
+    ]);
+    assert.deepEqual(cashSplashes(bought.events, bought.tokens, bought.route), [
+      { playerId: 'ada', space: 1, amount: 60, flow: 'pay', wait: false },
+    ]);
   });
 
   it('charges rent, doubles it for a monopoly, and scales railroads', () => {
@@ -81,6 +98,10 @@ describe('monopoly play', () => {
     assert.equal(paid.play.turn, 'bea');
     assert.equal(paid.play.pending, null);
     assert.equal(moneyFromSquare(landed.play, paid), 3);
+    assert.deepEqual(cashSplashes(paid.events, { ada: 3, bea: 1 }, paid.route), [
+      { playerId: 'ada', space: 3, amount: 8, flow: 'pay', wait: false },
+      { playerId: 'bea', space: 1, amount: 8, flow: 'receive', wait: false },
+    ]);
   });
 
   it('gives another roll after doubles and jails the third doubles', () => {
@@ -95,18 +116,28 @@ describe('monopoly play', () => {
     const second = resolveRoll(again.play, again.tokens, players, roll(1, 1));
     assert.equal(second.play.doubles, 2);
     assert.equal(second.play.pending?.kind, 'buy');
-    const passed = declineProperty(second.play, second.tokens, players);
-    assert.ok(!('error' in passed));
-    if ('error' in passed) return;
-    assert.equal(passed.play.turn, 'ada');
-    assert.equal(passed.play.doubles, 2);
-    assert.match(passed.note, /Roll again/);
+    const declined = declineProperty(second.play, second.tokens, players);
+    assert.ok(!('error' in declined));
+    if ('error' in declined) return;
+    assert.equal(declined.play.pending?.kind, 'auction');
+    let auction = declined;
+    while (auction.play.pending?.kind === 'auction') {
+      const next = passAuction(auction.play, auction.tokens, players);
+      assert.ok(!('error' in next));
+      if ('error' in next) return;
+      auction = next;
+    }
+    assert.equal(auction.play.turn, 'ada');
+    assert.equal(auction.play.doubles, 2);
+    assert.match(auction.note, /Roll again|No bids/);
 
-    const third = resolveRoll(passed.play, passed.tokens, players, roll(1, 1));
+    const third = resolveRoll(auction.play, auction.tokens, players, roll(1, 1));
     assert.equal(third.tokens.ada, 10);
     assert.equal(third.play.jail.ada, 0);
     assert.equal(third.play.doubles, 0);
     assert.equal(third.play.turn, 'bea');
+    assert.equal(third.events.length, 0);
+    assert.match(third.note, /Do not pass GO/);
   });
 
   it('sends the player to jail on the third doubles without moving there', () => {
@@ -116,7 +147,31 @@ describe('monopoly play', () => {
     assert.equal(jailed.play.jail.ada, 0);
     assert.equal(jailed.play.turn, 'bea');
     assert.match(jailed.note, /jail/);
+    assert.match(jailed.note, /Do not pass GO/);
     assert.deepEqual(jailed.route?.spaces, [0, 10]);
+  });
+
+  it('jails the third doubles without collecting salary when the roll would pass Go', () => {
+    const play = table({ doubles: 2 });
+    // From 38, 4+4 would land on 6 and collect $200 if the move were played out.
+    const jailed = resolveRoll(play, { ada: 38 }, players, roll(4, 4), []);
+    assert.equal(jailed.tokens.ada, 10);
+    assert.equal(jailed.play.jail.ada, 0);
+    assert.equal(jailed.play.turn, 'bea');
+    assert.equal(jailed.events.length, 0);
+    assert.deepEqual(jailed.route?.spaces, [38, 10]);
+    assert.equal(jailed.route?.spaces.includes(0), false);
+  });
+
+  it('sends a player who lands on Go to Jail straight to jail', () => {
+    const jailed = resolveRoll(table(), { ada: 28 }, players, roll(1, 1));
+    assert.equal(jailed.tokens.ada, 10);
+    assert.equal(jailed.play.jail.ada, 0);
+    assert.equal(jailed.play.doubles, 0);
+    assert.equal(jailed.play.turn, 'bea');
+    assert.equal(jailed.events.length, 0);
+    assert.deepEqual(jailed.route?.spaces, [30, 10]);
+    assert.match(jailed.note, /Do not pass GO/);
   });
 
   it('lets doubles out of jail and makes the third miss pay $50', () => {
@@ -130,6 +185,9 @@ describe('monopoly play', () => {
     assert.equal(stuck.play.jail.ada, undefined);
     assert.equal(stuck.events.some((event) => event.points === -50), true);
     assert.equal(stuck.tokens.ada, 15);
+    assert.deepEqual(cashSplashes(stuck.events, stuck.tokens, stuck.route), [
+      { playerId: 'ada', space: 10, amount: 50, flow: 'pay', wait: false },
+    ]);
   });
 
   it('follows a Chance card onto a property', () => {
@@ -164,6 +222,9 @@ describe('monopoly play', () => {
     assert.equal(canBuild(built.play, 'mediterranean'), false);
     assert.equal(rentDue(built.play, 'mediterranean', 4), 10);
     assert.equal(moneyFromSquare(owned, built), null);
+    assert.deepEqual(cashSplashes(built.events, built.tokens), [
+      { playerId: 'ada', space: 1, amount: 50, flow: 'pay', wait: false },
+    ]);
 
     const mortgaged = mortgageProperty(table({ owned: { reading: 'ada' } }), {}, players, 'reading');
     assert.ok(!('error' in mortgaged));
@@ -207,12 +268,16 @@ describe('monopoly play', () => {
     const play = table();
     const taxed = resolveRoll(play, { ada: 0 }, players, roll(1, 3));
     assert.equal(taxed.tokens.ada, 4);
-    assert.equal(taxed.play.pending?.kind, 'pay');
+    assert.equal(taxed.play.pending?.kind, 'tax');
     assert.equal(moneyFromSquare(play, taxed), null);
-    const paid = payDue(taxed.play, taxed.tokens, players);
+    const chosen = chooseIncomeTax(taxed.play, taxed.tokens, players, 'flat');
+    assert.ok(!('error' in chosen));
+    if ('error' in chosen) return;
+    assert.equal(chosen.play.pending?.kind, 'pay');
+    const paid = payDue(chosen.play, chosen.tokens, players);
     assert.ok(!('error' in paid));
     if ('error' in paid) return;
-    assert.equal(moneyFromSquare(taxed.play, paid), 4);
+    assert.equal(moneyFromSquare(chosen.play, paid), 4);
     assert.equal(paid.play.turn, 'bea');
   });
 
@@ -228,10 +293,14 @@ describe('monopoly play', () => {
     if ('error' in accepted) return;
     assert.equal(accepted.tokens.ada, 4);
     assert.deepEqual(accepted.route?.spaces, [7, 6, 5, 4]);
-    assert.equal(accepted.play.pending?.kind, 'pay');
-    if (accepted.play.pending?.kind !== 'pay') return;
-    assert.equal(accepted.play.pending.amount, 200);
-    assert.equal(accepted.play.pending.label, 'Income Tax');
+    assert.equal(accepted.play.pending?.kind, 'tax');
+    const chosen = chooseIncomeTax(accepted.play, accepted.tokens, players, 'flat');
+    assert.ok(!('error' in chosen));
+    if ('error' in chosen) return;
+    assert.equal(chosen.play.pending?.kind, 'pay');
+    if (chosen.play.pending?.kind !== 'pay') return;
+    assert.equal(chosen.play.pending.amount, 200);
+    assert.equal(chosen.play.pending.label, 'Income Tax');
   });
 
   it('waits to draw the next card until the first one is accepted', () => {
@@ -247,7 +316,13 @@ describe('monopoly play', () => {
     if (stepped.play.pending?.kind !== 'card') return;
     assert.equal(stepped.play.pending.id, 'doctor');
     assert.equal(stepped.events.some((event) => event.points === -50), false);
-    const paid = acceptCard(stepped.play, stepped.tokens, players);
+    const owed = acceptCard(stepped.play, stepped.tokens, players);
+    assert.ok(!('error' in owed));
+    if ('error' in owed) return;
+    assert.equal(owed.play.pending?.kind, 'pay');
+    if (owed.play.pending?.kind !== 'pay') return;
+    assert.equal(owed.play.pending.amount, 50);
+    const paid = payDue(owed.play, owed.tokens, players);
     assert.ok(!('error' in paid));
     if ('error' in paid) return;
     assert.equal(paid.events.some((event) => event.points === -50), true);
@@ -264,6 +339,9 @@ describe('monopoly play', () => {
     if ('error' in accepted) return;
     assert.equal(accepted.events.find((event) => event.playerId === 'ada')?.points, 50);
     assert.equal(accepted.play.turn, 'bea');
+    assert.deepEqual(cashSplashes(accepted.events, accepted.tokens, accepted.route), [
+      { playerId: 'ada', space: 7, amount: 50, flow: 'receive', wait: false },
+    ]);
   });
 
   it('keeps a Get Out of Jail Free card when it is accepted', () => {
@@ -302,18 +380,32 @@ describe('monopoly play', () => {
     assert.match(turnPrompt(jailed, marked), /^🚗 Ada is in jail/);
   });
 
-  it('passes on a property and gives the turn to the next player', () => {
+  it('opens an auction when a property is declined', () => {
     const moved = resolveRoll(table(), { ada: 0 }, players, roll(2, 3));
     assert.equal(offeredProperty(moved.play), 'reading');
-    const passed = declineProperty(moved.play, moved.tokens, players);
-    assert.ok(!('error' in passed));
-    if ('error' in passed) return;
-    assert.equal(passed.play.pending, null);
-    assert.equal(passed.play.owned.reading, undefined);
-    assert.equal(passed.play.turn, 'bea');
+    const declined = declineProperty(moved.play, moved.tokens, players);
+    assert.ok(!('error' in declined));
+    if ('error' in declined) return;
+    assert.equal(declined.play.pending?.kind, 'auction');
+    if (declined.play.pending?.kind !== 'auction') return;
+    assert.equal(declined.play.pending.propertyId, 'reading');
+    const bid = bidAuction(declined.play, declined.tokens, players, 50);
+    assert.ok(!('error' in bid));
+    if ('error' in bid) return;
+    assert.equal(bid.play.pending?.kind, 'auction');
+    if (bid.play.pending?.kind !== 'auction') return;
+    assert.equal(bid.play.pending.highBid, 50);
+    assert.equal(bid.play.pending.highBidderId, 'ada');
+    const pass = passAuction(bid.play, bid.tokens, players);
+    assert.ok(!('error' in pass));
+    if ('error' in pass) return;
+    assert.equal(pass.play.owned.reading, 'ada');
+    assert.equal(pass.play.pending, null);
+    assert.equal(pass.play.turn, 'bea');
+    assert.equal(pass.events.find((event) => event.playerId === 'ada')?.points, -50);
   });
 
-  it('ends the turn after buying or passing when the undo history is very deep', () => {
+  it('ends the turn after buying or auctioning when the undo history is very deep', () => {
     let prior: OpolyPlay['undo'] = null;
     for (let step = 0; step < 40; step += 1) {
       prior = {
@@ -338,17 +430,281 @@ describe('monopoly play', () => {
     if (!loaded) return;
     assert.ok(nestingDepth({ monopoly: loaded }) <= 20);
     const moved = resolveRoll(loaded, { ada: 0 }, players, roll(2, 3));
-    const passed = declineProperty(moved.play, moved.tokens, players);
+    const declined = declineProperty(moved.play, moved.tokens, players);
     const bought = buyProperty(moved.play, moved.tokens, players, 1500);
-    assert.ok(!('error' in passed));
+    assert.ok(!('error' in declined));
     assert.ok(!('error' in bought));
-    if ('error' in passed || 'error' in bought) return;
-    assert.equal(passed.play.turn, 'bea');
+    if ('error' in declined || 'error' in bought) return;
+    let auction = declined;
+    while (auction.play.pending?.kind === 'auction') {
+      const next = passAuction(auction.play, auction.tokens, players);
+      assert.ok(!('error' in next));
+      if ('error' in next) return;
+      auction = next;
+    }
+    assert.equal(auction.play.turn, 'bea');
     assert.equal(bought.play.turn, 'bea');
-    assert.equal(passed.play.pending, null);
+    assert.equal(auction.play.pending, null);
     assert.equal(bought.play.pending, null);
-    assert.ok(nestingDepth({ monopoly: passed.play }) <= 20);
+    assert.ok(nestingDepth({ monopoly: auction.play }) <= 20);
     assert.ok(nestingDepth({ monopoly: bought.play }) <= 20);
+  });
+
+  it('skips bankrupt players when the turn moves on', () => {
+    const seated = [...players, { id: 'cal', name: 'Cal' }];
+    const broke = [createScoreEvent('bea', -1500)];
+    const moved = resolveRoll(table(), { ada: 15 }, seated, roll(2, 3), broke);
+    assert.equal(moved.tokens.ada, 20);
+    assert.equal(moved.play.turn, 'cal');
+    assert.match(moved.note, /Bea is bankrupt/);
+
+    const stayed = resolveRoll(table(), { ada: 15 }, players, roll(2, 3), broke);
+    assert.equal(stayed.play.turn, 'ada');
+    assert.match(stayed.note, /Bea is bankrupt/);
+  });
+
+  it('ends a doubles turn when the payment leaves the player bankrupt', () => {
+    const broke = [createScoreEvent('ada', -1400)];
+    const taxed = resolveRoll(table(), { ada: 36 }, players, roll(1, 1), broke);
+    assert.equal(taxed.play.pending?.kind, 'pay');
+    assert.equal(taxed.play.doubles, 1);
+    const paid = payDue(taxed.play, taxed.tokens, players, broke);
+    assert.ok(!('error' in paid));
+    if ('error' in paid) return;
+    assert.equal(paid.play.turn, 'bea');
+    assert.equal(paid.play.doubles, 0);
+    assert.match(paid.note, /Ada is bankrupt/);
+    assert.doesNotMatch(paid.note, /Roll again/);
+  });
+
+  it('moves off a bankrupt player before they roll', () => {
+    const seated = [...players, { id: 'cal', name: 'Cal' }];
+    const broke = [createScoreEvent('bea', -1500), createScoreEvent('cal', -1600)];
+    const skipped = skipBankruptTurn(table({ turn: 'bea' }), { bea: 4 }, seated, broke);
+    assert.ok(skipped);
+    assert.equal(skipped?.play.turn, 'ada');
+    assert.match(skipped?.note ?? '', /Bea is bankrupt/);
+    assert.match(skipped?.note ?? '', /Cal is bankrupt/);
+    assert.equal(
+      skipBankruptTurn(table(), {}, players, [createScoreEvent('ada', -1500), createScoreEvent('bea', -1500)]),
+      null,
+    );
+    assert.equal(turnPrompt(table(), players, [createScoreEvent('ada', -1500)]), 'Ada is bankrupt.');
+    const left = withoutOpolyPlayer(table({ turn: 'ada' }), 'ada', seated, [createScoreEvent('bea', -1500)]);
+    assert.equal(left.turn, 'cal');
+  });
+
+  it('moves the token to the square named on an accepted card', () => {
+    const moved = (
+      deck: 'chance' | 'chest',
+      id: string,
+      space: number,
+      partial: Partial<OpolyPlay> = {},
+    ) => {
+      const result = acceptCard(
+        table({ pending: { kind: 'card', deck, id, space }, ...partial }),
+        { ada: space },
+        players,
+        [],
+        () => 0,
+      );
+      assert.ok(!('error' in result));
+      if ('error' in result) throw new Error(result.error);
+      return result;
+    };
+    const collected = (result: { events: { playerId: string; points: number }[] }, id = 'ada') =>
+      result.events.filter((event) => event.playerId === id).reduce((sum, event) => sum + event.points, 0);
+
+    const go = moved('chance', 'go', 7);
+    assert.equal(go.tokens.ada, 0);
+    assert.equal(collected(go), 200);
+    assert.deepEqual(go.route?.spaces, forwardSpaces(7, 0));
+
+    const boardwalk = moved('chance', 'boardwalk', 7);
+    assert.equal(boardwalk.tokens.ada, 39);
+    assert.equal(collected(boardwalk), 0);
+    assert.deepEqual(boardwalk.route?.spaces, forwardSpaces(7, 39));
+    assert.equal(boardwalk.play.pending?.kind, 'buy');
+
+    const illinois = moved('chance', 'illinois', 36);
+    assert.equal(illinois.tokens.ada, 24);
+    assert.equal(collected(illinois), 200);
+    assert.deepEqual(illinois.route?.spaces, forwardSpaces(36, 24));
+
+    const charles = moved('chance', 'st-charles', 7);
+    assert.equal(charles.tokens.ada, 11);
+    assert.equal(collected(charles), 0);
+    const charlesLap = moved('chance', 'st-charles', 22);
+    assert.equal(charlesLap.tokens.ada, 11);
+    assert.equal(collected(charlesLap), 200);
+
+    const reading = moved('chance', 'reading', 7);
+    assert.equal(reading.tokens.ada, 5);
+    assert.equal(collected(reading), 200);
+    assert.deepEqual(reading.route?.spaces, forwardSpaces(7, 5));
+
+    const railroad = moved('chance', 'railroad-a', 7);
+    assert.equal(railroad.tokens.ada, 15);
+    assert.equal(railroad.play.pending?.kind, 'buy');
+    const railroadOwned = moved('chance', 'railroad-b', 22, { owned: { bo: 'bea' } });
+    assert.equal(railroadOwned.tokens.ada, 25);
+    assert.equal(railroadOwned.play.pending?.kind, 'pay');
+    if (railroadOwned.play.pending?.kind === 'pay') assert.equal(railroadOwned.play.pending.amount, 50);
+    const railroadLap = moved('chance', 'railroad-a', 36, { owned: { reading: 'bea' } });
+    assert.equal(railroadLap.tokens.ada, 5);
+    assert.equal(collected(railroadLap), 200);
+    if (railroadLap.play.pending?.kind === 'pay') assert.equal(railroadLap.play.pending.amount, 50);
+
+    const utility = moved('chance', 'utility', 7);
+    assert.equal(utility.tokens.ada, 12);
+    assert.equal(utility.play.pending?.kind, 'buy');
+    const utilityOwned = moved('chance', 'utility', 22, { owned: { water: 'bea' } });
+    assert.equal(utilityOwned.tokens.ada, 28);
+    assert.equal(utilityOwned.play.pending?.kind, 'pay');
+    if (utilityOwned.play.pending?.kind === 'pay') assert.equal(utilityOwned.play.pending.amount, 20);
+
+    const back = moved('chance', 'back-3', 7);
+    assert.equal(back.tokens.ada, 4);
+    assert.deepEqual(back.route?.spaces, backwardSpaces(7, 4));
+
+    const jail = moved('chance', 'go-jail', 36);
+    assert.equal(jail.tokens.ada, 10);
+    assert.equal(jail.play.jail.ada, 0);
+    assert.equal(collected(jail), 0);
+    assert.deepEqual(jail.route?.spaces, [36, 10]);
+
+    const chestGo = moved('chest', 'go', 33);
+    assert.equal(chestGo.tokens.ada, 0);
+    assert.equal(collected(chestGo), 200);
+    assert.deepEqual(chestGo.route?.spaces, forwardSpaces(33, 0));
+    const chestJail = moved('chest', 'go-jail', 2);
+    assert.equal(chestJail.tokens.ada, 10);
+    assert.equal(chestJail.play.jail.ada, 0);
+    assert.equal(collected(chestJail), 0);
+  });
+
+  it('collects or pays a money card without moving the token', () => {
+    const stayed = (deck: 'chance' | 'chest', id: string, partial: Partial<OpolyPlay> = {}) => {
+      const result = acceptCard(
+        table({ pending: { kind: 'card', deck, id, space: 7 }, ...partial }),
+        { ada: 7 },
+        players,
+      );
+      assert.ok(!('error' in result));
+      if ('error' in result) throw new Error(result.error);
+      assert.equal(result.tokens.ada, 7);
+      assert.equal(result.route, null);
+      return result;
+    };
+    const collected = (result: { events: { playerId: string; points: number }[] }, id = 'ada') =>
+      result.events.filter((event) => event.playerId === id).reduce((sum, event) => sum + event.points, 0);
+
+    assert.equal(collected(stayed('chance', 'bank-50')), 50);
+    assert.equal(collected(stayed('chance', 'loan')), 150);
+    const poor = stayed('chance', 'poor-tax');
+    assert.equal(poor.play.pending?.kind, 'pay');
+    if (poor.play.pending?.kind === 'pay') assert.equal(poor.play.pending.amount, 15);
+    assert.equal(collected(stayed('chest', 'bank-error')), 200);
+    assert.equal(collected(stayed('chest', 'stock')), 50);
+    assert.equal(collected(stayed('chest', 'holiday')), 100);
+    assert.equal(collected(stayed('chest', 'refund')), 20);
+    assert.equal(collected(stayed('chest', 'life')), 100);
+    const doctor = stayed('chest', 'doctor');
+    assert.equal(doctor.play.pending?.kind, 'pay');
+    if (doctor.play.pending?.kind === 'pay') assert.equal(doctor.play.pending.amount, 50);
+    const hospital = stayed('chest', 'hospital');
+    assert.equal(hospital.play.pending?.kind, 'pay');
+    if (hospital.play.pending?.kind === 'pay') assert.equal(hospital.play.pending.amount, 100);
+    const school = stayed('chest', 'school');
+    assert.equal(school.play.pending?.kind, 'pay');
+    if (school.play.pending?.kind === 'pay') assert.equal(school.play.pending.amount, 50);
+    assert.equal(collected(stayed('chest', 'consultancy')), 25);
+    assert.equal(collected(stayed('chest', 'beauty')), 10);
+    assert.equal(collected(stayed('chest', 'inherit')), 100);
+
+    const chair = stayed('chance', 'chairman');
+    assert.equal(chair.play.pending?.kind, 'pay');
+    if (chair.play.pending?.kind === 'pay') {
+      assert.equal(chair.play.pending.amount, 50);
+      assert.equal(chair.play.pending.payeeId, 'bea');
+    }
+    const birthday = stayed('chest', 'birthday');
+    assert.equal(collected(birthday, 'ada'), 10);
+    assert.equal(collected(birthday, 'bea'), -10);
+    const chanceRepairs = stayed('chance', 'repairs', {
+      owned: { mediterranean: 'ada' },
+      houses: { mediterranean: 2 },
+    });
+    assert.equal(chanceRepairs.play.pending?.kind, 'pay');
+    if (chanceRepairs.play.pending?.kind === 'pay') assert.equal(chanceRepairs.play.pending.amount, 50);
+    const chestRepairs = stayed('chest', 'repairs', {
+      owned: { mediterranean: 'ada' },
+      houses: { mediterranean: 5 },
+    });
+    assert.equal(chestRepairs.play.pending?.kind, 'pay');
+    if (chestRepairs.play.pending?.kind === 'pay') assert.equal(chestRepairs.play.pending.amount, 115);
+    const kept = stayed('chance', 'jail-free');
+    assert.equal(kept.play.chanceFree.ada, 1);
+    assert.equal(kept.tokens.ada, 7);
+  });
+
+  it('refuses pay when cash is short and bankrupts to the creditor', () => {
+    const broke = [createScoreEvent('ada', -1400)];
+    const owing: OpolyPlay = {
+      ...table({ owned: { baltic: 'ada', mediterranean: 'bea' }, houses: { baltic: 2 } }),
+      pending: { kind: 'pay', amount: 200, payeeId: 'bea', space: 3, label: 'A' },
+      turn: 'ada',
+    };
+    const refused = payDue(owing, { ada: 3, bea: 1 }, players, broke);
+    assert.ok('error' in refused);
+    const bust = declareBankruptcy(owing, { ada: 3, bea: 1 }, players, broke);
+    assert.ok(!('error' in bust));
+    if ('error' in bust) return;
+    assert.equal(bust.play.owned.baltic, 'bea');
+    assert.equal(bust.play.houses.baltic, undefined);
+    assert.equal(bust.play.pending, null);
+    assert.equal(bust.play.turn, 'bea');
+    assert.match(bust.note, /bankrupt/);
+  });
+
+  it('trades deeds and cash between players', () => {
+    const play = table({ owned: { mediterranean: 'ada', baltic: 'bea' } });
+    const traded = applyTrade(
+      play,
+      { ada: 1, bea: 3 },
+      players,
+      {
+        counterpartyId: 'bea',
+        givePropertyIds: ['mediterranean'],
+        giveCash: 50,
+        giveChanceFree: 0,
+        giveChestFree: 0,
+        takePropertyIds: ['baltic'],
+        takeCash: 0,
+        takeChanceFree: 0,
+        takeChestFree: 0,
+      },
+    );
+    assert.ok(!('error' in traded));
+    if ('error' in traded) return;
+    assert.equal(traded.play.owned.mediterranean, 'bea');
+    assert.equal(traded.play.owned.baltic, 'ada');
+    assert.equal(traded.events.find((event) => event.playerId === 'ada')?.points, -50);
+    assert.equal(traded.events.find((event) => event.playerId === 'bea')?.points, 50);
+  });
+
+  it('lets Income Tax take 10 percent of net worth', () => {
+    const play = table({ owned: { boardwalk: 'ada' } });
+    const landed = resolveRoll(play, { ada: 0 }, players, roll(1, 3));
+    assert.equal(landed.play.pending?.kind, 'tax');
+    const worth = netWorth(landed.play, 'ada', []);
+    assert.equal(worth, 1500 + 400);
+    const chosen = chooseIncomeTax(landed.play, landed.tokens, players, 'percent');
+    assert.ok(!('error' in chosen));
+    if ('error' in chosen) return;
+    assert.equal(chosen.play.pending?.kind, 'pay');
+    if (chosen.play.pending?.kind !== 'pay') return;
+    assert.equal(chosen.play.pending.amount, Math.ceil(worth * 0.1));
   });
 });
 

@@ -1,12 +1,19 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { projectTiltedPoint } from './dieProjection';
 import {
   cellBox,
   colorBarThickness,
   centerTitleBounds,
+  CARD_READ_TILT,
   DECK_TILT,
+  cardReadScale,
   deckPileLayout,
   deckVisualBox,
+  drawnCardCorners,
+  drawnCardFrame,
+  followRoute,
+  forwardSpaces,
   diceHopPoints,
   diceRollCurves,
   jailCell,
@@ -118,12 +125,26 @@ describe('jail tokens', () => {
       const box = jailCell(cell);
       for (const count of [1, 2, 4]) {
         const spots = layoutVisitingTokens(cell, count);
+        assert.equal(spots.length, count);
         for (const spot of spots) {
           assert.ok(spot.x >= -0.01);
           assert.ok(spot.y >= -0.01);
           assert.ok(spot.x + spot.piece <= cell + 0.01);
           assert.ok(spot.y + spot.piece <= cell + 0.01);
           assert.equal(overlaps(spot, box), false);
+        }
+        for (const spot of spots.map((raw) => placeCornerToken(cell, raw, cornerFacing(10)))) {
+          const cx = spot.x + spot.piece / 2;
+          const cy = spot.y + spot.piece / 2;
+          const dx = cx - cell / 2;
+          const dy = cy - cell / 2;
+          const localX = cell / 2 + (dx + dy);
+          const localY = cell / 2 + (dy - dx);
+          assert.equal(
+            localX >= box.x && localX <= box.x + box.width && localY >= box.y && localY <= box.y + box.height,
+            false,
+            `visitor center landed in the bars at ${localX},${localY}`,
+          );
         }
       }
     });
@@ -153,6 +174,38 @@ describe('deckPileLayout', () => {
       }
     });
   }
+});
+
+describe('drawn card', () => {
+  for (const board of [280, 360, 480, 720, 851, 1100, 1277, 1702, 2200]) {
+    it(`lies flat and fills the felt on a ${board}px board`, () => {
+      const frame = drawnCardFrame(board);
+      const felt = centerTitleBounds(board).felt;
+      assert.equal(frame.lift, 0);
+      assert.equal(frame.hover, 0);
+      assert.equal(frame.lift, CARD_READ_TILT);
+      assert.equal(DECK_TILT, 0);
+      assert.ok(frame.width > felt * 0.28, `card width ${frame.width}`);
+      assert.ok(frame.height > felt * 0.4, `card height ${frame.height}`);
+      assert.ok(frame.width <= felt * 0.5 + 0.5, `card width ${frame.width}`);
+      assert.ok(frame.height <= felt * 0.64 + 0.5, `card height ${frame.height}`);
+      const corners = drawnCardCorners(board);
+      assert.ok(corners.every((corner) => corner.z === 0));
+      const half = board / 2;
+      for (const corner of corners) {
+        const projected = projectTiltedPoint(corner.x, corner.y, corner.z, board);
+        assert.ok(projected.x >= -half && projected.x <= half, `x ${projected.x}`);
+        assert.ok(projected.y >= -half && projected.y <= half, `y ${projected.y}`);
+      }
+    });
+  }
+
+  it('grows face-up cards when the board is zoomed out', () => {
+    assert.equal(cardReadScale(1), 1);
+    assert.equal(cardReadScale(1.5), 1);
+    assert.equal(cardReadScale(0.5), 2);
+    assert.ok(cardReadScale(0.75) > 1);
+  });
 });
 
 describe('nameFacing', () => {
@@ -381,6 +434,7 @@ describe('board facing', () => {
     assert.equal(nearestBoardTurn(-270, 0), -360);
     assert.equal(nearestBoardTurn(0, 30), 90);
     assert.equal(nearestBoardTurn(-90, 15), -90);
+    assert.equal(nearestBoardTurn(3000, 0), 2880);
   });
 
   it('keeps a landed die on the same spot on screen when the board turns', () => {
@@ -422,5 +476,22 @@ describe('visible board rect', () => {
       windowSize: { width: 390, height: 800 },
     });
     assert.deepEqual(view, { x: 200, y: 200, width: 390, height: 270 });
+  });
+});
+
+describe('followRoute', () => {
+  it('keeps a card trip that already starts where the piece is', () => {
+    const route = forwardSpaces(7, 39);
+    assert.deepEqual(followRoute(7, 39, route), route);
+  });
+
+  it('joins a piece that is still walking up to the card square', () => {
+    const route = forwardSpaces(7, 39);
+    assert.deepEqual(followRoute(5, 39, route), forwardSpaces(5, 39));
+  });
+
+  it('continues from the square already reached on the trip', () => {
+    const route = forwardSpaces(7, 11);
+    assert.deepEqual(followRoute(9, 11, route), [9, 10, 11]);
   });
 });

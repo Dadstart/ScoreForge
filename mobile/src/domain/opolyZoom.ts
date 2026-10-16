@@ -1,4 +1,5 @@
-import { TRACK_DEPTH } from './opolyBoard';
+import { projectTiltedPoint } from './dieProjection';
+import { cellBox, nearestBoardTurn, spaceToCell, TRACK_DEPTH, type Point } from './opolyBoard';
 
 export const MIN_ZOOM = 0.5;
 /** Far enough in that a phone can show property names, without an unbounded pinch. */
@@ -15,8 +16,27 @@ const READABLE_BOARD = READABLE_EDGE / ((1 - 2 * TRACK_DEPTH) / 9);
 const PAGE_STOPS = [0.5, 0.75, 1];
 const TRACK = TRACK_DEPTH;
 
+/**
+ * Shortest clockwise step from one two-finger angle to the next, in degrees.
+ * Both angles are screen degrees, where clockwise is positive.
+ */
+export function twistStep(previous: number, next: number): number {
+  const diff = ((next - previous) % 360 + 360) % 360;
+  return diff > 180 ? diff - 360 : diff;
+}
+
 export function clampZoom(zoom: number) {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
+}
+
+/**
+ * How far to slide a board that stays at `layoutZoom` so scaling it around its
+ * center matches a board resized to `zoom`. The resized board is laid out once
+ * when the pinch ends, so the board does not flicker on every finger move.
+ */
+export function centeredZoomShift(layoutZoom: number, zoom: number, viewport: number) {
+  if (layoutZoom <= 0 || viewport <= 0) return 0;
+  return (viewport * (zoom - layoutZoom)) / 2;
 }
 
 /**
@@ -104,6 +124,179 @@ export function panForZoom(
     nextZoom,
     viewport,
   );
+}
+
+/** Where a token sits in its cell: toward the outer rim, where the piece stands. */
+export function spaceAnchor(space: number, board: number): Point {
+  const index = ((space % 40) + 40) % 40;
+  const { row, col } = spaceToCell(index);
+  const box = cellBox(row, col);
+  const outward = 0.7;
+  let u = 0.5;
+  let v = 0.5;
+  if (row === 10) v = outward;
+  else if (row === 0) v = 1 - outward;
+  if (col === 0) u = 1 - outward;
+  else if (col === 10) u = outward;
+  return {
+    x: (box.x + box.w * u) * board,
+    y: (box.y + box.h * v) * board,
+  };
+}
+
+/** Board point, after the table turn, as an offset from the board center in viewport pixels. */
+function projectAnchor(anchor: Point, turn: number, board: number): Point {
+  const ox = anchor.x - board / 2;
+  const oy = anchor.y - board / 2;
+  const rad = (turn * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  return projectTiltedPoint(ox * cos - oy * sin, ox * sin + oy * cos, 0, board);
+}
+
+/** Viewport position of a space. The board's top-left is `pan`. */
+export function spaceScreen(
+  space: number,
+  turn: number,
+  pan: { x: number; y: number },
+  zoom: number,
+  viewport: number,
+): Point {
+  const board = viewport * zoom;
+  const offset = projectAnchor(spaceAnchor(space, board), turn, board);
+  return { x: pan.x + board / 2 + offset.x, y: pan.y + board / 2 + offset.y };
+}
+
+function screenOf(anchor: Point, turn: number, pan: { x: number; y: number }, board: number): Point {
+  const offset = projectAnchor(anchor, turn, board);
+  return { x: pan.x + board / 2 + offset.x, y: pan.y + board / 2 + offset.y };
+}
+
+/** Pan that puts `anchor` at `screen` while the board is turned by `turn` degrees. */
+function panHolding(
+  anchor: Point,
+  turn: number,
+  screen: Point,
+  zoom: number,
+  viewport: number,
+): { x: number; y: number } {
+  const board = viewport * zoom;
+  const offset = projectAnchor(anchor, turn, board);
+  return clampPan(
+    {
+      x: screen.x - (board / 2 + offset.x),
+      y: screen.y - (board / 2 + offset.y),
+    },
+    zoom,
+    viewport,
+  );
+}
+
+/**
+ * Near-edge band, matching the unzoomed table: the piece sits low, just above
+ * the buttons, and away from the left and right edges.
+ */
+function tokenBand(viewport: number) {
+  const marginX = viewport * 0.16;
+  const marginY = viewport * 0.1;
+  return {
+    minX: marginX,
+    maxX: viewport - marginX,
+    minY: marginY,
+    maxY: viewport * 0.86,
+    homeY: viewport * 0.74,
+  };
+}
+
+/**
+ * Turn and pan that keep a space viewable.
+ * The space's side becomes the near edge. When that still leaves the piece
+ * outside the phone, the board slides until the piece sits in the lower band.
+ * A piece already there is left where the player put it.
+ */
+export function frameToken(args: {
+  space: number;
+  turn: number;
+  pan: { x: number; y: number };
+  zoom: number;
+  viewport: number;
+}): { turn: number; pan: { x: number; y: number } } {
+  const { space, turn, zoom, viewport } = args;
+  if (viewport <= 0 || zoom <= 0) return { turn, pan: args.pan };
+  const nextTurn = nearestBoardTurn(turn, space);
+  if (zoom <= 1) return { turn: nextTurn, pan: clampPan(args.pan, zoom, viewport) };
+
+  const board = viewport * zoom;
+  const offset = projectAnchor(spaceAnchor(space, board), nextTurn, board);
+  const screen = {
+    x: args.pan.x + board / 2 + offset.x,
+    y: args.pan.y + board / 2 + offset.y,
+  };
+  const band = tokenBand(viewport);
+  const xOk = screen.x >= band.minX && screen.x <= band.maxX;
+  const yOk = screen.y >= band.minY && screen.y <= band.maxY;
+  if (Math.abs(nextTurn - turn) < 1 && xOk && yOk) return { turn, pan: args.pan };
+
+  return {
+    turn: nextTurn,
+    pan: clampPan(
+      {
+        x: xOk ? args.pan.x : viewport / 2 - (board / 2 + offset.x),
+        y: yOk ? args.pan.y : band.homeY - (board / 2 + offset.y),
+      },
+      zoom,
+      viewport,
+    ),
+  };
+}
+
+export type TokenShot = {
+  fromSpace: number;
+  toSpace: number;
+  startTurn: number;
+  endTurn: number;
+  startPan: { x: number; y: number };
+  endPan: { x: number; y: number };
+  zoom: number;
+  viewport: number;
+};
+
+/**
+ * Camera while a piece moves from one space to the next.
+ * `t` is 0 at the start and 1 at the landing. Turn and pan move together so
+ * the piece stays on the straight line between its start and end on screen.
+ */
+export function cameraAlong(shot: TokenShot, t: number): { turn: number; pan: { x: number; y: number } } {
+  const clamped = Math.min(1, Math.max(0, t));
+  const turn = shot.startTurn + (shot.endTurn - shot.startTurn) * clamped;
+  const board = shot.viewport * shot.zoom;
+  const from = spaceAnchor(shot.fromSpace, board);
+  const to = spaceAnchor(shot.toSpace, board);
+  const anchor = {
+    x: from.x + (to.x - from.x) * clamped,
+    y: from.y + (to.y - from.y) * clamped,
+  };
+  const startScreen = screenOf(from, shot.startTurn, shot.startPan, board);
+  const endScreen = screenOf(to, shot.endTurn, shot.endPan, board);
+  const screen = {
+    x: startScreen.x + (endScreen.x - startScreen.x) * clamped,
+    y: startScreen.y + (endScreen.y - startScreen.y) * clamped,
+  };
+  return { turn, pan: panHolding(anchor, turn, screen, shot.zoom, shot.viewport) };
+}
+
+/** Where the moving piece sits on screen at `t` along a hop. */
+export function pieceScreen(shot: TokenShot, t: number): Point {
+  const camera = cameraAlong(shot, t);
+  const board = shot.viewport * shot.zoom;
+  const from = spaceAnchor(shot.fromSpace, board);
+  const to = spaceAnchor(shot.toSpace, board);
+  const clamped = Math.min(1, Math.max(0, t));
+  const anchor = {
+    x: from.x + (to.x - from.x) * clamped,
+    y: from.y + (to.y - from.y) * clamped,
+  };
+  return screenOf(anchor, camera.turn, camera.pan, board);
 }
 
 function zoomAnchor(pan: { x: number; y: number }, zoom: number, viewport: number) {

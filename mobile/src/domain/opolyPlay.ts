@@ -16,8 +16,40 @@ import { fillRandom } from './secureRandom';
 
 export type BuyPending = { kind: 'buy'; propertyId: string };
 export type CardPending = { kind: 'card'; deck: CardDeck; id: string; space: number };
-export type PayPending = { kind: 'pay'; amount: number; payeeId: string; space: number; label: string };
-export type PlayPending = BuyPending | CardPending | PayPending;
+export type PayMore = { payeeId: string; amount: number; label: string };
+export type PayPending = {
+  kind: 'pay';
+  amount: number;
+  payeeId: string;
+  space: number;
+  label: string;
+  /** Further pays after this one (e.g. Chairman of the Board). */
+  more?: PayMore[];
+};
+export type AuctionPending = {
+  kind: 'auction';
+  propertyId: string;
+  highBid: number;
+  highBidderId: string | null;
+  bidderIds: string[];
+  bidderIndex: number;
+  /** Players who have passed since the last raise. */
+  passed: string[];
+};
+export type TaxPending = { kind: 'tax'; space: number };
+export type PlayPending = BuyPending | CardPending | PayPending | AuctionPending | TaxPending;
+
+export type TradeOffer = {
+  counterpartyId: string;
+  givePropertyIds: string[];
+  giveCash: number;
+  giveChanceFree: number;
+  giveChestFree: number;
+  takePropertyIds: string[];
+  takeCash: number;
+  takeChanceFree: number;
+  takeChestFree: number;
+};
 
 export type OpolyUndo = {
   turn: string;
@@ -154,6 +186,44 @@ export function canMortgage(play: OpolyPlay, propertyId: string): boolean {
   return streetsIn(property.group).every((street) => levelOf(play, street.id) === 0);
 }
 
+/** Mortgage or sell buildings while a debt is open. */
+export function canRaiseFunds(play: OpolyPlay): boolean {
+  return play.pending?.kind === 'pay';
+}
+
+function clonePending(pending: PlayPending): PlayPending {
+  if (pending.kind === 'auction') {
+    return { ...pending, bidderIds: [...pending.bidderIds], passed: [...pending.passed] };
+  }
+  if (pending.kind === 'pay' && pending.more) {
+    return { ...pending, more: pending.more.map((row) => ({ ...row })) };
+  }
+  return { ...pending };
+}
+
+/** Cash + deeds at list/mortgage value + buildings at cost. */
+export function netWorth(play: OpolyPlay, playerId: string, events: ScoreEvent[]): number {
+  let total = cashOf(events, playerId);
+  for (const [propertyId, owner] of Object.entries(play.owned)) {
+    if (owner !== playerId) continue;
+    const property = getProperty(propertyId);
+    if (!property) continue;
+    total += play.mortgaged.includes(propertyId) ? mortgageValue(propertyId) : property.price;
+    const level = levelOf(play, propertyId);
+    if (level > 0) total += level * houseCost(property);
+  }
+  return total;
+}
+
+function solventIds(players: PlayPlayer[], events: ScoreEvent[]): string[] {
+  return players.filter((player) => cashOf(events, player.id) > 0).map((player) => player.id);
+}
+
+function nextBidderIndex(bidderIds: string[], from: number): number {
+  if (bidderIds.length === 0) return 0;
+  return (from + 1) % bidderIds.length;
+}
+
 function shuffle(ids: string[], sample: () => number): string[] {
   const next = [...ids];
   for (let index = next.length - 1; index > 0; index -= 1) {
@@ -230,7 +300,8 @@ export function normalizeOpolyPlay(value: unknown, playerIds: string[]): OpolyPl
   const ids = new Set(playerIds);
   const turn = typeof raw.turn === 'string' && ids.has(raw.turn) ? raw.turn : playerIds[0] ?? '';
   const play = blankPlay(turn);
-  play.doubles = raw.doubles === 1 || raw.doubles === 2 ? raw.doubles : 0;
+  const streak = Math.trunc(Number(raw.doubles));
+  play.doubles = streak === 1 || streak === 2 ? streak : 0;
   if (raw.jail && typeof raw.jail === 'object') {
     for (const [id, turns] of Object.entries(raw.jail)) {
       if (ids.has(id) && typeof turns === 'number' && turns >= 0 && turns < 3) play.jail[id] = Math.trunc(turns);
@@ -289,13 +360,62 @@ export function normalizeOpolyPlay(value: unknown, playerIds: string[]): OpolyPl
     pending.space < 40 &&
     typeof pending.label === 'string'
   ) {
+    const more: PayMore[] = [];
+    if (Array.isArray(pending.more)) {
+      for (const row of pending.more) {
+        if (
+          row &&
+          typeof row.amount === 'number' &&
+          row.amount > 0 &&
+          typeof row.payeeId === 'string' &&
+          (row.payeeId === BANK_PARTY_ID || ids.has(row.payeeId)) &&
+          typeof row.label === 'string'
+        ) {
+          more.push({ payeeId: row.payeeId, amount: Math.trunc(row.amount), label: row.label });
+        }
+      }
+    }
     play.pending = {
       kind: 'pay',
       amount: Math.trunc(pending.amount),
       payeeId: pending.payeeId,
       space: Math.trunc(pending.space),
       label: pending.label,
+      ...(more.length > 0 ? { more } : null),
     };
+  } else if (
+    pending &&
+    pending.kind === 'auction' &&
+    getProperty(pending.propertyId) &&
+    play.owned[pending.propertyId] == null &&
+    typeof pending.highBid === 'number' &&
+    pending.highBid >= 0 &&
+    (pending.highBidderId == null || (typeof pending.highBidderId === 'string' && ids.has(pending.highBidderId))) &&
+    Array.isArray(pending.bidderIds) &&
+    typeof pending.bidderIndex === 'number' &&
+    Array.isArray(pending.passed)
+  ) {
+    const bidderIds = pending.bidderIds.filter((id): id is string => typeof id === 'string' && ids.has(id));
+    if (bidderIds.length > 0) {
+      play.pending = {
+        kind: 'auction',
+        propertyId: pending.propertyId,
+        highBid: Math.trunc(pending.highBid),
+        highBidderId:
+          typeof pending.highBidderId === 'string' && ids.has(pending.highBidderId) ? pending.highBidderId : null,
+        bidderIds,
+        bidderIndex: Math.min(bidderIds.length - 1, Math.max(0, Math.trunc(pending.bidderIndex))),
+        passed: pending.passed.filter((id): id is string => typeof id === 'string' && ids.has(id)),
+      };
+    }
+  } else if (
+    pending &&
+    pending.kind === 'tax' &&
+    typeof pending.space === 'number' &&
+    pending.space >= 0 &&
+    pending.space < 40
+  ) {
+    play.pending = { kind: 'tax', space: Math.trunc(pending.space) };
   }
   play.undo = raw.undo && typeof raw.undo === 'object' ? linkedUndo(raw.undo, MAX_UNDO_LINKS) : null;
   return play;
@@ -307,7 +427,12 @@ export function unpackOpoly(value: unknown, playerIds: string[]): OpolyPlay | nu
 
 /** Property from the latest token move, including a buy decision still open on that square. */
 export function landedPropertyId(play: OpolyPlay, tokens: Record<string, number>): string | null {
-  if (play.pending?.kind === 'buy' && getProperty(play.pending.propertyId)) return play.pending.propertyId;
+  if (
+    (play.pending?.kind === 'buy' || play.pending?.kind === 'auction') &&
+    getProperty(play.pending.propertyId)
+  ) {
+    return play.pending.propertyId;
+  }
   let spaces = tokens;
   let undo = play.undo;
   const seen = new Set<OpolyUndo>();
@@ -335,10 +460,30 @@ function playerName(players: PlayPlayer[], id: string): string {
   return playerLabel(player.name, player.token);
 }
 
-function nextPlayer(players: PlayPlayer[], current: string): string {
+/** The next player who still has cash, or null when everyone else is bankrupt. */
+function nextSolvent(players: PlayPlayer[], current: string, events: ScoreEvent[]): string | null {
   const index = players.findIndex((player) => player.id === current);
-  if (players.length === 0) return current;
-  return players[(index + 1) % players.length]?.id ?? current;
+  if (index < 0 || players.length === 0) return null;
+  for (let step = 1; step < players.length; step += 1) {
+    const candidate = players[(index + step) % players.length];
+    if (candidate && cashOf(events, candidate.id) > 0) return candidate.id;
+  }
+  return null;
+}
+
+/** Hand the turn to the next player with cash, and say who was skipped. */
+function passTurn(players: PlayPlayer[], current: string, events: ScoreEvent[]): { turn: string; notes: string[] } {
+  const next = nextSolvent(players, current, events) ?? current;
+  const notes: string[] = [];
+  if (cashOf(events, current) <= 0) notes.push(`${playerName(players, current)} is bankrupt.`);
+  const index = players.findIndex((player) => player.id === current);
+  if (index < 0) return { turn: next, notes };
+  for (let step = 1; step < players.length; step += 1) {
+    const candidate = players[(index + step) % players.length];
+    if (!candidate || candidate.id === next || candidate.id === current) break;
+    if (cashOf(events, candidate.id) <= 0) notes.push(`${playerName(players, candidate.id)} is bankrupt.`);
+  }
+  return { turn: next, notes };
 }
 
 type Ctx = {
@@ -354,6 +499,7 @@ type Ctx = {
   depth: number;
   route: TokenRoute | null;
   drawn: DrawnCard[];
+  priorEvents: ScoreEvent[];
 };
 
 function credit(ctx: Ctx, playerId: string, amount: number) {
@@ -405,12 +551,17 @@ function extendRoute(ctx: Ctx, playerId: string, spaces: number[]) {
 
 function sendToJail(ctx: Ctx, playerId: string) {
   const from = ctx.tokens[playerId] ?? 0;
-  if (from !== 10) extendRoute(ctx, playerId, [from, 10]);
+  // Straight across the board — never along the track past GO.
+  if (from !== 10) {
+    ctx.route = { playerId, spaces: [from, 10] };
+  }
   ctx.tokens[playerId] = 10;
   ctx.play.jail[playerId] = 0;
   ctx.play.doubles = 0;
   ctx.play.pending = null;
-  ctx.notes.push(`${playerName(ctx.players, playerId)} goes to jail.`);
+  ctx.notes.push(
+    `${playerName(ctx.players, playerId)} goes directly to jail. Do not pass GO. Do not collect $200.`,
+  );
 }
 
 function nearest(from: number, targets: number[]): number {
@@ -432,18 +583,21 @@ function advance(from: number, target: number) {
   return { index: dest, passedGo: start !== dest && dest < start };
 }
 
+function handOff(ctx: Ctx, playerId: string) {
+  const passed = passTurn(ctx.players, playerId, [...ctx.priorEvents, ...ctx.events]);
+  for (const note of passed.notes) ctx.notes.push(note);
+  ctx.play.doubles = 0;
+  ctx.play.turn = passed.turn;
+}
+
 function finish(ctx: Ctx, playerId: string) {
   if (ctx.play.pending) return;
-  if (ctx.play.jail[playerId] != null) {
-    ctx.play.doubles = 0;
-    ctx.play.turn = nextPlayer(ctx.players, playerId);
-    return;
-  }
-  if (ctx.play.doubles > 0) {
+  const events = [...ctx.priorEvents, ...ctx.events];
+  if (ctx.play.jail[playerId] == null && ctx.play.doubles > 0 && cashOf(events, playerId) > 0) {
     ctx.notes.push('Roll again.');
     return;
   }
-  ctx.play.turn = nextPlayer(ctx.players, playerId);
+  handOff(ctx, playerId);
 }
 
 function resolveProperty(ctx: Ctx, playerId: string, propertyId: string) {
@@ -506,6 +660,11 @@ function resolveSpace(
     resolveProperty(ctx, playerId, space.propertyId);
     return;
   }
+  if (space.name === 'Income Tax') {
+    ctx.play.pending = { kind: 'tax', space: space.index };
+    ctx.notes.push(`${playerName(ctx.players, playerId)} owes Income Tax. Choose $200 or 10% of worth.`);
+    return;
+  }
   if (space.tax) {
     ctx.play.pending = {
       kind: 'pay',
@@ -565,7 +724,7 @@ function applyCard(ctx: Ctx, playerId: string, deck: 'chance' | 'chest', id: str
     return;
   }
   if (id === 'go-jail') {
-    ctx.notes.push(`${label}: Go to jail.`);
+    ctx.notes.push(`${label}:`);
     sendToJail(ctx, playerId);
     return;
   }
@@ -625,16 +784,38 @@ function applyCard(ctx: Ctx, playerId: string, deck: 'chance' | 'chest', id: str
     const house = deck === 'chance' ? 25 : 40;
     const hotel = deck === 'chance' ? 100 : 115;
     const amount = built.houses * house + built.hotels * hotel;
-    charge(ctx, playerId, BANK_PARTY_ID, amount);
+    if (amount <= 0) {
+      ctx.notes.push(`${label}: Make repairs. Nothing is due.`);
+      return;
+    }
+    ctx.play.pending = {
+      kind: 'pay',
+      amount,
+      payeeId: BANK_PARTY_ID,
+      space: from,
+      label: 'repairs',
+    };
     ctx.notes.push(
-      `${label}: Make repairs. ${name} pays ${formatMoney(amount)} for ${built.houses} houses and ${built.hotels} hotels.`,
+      `${label}: Make repairs. ${name} owes ${formatMoney(amount)} for ${built.houses} houses and ${built.hotels} hotels.`,
     );
     return;
   }
   if (id === 'chairman') {
-    const others = ctx.players.filter((player) => player.id !== playerId);
-    for (const other of others) charge(ctx, playerId, other.id, 50);
-    ctx.notes.push(`${label}: ${name} pays each player ${formatMoney(50)}.`);
+    const others = ctx.players.filter((player) => player.id !== playerId && cashOf([...ctx.priorEvents, ...ctx.events], player.id) > 0);
+    if (others.length === 0) {
+      ctx.notes.push(`${label}: ${name} is elected Chairman. Nobody else to pay.`);
+      return;
+    }
+    const [first, ...rest] = others;
+    ctx.play.pending = {
+      kind: 'pay',
+      amount: 50,
+      payeeId: first.id,
+      space: from,
+      label: 'Chairman of the Board',
+      more: rest.map((other) => ({ payeeId: other.id, amount: 50, label: 'Chairman of the Board' })),
+    };
+    ctx.notes.push(`${label}: ${name} owes each player ${formatMoney(50)}.`);
     return;
   }
   if (id === 'birthday') {
@@ -668,8 +849,14 @@ function applyCard(ctx: Ctx, playerId: string, deck: 'chance' | 'chest', id: str
     return;
   }
   if (fines[id] != null) {
-    charge(ctx, playerId, BANK_PARTY_ID, fines[id]);
-    ctx.notes.push(`${label}: ${name} pays ${formatMoney(fines[id])}.`);
+    ctx.play.pending = {
+      kind: 'pay',
+      amount: fines[id],
+      payeeId: BANK_PARTY_ID,
+      space: from,
+      label: id,
+    };
+    ctx.notes.push(`${label}: ${name} owes ${formatMoney(fines[id])}.`);
   }
 }
 
@@ -703,7 +890,7 @@ function packUndo(play: OpolyPlay, tokens: Record<string, number>, events: numbe
     chest: [...play.chest],
     chanceFree: { ...play.chanceFree },
     chestFree: { ...play.chestFree },
-    pending: play.pending ? { ...play.pending } : null,
+    pending: play.pending ? clonePending(play.pending) : null,
     tokens: { ...tokens },
     events,
     prior: linkedUndo(play.undo, MAX_UNDO_LINKS - 1),
@@ -726,6 +913,7 @@ export function resolveRoll(
   tokens: Record<string, number>,
   players: PlayPlayer[],
   roll: DiceRoll,
+  ledger: ScoreEvent[] = [],
   sample: () => number = Math.random,
 ): PlayOutcome {
   const before = play;
@@ -752,6 +940,7 @@ export function resolveRoll(
     depth: 0,
     route: null,
     drawn: [],
+    priorEvents: ledger,
   };
   const playerId = play.turn;
   const name = playerName(players, playerId);
@@ -759,6 +948,11 @@ export function resolveRoll(
   ctx.notes.push(faces);
   if (play.pending || players.every((player) => player.id !== playerId)) {
     return { play, tokens, events: [], note: 'Finish the current decision first.' };
+  }
+  if (cashOf(ledger, playerId) <= 0) {
+    const skipped = skipBankruptTurn(play, tokens, players, ledger);
+    if (skipped) return skipped;
+    return { play, tokens, events: [], note: `${name} is bankrupt.` };
   }
   const from = tokens[playerId] ?? 0;
   if (play.jail[playerId] != null) {
@@ -779,16 +973,17 @@ export function resolveRoll(
         finish(ctx, playerId);
       } else {
         ctx.play.jail[playerId] = spent;
-        ctx.play.turn = nextPlayer(players, playerId);
         ctx.notes.push(`${name} stays in jail.`);
+        handOff(ctx, playerId);
       }
     }
     return commit(before, tokens, ctx);
   }
   if (roll.doubles && play.doubles >= 2) {
+    // Third doubles: do not move the rolled spaces, do not pass GO, do not collect $200.
     ctx.notes.push('Three doubles.');
     sendToJail(ctx, playerId);
-    ctx.play.turn = nextPlayer(players, playerId);
+    handOff(ctx, playerId);
     return commit(before, tokens, ctx);
   }
   ctx.play.doubles = roll.doubles ? play.doubles + 1 : 0;
@@ -804,6 +999,7 @@ function afterChoice(
   players: PlayPlayer[],
   notes: string[],
   events: ScoreEvent[],
+  ledger: ScoreEvent[] = [],
 ): PlayOutcome {
   const ctx: Ctx = {
     play: updated,
@@ -818,6 +1014,7 @@ function afterChoice(
     depth: 0,
     route: null,
     drawn: [],
+    priorEvents: ledger,
   };
   finish(ctx, original.turn);
   return commit(original, tokens, ctx);
@@ -827,12 +1024,38 @@ export function payDue(
   play: OpolyPlay,
   tokens: Record<string, number>,
   players: PlayPlayer[],
+  ledger: ScoreEvent[] = [],
 ): PlayOutcome | { error: string } {
   const pending = play.pending;
   if (!pending || pending.kind !== 'pay') return { error: 'There is nothing to pay.' };
+  const cash = cashOf(ledger, play.turn);
+  if (cash < pending.amount) {
+    return { error: `${playerName(players, play.turn)} needs ${formatMoney(pending.amount)}. Raise cash or declare bankruptcy.` };
+  }
   const events = transferEvents(play.turn, pending.payeeId, pending.amount);
   const name = playerName(players, play.turn);
   const payee = pending.payeeId === BANK_PARTY_ID ? 'the bank' : playerName(players, pending.payeeId);
+  const more = pending.more ?? [];
+  if (more.length > 0) {
+    const [next, ...rest] = more;
+    const updated: OpolyPlay = {
+      ...play,
+      pending: {
+        kind: 'pay',
+        amount: next.amount,
+        payeeId: next.payeeId,
+        space: pending.space,
+        label: next.label,
+        ...(rest.length > 0 ? { more: rest } : null),
+      },
+    };
+    return {
+      play: { ...updated, undo: packUndo(play, tokens, events.length) },
+      tokens,
+      events: stamped(events),
+      note: `${name} pays ${payee} ${formatMoney(pending.amount)} for ${pending.label}.`,
+    };
+  }
   return afterChoice(
     play,
     { ...play, pending: null },
@@ -840,7 +1063,68 @@ export function payDue(
     players,
     [`${name} pays ${payee} ${formatMoney(pending.amount)} for ${pending.label}.`],
     events,
+    ledger,
   );
+}
+
+export type CashSplash = {
+  playerId: string;
+  space: number;
+  amount: number;
+  flow: 'pay' | 'receive';
+  /** Hold the bills until this player's token finishes walking. */
+  wait: boolean;
+};
+
+function passedGo(spaces: number[] | undefined): boolean {
+  if (!spaces || spaces.length < 2) return false;
+  for (let index = 1; index < spaces.length; index += 1) {
+    if (spaces[index] === 0 && spaces[index - 1] !== 0) return true;
+  }
+  return false;
+}
+
+/** Where bills should fly for each player who paid or collected. */
+export function cashSplashes(
+  events: { playerId: string; points: number }[],
+  tokens: Record<string, number>,
+  route?: { playerId: string; spaces: number[] } | null,
+): CashSplash[] {
+  const totals = new Map<string, { pay: number; receive: number }>();
+  for (const event of events) {
+    if (!event.playerId || event.points === 0) continue;
+    const row = totals.get(event.playerId) ?? { pay: 0, receive: 0 };
+    if (event.points < 0) row.pay += -event.points;
+    else row.receive += event.points;
+    totals.set(event.playerId, row);
+  }
+  const moving = route && route.spaces.length > 1 ? route.playerId : null;
+  const collectsGo = moving != null && passedGo(route?.spaces);
+  const splashes: CashSplash[] = [];
+  for (const [playerId, row] of totals) {
+    const space = tokens[playerId];
+    if (typeof space !== 'number') continue;
+    const walking = playerId === moving;
+    let receive = row.receive;
+    if (collectsGo && walking && receive >= GO_PAYOUT) {
+      splashes.push({ playerId, space: 0, amount: GO_PAYOUT, flow: 'receive', wait: false });
+      receive -= GO_PAYOUT;
+    }
+    if (receive > 0) {
+      splashes.push({ playerId, space, amount: receive, flow: 'receive', wait: walking });
+    }
+    if (row.pay > 0) {
+      const leftFrom = walking && route && route.spaces[0] !== space ? route.spaces[0] : null;
+      splashes.push({
+        playerId,
+        space: leftFrom ?? space,
+        amount: row.pay,
+        flow: 'pay',
+        wait: walking && leftFrom == null,
+      });
+    }
+  }
+  return splashes;
 }
 
 export function moneyFromSquare(prior: OpolyPlay, result: PlayOutcome): number | null {
@@ -869,6 +1153,7 @@ export function acceptCard(
   play: OpolyPlay,
   tokens: Record<string, number>,
   players: PlayPlayer[],
+  ledger: ScoreEvent[] = [],
   sample: () => number = Math.random,
 ): PlayOutcome | { error: string } {
   const pending = play.pending;
@@ -898,6 +1183,7 @@ export function acceptCard(
     depth: 0,
     route: null,
     drawn: [],
+    priorEvents: ledger,
   };
   applyCard(ctx, play.turn, pending.deck, pending.id, pending.space);
   finish(ctx, play.turn);
@@ -909,6 +1195,7 @@ export function buyProperty(
   tokens: Record<string, number>,
   players: PlayPlayer[],
   cash: number,
+  ledger: ScoreEvent[] = [],
 ): PlayOutcome | { error: string } {
   const pending = play.pending;
   if (!pending || pending.kind !== 'buy') return { error: 'There is nothing to buy.' };
@@ -928,20 +1215,189 @@ export function buyProperty(
     players,
     [`${playerName(players, play.turn)} buys ${property.name} for ${formatMoney(property.price)}.`],
     events,
+    ledger,
   );
 }
 
-export function declineProperty(play: OpolyPlay, tokens: Record<string, number>, players: PlayPlayer[]): PlayOutcome | { error: string } {
+export function declineProperty(
+  play: OpolyPlay,
+  tokens: Record<string, number>,
+  players: PlayPlayer[],
+  ledger: ScoreEvent[] = [],
+): PlayOutcome | { error: string } {
   if (play.pending?.kind !== 'buy') return { error: 'There is nothing to pass on.' };
   const property = getProperty(play.pending.propertyId);
+  if (!property) return { error: 'That property is not on the board.' };
+  const bidderIds = solventIds(players, ledger);
+  const name = playerName(players, play.turn);
+  if (bidderIds.length === 0) {
+    return afterChoice(
+      play,
+      { ...play, pending: null },
+      tokens,
+      players,
+      [`${name} passes on ${property.name}. Nobody can bid.`],
+      [],
+      ledger,
+    );
+  }
+  const start = Math.max(0, bidderIds.indexOf(play.turn));
+  const pending: AuctionPending = {
+    kind: 'auction',
+    propertyId: property.id,
+    highBid: 0,
+    highBidderId: null,
+    bidderIds,
+    bidderIndex: start >= 0 ? start : 0,
+    passed: [],
+  };
+  return {
+    play: { ...play, pending, undo: packUndo(play, tokens, 0) },
+    tokens,
+    events: [],
+    note: `${name} declines ${property.name}. Auction opens.`,
+  };
+}
+
+function settleAuction(
+  play: OpolyPlay,
+  tokens: Record<string, number>,
+  players: PlayPlayer[],
+  pending: AuctionPending,
+  ledger: ScoreEvent[],
+): PlayOutcome {
+  const property = getProperty(pending.propertyId);
+  const label = property?.name ?? 'the property';
+  if (!pending.highBidderId || pending.highBid <= 0 || !property) {
+    return afterChoice(
+      play,
+      { ...play, pending: null },
+      tokens,
+      players,
+      [`No bids on ${label}.`],
+      [],
+      ledger,
+    );
+  }
+  const winner = pending.highBidderId;
+  const cash = cashOf(ledger, winner);
+  if (cash < pending.highBid) {
+    return afterChoice(
+      play,
+      { ...play, pending: null },
+      tokens,
+      players,
+      [`${playerName(players, winner)} cannot cover the bid. ${label} stays unsold.`],
+      [],
+      ledger,
+    );
+  }
+  const events = transferEvents(winner, BANK_PARTY_ID, pending.highBid);
   return afterChoice(
     play,
-    { ...play, pending: null },
+    { ...play, owned: { ...play.owned, [property.id]: winner }, pending: null },
     tokens,
     players,
-    [`${playerName(players, play.turn)} passes on ${property?.name ?? 'the property'}.`],
-    [],
+    [`${playerName(players, winner)} wins ${label} for ${formatMoney(pending.highBid)}.`],
+    events,
+    ledger,
   );
+}
+
+export function bidAuction(
+  play: OpolyPlay,
+  tokens: Record<string, number>,
+  players: PlayPlayer[],
+  amount: number,
+  ledger: ScoreEvent[] = [],
+): PlayOutcome | { error: string } {
+  const pending = play.pending;
+  if (!pending || pending.kind !== 'auction') return { error: 'There is no auction.' };
+  const bidderId = pending.bidderIds[pending.bidderIndex];
+  if (!bidderId) return { error: 'There is no auction.' };
+  const bid = Math.trunc(amount);
+  if (!Number.isFinite(bid) || bid <= pending.highBid) {
+    return { error: `Bid more than ${formatMoney(pending.highBid)}.` };
+  }
+  if (cashOf(ledger, bidderId) < bid) {
+    return { error: `${playerName(players, bidderId)} does not have ${formatMoney(bid)}.` };
+  }
+  const next: AuctionPending = {
+    ...pending,
+    highBid: bid,
+    highBidderId: bidderId,
+    passed: [],
+    bidderIndex: nextBidderIndex(pending.bidderIds, pending.bidderIndex),
+  };
+  return {
+    play: { ...play, pending: next, undo: packUndo(play, tokens, 0) },
+    tokens,
+    events: [],
+    note: `${playerName(players, bidderId)} bids ${formatMoney(bid)}.`,
+  };
+}
+
+export function passAuction(
+  play: OpolyPlay,
+  tokens: Record<string, number>,
+  players: PlayPlayer[],
+  ledger: ScoreEvent[] = [],
+): PlayOutcome | { error: string } {
+  const pending = play.pending;
+  if (!pending || pending.kind !== 'auction') return { error: 'There is no auction.' };
+  const bidderId = pending.bidderIds[pending.bidderIndex];
+  if (!bidderId) return { error: 'There is no auction.' };
+  const passed = pending.passed.includes(bidderId) ? pending.passed : [...pending.passed, bidderId];
+  const others = pending.bidderIds.filter((id) => id !== pending.highBidderId);
+  const allPassed = pending.bidderIds.every((id) => passed.includes(id));
+  const othersPassed = pending.highBidderId != null && others.every((id) => passed.includes(id));
+  if ((!pending.highBidderId && allPassed) || othersPassed) {
+    return settleAuction(play, tokens, players, { ...pending, passed }, ledger);
+  }
+  const next: AuctionPending = {
+    ...pending,
+    passed,
+    bidderIndex: nextBidderIndex(pending.bidderIds, pending.bidderIndex),
+  };
+  return {
+    play: { ...play, pending: next, undo: packUndo(play, tokens, 0) },
+    tokens,
+    events: [],
+    note: `${playerName(players, bidderId)} passes.`,
+  };
+}
+
+export function chooseIncomeTax(
+  play: OpolyPlay,
+  tokens: Record<string, number>,
+  players: PlayPlayer[],
+  choice: 'flat' | 'percent',
+  ledger: ScoreEvent[] = [],
+): PlayOutcome | { error: string } {
+  if (play.pending?.kind !== 'tax') return { error: 'Income Tax is not due.' };
+  const worth = netWorth(play, play.turn, ledger);
+  const amount = choice === 'flat' ? 200 : Math.max(0, Math.ceil(worth * 0.1));
+  const updated: OpolyPlay = {
+    ...play,
+    pending: {
+      kind: 'pay',
+      amount: amount > 0 ? amount : 0,
+      payeeId: BANK_PARTY_ID,
+      space: play.pending.space,
+      label: 'Income Tax',
+    },
+  };
+  if (amount <= 0) {
+    return afterChoice(play, { ...play, pending: null }, tokens, players, ['Income Tax is nothing.'], [], ledger);
+  }
+  return {
+    play: { ...updated, undo: packUndo(play, tokens, 0) },
+    tokens,
+    events: [],
+    note: `${playerName(players, play.turn)} chooses ${
+      choice === 'flat' ? formatMoney(200) : `10% (${formatMoney(amount)})`
+    } for Income Tax.`,
+  };
 }
 
 export function payToLeaveJail(play: OpolyPlay, tokens: Record<string, number>, players: PlayPlayer[], cash: number): PlayOutcome | { error: string } {
@@ -1012,6 +1468,7 @@ export function buildHouse(play: OpolyPlay, tokens: Record<string, number>, play
 }
 
 export function sellBuilding(play: OpolyPlay, tokens: Record<string, number>, players: PlayPlayer[], propertyId: string): PlayOutcome | { error: string } {
+  if (play.pending && play.pending.kind !== 'pay') return { error: 'Finish the current decision first.' };
   if (!canSellBuilding(play, propertyId)) return { error: 'Sell houses evenly, hotels first.' };
   const property = ownedPlay(play, propertyId, play.turn);
   if (!property) return { error: 'You do not own that property.' };
@@ -1030,6 +1487,7 @@ export function sellBuilding(play: OpolyPlay, tokens: Record<string, number>, pl
 }
 
 export function mortgageProperty(play: OpolyPlay, tokens: Record<string, number>, players: PlayPlayer[], propertyId: string): PlayOutcome | { error: string } {
+  if (play.pending && play.pending.kind !== 'pay') return { error: 'Finish the current decision first.' };
   if (!canMortgage(play, propertyId) || play.owned[propertyId] !== play.turn) return { error: 'Sell the houses on that color before mortgaging.' };
   const property = getProperty(propertyId);
   if (!property) return { error: 'That property is not on the board.' };
@@ -1050,6 +1508,7 @@ export function unmortgageProperty(
   propertyId: string,
   cash: number,
 ): PlayOutcome | { error: string } {
+  if (play.pending) return { error: 'Finish the current decision first.' };
   if (!play.mortgaged.includes(propertyId) || play.owned[propertyId] !== play.turn) return { error: 'That property is not mortgaged.' };
   const property = getProperty(propertyId);
   if (!property) return { error: 'That property is not on the board.' };
@@ -1084,7 +1543,7 @@ export function undoOpoly(
   restored.chest = [...undo.chest];
   restored.chanceFree = { ...undo.chanceFree };
   restored.chestFree = { ...undo.chestFree };
-  restored.pending = undo.pending ? { ...undo.pending } : null;
+  restored.pending = undo.pending ? clonePending(undo.pending) : null;
   restored.undo = undo.prior ?? null;
   return {
     play: restored,
@@ -1093,12 +1552,195 @@ export function undoOpoly(
   };
 }
 
+function sellAllBuildings(play: OpolyPlay, playerId: string): { play: OpolyPlay; events: ScoreEvent[]; refund: number } {
+  let next = play;
+  const events: ScoreEvent[] = [];
+  let refund = 0;
+  let guard = 0;
+  while (guard < 64) {
+    guard += 1;
+    const owned = properties.filter(
+      (property) => property.kind === 'street' && next.owned[property.id] === playerId && canSellBuilding(next, property.id),
+    );
+    if (owned.length === 0) break;
+    const property = owned[0];
+    const amount = Math.floor(houseCost(property) / 2);
+    const houses = { ...next.houses };
+    const level = levelOf(next, property.id) - 1;
+    if (level <= 0) delete houses[property.id];
+    else houses[property.id] = level;
+    next = { ...next, houses };
+    events.push(...transferEvents(BANK_PARTY_ID, playerId, amount));
+    refund += amount;
+  }
+  return { play: next, events, refund };
+}
+
+/** Hand assets to the creditor (or bank) and leave the table broke. */
+export function declareBankruptcy(
+  play: OpolyPlay,
+  tokens: Record<string, number>,
+  players: PlayPlayer[],
+  ledger: ScoreEvent[] = [],
+): PlayOutcome | { error: string } {
+  if (play.pending?.kind !== 'pay') return { error: 'There is no debt to bankrupt on.' };
+  const debtor = play.turn;
+  const creditor = play.pending.payeeId;
+  const debtLabel = play.pending.label;
+  let next = { ...play, pending: null as PlayPending | null };
+  const events: ScoreEvent[] = [];
+  const sold = sellAllBuildings(next, debtor);
+  next = sold.play;
+  events.push(...sold.events);
+  const afterSale = [...ledger, ...events];
+  const cash = cashOf(afterSale, debtor);
+  if (cash > 0) {
+    events.push(...transferEvents(debtor, creditor === BANK_PARTY_ID ? BANK_PARTY_ID : creditor, cash));
+  }
+  const owned: Record<string, string> = { ...next.owned };
+  const houses: Record<string, number> = { ...next.houses };
+  const mortgaged = [...next.mortgaged];
+  const chanceFree = { ...next.chanceFree };
+  const chestFree = { ...next.chestFree };
+  const chance = [...next.chance];
+  const chest = [...next.chest];
+  const transferred: string[] = [];
+  for (const [propertyId, owner] of Object.entries(owned)) {
+    if (owner !== debtor) continue;
+    delete houses[propertyId];
+    if (creditor === BANK_PARTY_ID) {
+      delete owned[propertyId];
+      const at = mortgaged.indexOf(propertyId);
+      if (at >= 0) mortgaged.splice(at, 1);
+    } else {
+      owned[propertyId] = creditor;
+      transferred.push(propertyId);
+    }
+  }
+  const chanceCards = countOf(chanceFree, debtor);
+  const chestCards = countOf(chestFree, debtor);
+  if (creditor === BANK_PARTY_ID) {
+    for (let n = chanceCards; n > 0; n -= 1) chance.push('jail-free');
+    for (let n = chestCards; n > 0; n -= 1) chest.push('jail-free');
+    delete chanceFree[debtor];
+    delete chestFree[debtor];
+  } else {
+    if (chanceCards > 0) {
+      chanceFree[creditor] = countOf(chanceFree, creditor) + chanceCards;
+      delete chanceFree[debtor];
+    }
+    if (chestCards > 0) {
+      chestFree[creditor] = countOf(chestFree, creditor) + chestCards;
+      delete chestFree[debtor];
+    }
+  }
+  next = {
+    ...next,
+    owned,
+    houses,
+    mortgaged: mortgaged.filter((id) => owned[id] != null),
+    chance,
+    chest,
+    chanceFree,
+    chestFree,
+    pending: null,
+  };
+  const jail = { ...next.jail };
+  delete jail[debtor];
+  next = { ...next, jail };
+  const notes = [
+    `${playerName(players, debtor)} goes bankrupt over ${debtLabel}.`,
+    creditor === BANK_PARTY_ID
+      ? 'Properties return to the bank.'
+      : `${playerName(players, creditor)} takes the deeds${transferred.length ? ` (${transferred.length})` : ''}.`,
+  ];
+  return afterChoice(play, next, tokens, players, notes, events, ledger);
+}
+
+export function applyTrade(
+  play: OpolyPlay,
+  tokens: Record<string, number>,
+  players: PlayPlayer[],
+  offer: TradeOffer,
+  ledger: ScoreEvent[] = [],
+): PlayOutcome | { error: string } {
+  if (play.pending) return { error: 'Finish the current decision before trading.' };
+  const a = play.turn;
+  const b = offer.counterpartyId;
+  if (!players.some((player) => player.id === b) || b === a) return { error: 'Pick another player to trade with.' };
+  if (cashOf(ledger, a) <= 0 || cashOf(ledger, b) <= 0) return { error: 'Both traders need cash on the table.' };
+  const giveCash = Math.max(0, Math.trunc(offer.giveCash));
+  const takeCash = Math.max(0, Math.trunc(offer.takeCash));
+  const giveChance = Math.max(0, Math.trunc(offer.giveChanceFree));
+  const giveChest = Math.max(0, Math.trunc(offer.giveChestFree));
+  const takeChance = Math.max(0, Math.trunc(offer.takeChanceFree));
+  const takeChest = Math.max(0, Math.trunc(offer.takeChestFree));
+  if (giveCash > cashOf(ledger, a)) return { error: `${playerName(players, a)} does not have ${formatMoney(giveCash)}.` };
+  if (takeCash > cashOf(ledger, b)) return { error: `${playerName(players, b)} does not have ${formatMoney(takeCash)}.` };
+  if (giveChance > countOf(play.chanceFree, a) || giveChest > countOf(play.chestFree, a)) {
+    return { error: `${playerName(players, a)} does not have those jail cards.` };
+  }
+  if (takeChance > countOf(play.chanceFree, b) || takeChest > countOf(play.chestFree, b)) {
+    return { error: `${playerName(players, b)} does not have those jail cards.` };
+  }
+  for (const propertyId of offer.givePropertyIds) {
+    if (play.owned[propertyId] !== a) return { error: `${playerName(players, a)} does not own that property.` };
+    const property = getProperty(propertyId);
+    if (property?.kind === 'street' && streetsIn(property.group).some((street) => levelOf(play, street.id) > 0)) {
+      return { error: 'Sell houses on that color before trading it.' };
+    }
+  }
+  for (const propertyId of offer.takePropertyIds) {
+    if (play.owned[propertyId] !== b) return { error: `${playerName(players, b)} does not own that property.` };
+    const property = getProperty(propertyId);
+    if (property?.kind === 'street' && streetsIn(property.group).some((street) => levelOf(play, street.id) > 0)) {
+      return { error: 'Sell houses on that color before trading it.' };
+    }
+  }
+  const owned = { ...play.owned };
+  for (const propertyId of offer.givePropertyIds) owned[propertyId] = b;
+  for (const propertyId of offer.takePropertyIds) owned[propertyId] = a;
+  const chanceFree = { ...play.chanceFree };
+  const chestFree = { ...play.chestFree };
+  if (giveChance > 0) {
+    chanceFree[a] = countOf(chanceFree, a) - giveChance;
+    chanceFree[b] = countOf(chanceFree, b) + giveChance;
+  }
+  if (giveChest > 0) {
+    chestFree[a] = countOf(chestFree, a) - giveChest;
+    chestFree[b] = countOf(chestFree, b) + giveChest;
+  }
+  if (takeChance > 0) {
+    chanceFree[b] = countOf(chanceFree, b) - takeChance;
+    chanceFree[a] = countOf(chanceFree, a) + takeChance;
+  }
+  if (takeChest > 0) {
+    chestFree[b] = countOf(chestFree, b) - takeChest;
+    chestFree[a] = countOf(chestFree, a) + takeChest;
+  }
+  const events: ScoreEvent[] = [];
+  if (giveCash > 0) events.push(...transferEvents(a, b, giveCash));
+  if (takeCash > 0) events.push(...transferEvents(b, a, takeCash));
+  const updated: OpolyPlay = { ...play, owned, chanceFree, chestFree };
+  return {
+    play: { ...updated, undo: packUndo(play, tokens, events.length) },
+    tokens,
+    events: stamped(events),
+    note: `${playerName(players, a)} trades with ${playerName(players, b)}.`,
+  };
+}
+
 /** Remember a manual cash transfer so Undo puts the table back. */
 export function undoForCash(play: OpolyPlay, tokens: Record<string, number>, eventCount: number): OpolyPlay {
   return { ...play, undo: packUndo(play, tokens, eventCount) };
 }
 
-export function withoutOpolyPlayer(play: OpolyPlay, playerId: string, players: PlayPlayer[]): OpolyPlay {
+export function withoutOpolyPlayer(
+  play: OpolyPlay,
+  playerId: string,
+  players: PlayPlayer[],
+  events: ScoreEvent[] = [],
+): OpolyPlay {
   const owned: Record<string, string> = {};
   const houses: Record<string, number> = {};
   for (const [propertyId, owner] of Object.entries(play.owned)) {
@@ -1116,11 +1758,31 @@ export function withoutOpolyPlayer(play: OpolyPlay, playerId: string, players: P
   for (let count = countOf(chestFree, playerId); count > 0; count -= 1) chest.push('jail-free');
   delete chanceFree[playerId];
   delete chestFree[playerId];
-  const turn = play.turn === playerId ? nextPlayer(players, playerId) : play.turn;
-  const pending =
-    play.turn === playerId || (play.pending?.kind === 'pay' && play.pending.payeeId === playerId)
-      ? null
-      : play.pending;
+  let turn = play.turn;
+  if (play.turn === playerId) {
+    turn = nextSolvent(players, playerId, events) ?? playerId;
+    if (turn === playerId) {
+      const index = Math.max(0, players.findIndex((player) => player.id === playerId));
+      const fallback = players[(index + 1) % players.length];
+      turn = fallback && fallback.id !== playerId ? fallback.id : players.find((player) => player.id !== playerId)?.id ?? playerId;
+    }
+  }
+  let pending = play.pending;
+  if (play.turn === playerId) pending = null;
+  else if (pending?.kind === 'pay' && pending.payeeId === playerId) pending = null;
+  else if (pending?.kind === 'auction') {
+    const bidderIds = pending.bidderIds.filter((id) => id !== playerId);
+    if (bidderIds.length === 0) pending = null;
+    else {
+      pending = {
+        ...pending,
+        bidderIds,
+        highBidderId: pending.highBidderId === playerId ? null : pending.highBidderId,
+        passed: pending.passed.filter((id) => id !== playerId),
+        bidderIndex: Math.min(pending.bidderIndex, bidderIds.length - 1),
+      };
+    }
+  }
   return {
     ...play,
     turn,
@@ -1138,20 +1800,52 @@ export function withoutOpolyPlayer(play: OpolyPlay, playerId: string, players: P
   };
 }
 
-export function turnPrompt(play: OpolyPlay, players: PlayPlayer[]): string {
+/** Move off a bankrupt player who has nothing left to resolve. */
+export function skipBankruptTurn(
+  play: OpolyPlay,
+  tokens: Record<string, number>,
+  players: PlayPlayer[],
+  events: ScoreEvent[],
+): PlayOutcome | null {
+  if (play.pending || cashOf(events, play.turn) > 0) return null;
+  const passed = passTurn(players, play.turn, events);
+  if (passed.turn === play.turn) return null;
+  return {
+    play: { ...play, turn: passed.turn, doubles: 0 },
+    tokens,
+    events: [],
+    note: passed.notes.join(' '),
+  };
+}
+
+export function turnPrompt(play: OpolyPlay, players: PlayPlayer[], events: ScoreEvent[] = []): string {
   const name = playerName(players, play.turn);
+  if (!play.pending && cashOf(events, play.turn) <= 0) return `${name} is bankrupt.`;
   if (play.pending?.kind === 'buy') {
     const property = getProperty(play.pending.propertyId);
     return property
       ? `${name} can buy ${property.name} for ${formatMoney(property.price)}.`
       : `${name}'s turn.`;
   }
+  if (play.pending?.kind === 'auction') {
+    const property = getProperty(play.pending.propertyId);
+    const bidder = play.pending.bidderIds[play.pending.bidderIndex];
+    const whose = bidder ? playerName(players, bidder) : 'Someone';
+    const high =
+      play.pending.highBidderId && play.pending.highBid > 0
+        ? ` High bid ${formatMoney(play.pending.highBid)} by ${playerName(players, play.pending.highBidderId)}.`
+        : ' No bids yet.';
+    return `Auction: ${property?.name ?? 'property'}.${high} ${whose} to bid or pass.`;
+  }
+  if (play.pending?.kind === 'tax') {
+    return `${name} owes Income Tax. Choose $200 or 10% of worth.`;
+  }
   if (play.pending?.kind === 'card') {
     const label = play.pending.deck === 'chance' ? 'Chance' : 'Chest';
     return `${name} drew a ${label} card.`;
   }
   if (play.pending?.kind === 'pay') {
-    return `${name} owes ${formatMoney(play.pending.amount)} for ${play.pending.label}.`;
+    return `${name} owes ${formatMoney(play.pending.amount)} for ${play.pending.label}. Mortgage or sell buildings if short.`;
   }
   if (play.jail[play.turn] != null) {
     const spent = play.jail[play.turn] ?? 0;

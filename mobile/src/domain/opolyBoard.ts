@@ -1,3 +1,5 @@
+import { projectTiltedPoint } from './dieProjection';
+
 /** U.S. board in play order. Index 0 is Go. */
 
 export const INCOME_TAX = 200;
@@ -41,7 +43,7 @@ export const boardSpaces: BoardSpace[] = [
   space(17, 'Chest', 'Chest'),
   space(18, 'J', 'J', { propertyId: 'tennessee' }),
   space(19, 'K', 'K', { propertyId: 'new-york' }),
-  space(20, 'Free Parking', 'Free'),
+  space(20, 'Free Park', 'Free'),
   space(21, 'L', 'L', { propertyId: 'kentucky' }),
   space(22, 'Chance', 'Chance'),
   space(23, 'M', 'M', { propertyId: 'indiana' }),
@@ -91,17 +93,9 @@ export function boardTurnForSpace(space: number): number {
 /** Same facing as `boardTurnForSpace`, choosing the turn closest to `current`. */
 export function nearestBoardTurn(current: number, space: number): number {
   const base = boardTurnForSpace(space);
-  let best = base;
-  let bestDist = Infinity;
-  for (let lap = -2; lap <= 2; lap += 1) {
-    const next = base + lap * 360;
-    const dist = Math.abs(next - current);
-    if (dist < bestDist) {
-      bestDist = dist;
-      best = next;
-    }
-  }
-  return best;
+  const diff = (((base - current) % 360) + 360) % 360;
+  const delta = diff > 180 ? diff - 360 : diff;
+  return current + delta;
 }
 
 /** Board-space rect shown in `view` after the board has rotated `turn` degrees around its center. */
@@ -277,14 +271,93 @@ export function layoutJailedTokens(cell: number, count: number): TokenSpot[] {
   return shiftSpots(layoutSharedTokens(width, height, 10, 0, count), box.x + pad, box.y + title);
 }
 
-/** Just Visiting stays on the track under the jail, not in the cell. */
+/**
+ * Just Visiting stands on the walkway outside the bars — the lane beside the
+ * jail (where the JUST VISITING label sits) and the strip under it, never in
+ * the cell.
+ */
 export function layoutVisitingTokens(cell: number, count: number): TokenSpot[] {
   const box = jailCell(cell);
   const gap = Math.max(2, Math.round(cell * 0.04));
-  const y = box.y + box.height + gap;
-  const height = Math.max(8, cell - y - gap);
-  const width = Math.max(8, cell - gap * 2);
-  return shiftSpots(layoutSharedTokens(width, height, 10, 0, count), gap, y);
+  const leftWidth = Math.max(8, box.x - gap);
+  const bottomTop = box.y + box.height + gap;
+  const bottomHeight = Math.max(8, cell - bottomTop - gap);
+  const yardWidth = Math.max(8, cell - gap * 2);
+  const yardHeight = Math.max(8, cell - gap * 2);
+
+  // Prefer the left walkway (clear of the bars after the corner turn). When
+  // that lane is too tight for the crowd, pack into the full L-yard outside
+  // the jail by using the bottom strip, which is wider.
+  const leftSpots = shiftSpots(
+    layoutSharedTokens(leftWidth, yardHeight, 10, 0, count),
+    gap,
+    gap,
+  );
+  const leftFits = leftSpots.every(
+    (spot) => spot.x + spot.piece <= box.x - 0.5 && spot.piece >= 10,
+  );
+  if (leftFits) return leftSpots;
+
+  const bottomSpots = shiftSpots(
+    layoutSharedTokens(yardWidth, bottomHeight, 10, 0, count),
+    gap,
+    bottomTop,
+  );
+  const bottomFits = bottomSpots.every(
+    (spot) => spot.y >= box.y + box.height + 0.5 && !overlapsJail(spot, box),
+  );
+  if (bottomFits) return bottomSpots;
+
+  // L-pack: fill the left lane first, then the bottom strip under the jail.
+  return packVisitL(cell, count, box, gap, leftWidth, bottomTop, bottomHeight, yardWidth);
+}
+
+function overlapsJail(spot: TokenSpot, box: JailBox): boolean {
+  return !(
+    spot.x + spot.piece <= box.x ||
+    spot.x >= box.x + box.width ||
+    spot.y + spot.piece <= box.y ||
+    spot.y >= box.y + box.height
+  );
+}
+
+function packVisitL(
+  cell: number,
+  count: number,
+  box: JailBox,
+  gap: number,
+  leftWidth: number,
+  bottomTop: number,
+  bottomHeight: number,
+  yardWidth: number,
+): TokenSpot[] {
+  const n = Math.max(1, Math.floor(count));
+  let best: TokenSpot[] = [];
+  let bestPiece = -1;
+  for (let leftCount = 0; leftCount <= n; leftCount += 1) {
+    const bottomCount = n - leftCount;
+    const left =
+      leftCount > 0
+        ? shiftSpots(layoutSharedTokens(leftWidth, cell - gap * 2, 10, 0, leftCount), gap, gap)
+        : [];
+    const bottom =
+      bottomCount > 0
+        ? shiftSpots(layoutSharedTokens(yardWidth, bottomHeight, 10, 0, bottomCount), gap, bottomTop)
+        : [];
+    const spots = [...left, ...bottom];
+    if (spots.some((spot) => overlapsJail(spot, box))) continue;
+    if (spots.some((spot) => spot.x < -0.01 || spot.y < -0.01 || spot.x + spot.piece > cell + 0.01 || spot.y + spot.piece > cell + 0.01)) {
+      continue;
+    }
+    const piece = Math.min(...spots.map((spot) => spot.piece));
+    if (piece > bestPiece) {
+      bestPiece = piece;
+      best = spots;
+    }
+  }
+  if (best.length === n) return best;
+  // Last resort: bottom strip only (still outside the bars in local space).
+  return shiftSpots(layoutSharedTokens(yardWidth, bottomHeight, 10, 0, n), gap, bottomTop);
 }
 
 export type OwnerMark = {
@@ -451,7 +524,8 @@ export function centerTitleFont(corner: number): number {
 /** Fraunces 700 "OPOLY" at letter-spacing 1, measured on the board. */
 const TITLE_EM = 5.8;
 const TITLE_LINE = 1.25;
-export const DECK_TILT = 34;
+/** Decks sit flat on the felt (no in-plane skew). */
+export const DECK_TILT = 0;
 const DECK_ASPECT = 0.68;
 const STACK_X = 9;
 const STACK_Y = 12;
@@ -596,6 +670,58 @@ export function deckPileLayout(board: number): DeckPileLayout {
     }
   }
   return best;
+}
+
+/** Drawn cards lie flat on the felt — no camera lift. */
+export const CARD_READ_TILT = 0;
+
+export type DrawnCardFrame = {
+  width: number;
+  height: number;
+  /** Kept for callers; always 0 for flat cards. */
+  lift: number;
+  /** Kept for callers; always 0 for flat cards. */
+  hover: number;
+};
+
+/** A face-up card sized to fill most of the green so copy stays readable. */
+export function drawnCardFrame(board: number): DrawnCardFrame {
+  const felt = board * (1 - 2 * TRACK_DEPTH);
+  if (felt <= 0) return { width: 0, height: 0, lift: 0, hover: 0 };
+  const maxH = felt * 0.64;
+  const maxW = felt * 0.5;
+  let height = maxH;
+  let width = height * DECK_ASPECT;
+  if (width > maxW) {
+    width = maxW;
+    height = width / DECK_ASPECT;
+  }
+  return { width, height, lift: 0, hover: 0 };
+}
+
+/**
+ * Corners of the flat face-up card. Origin is the board center; y grows toward
+ * the near edge; z is on the felt.
+ */
+export function drawnCardCorners(board: number): { x: number; y: number; z: number }[] {
+  const frame = drawnCardFrame(board);
+  const halfW = frame.width / 2;
+  const halfH = frame.height / 2;
+  return [
+    { x: -halfW, y: -halfH, z: 0 },
+    { x: halfW, y: -halfH, z: 0 },
+    { x: halfW, y: halfH, z: 0 },
+    { x: -halfW, y: halfH, z: 0 },
+  ];
+}
+
+/**
+ * Extra scale for a face-up card when the board is zoomed out, so on-screen
+ * text stays about as large as at zoom 1.
+ */
+export function cardReadScale(zoom: number): number {
+  if (!(zoom > 0) || zoom >= 1) return 1;
+  return Math.min(2.4, 1 / zoom);
 }
 
 export type Point = { x: number; y: number };
@@ -825,4 +951,21 @@ export function tokenSpacesBetween(from: number, to: number): number[] {
   if (forward <= 12) return forwardSpaces(start, end);
   if (back <= 12) return backwardSpaces(start, end);
   return [start, end];
+}
+
+/**
+ * Path that finishes on `to` by following `route`.
+ * A piece still walking up to the route continues along the track to its start.
+ */
+export function followRoute(from: number, to: number, route: number[] | null): number[] | null {
+  if (!route || route.length < 2 || route[route.length - 1] !== wrapSpace(to)) return null;
+  const start = wrapSpace(from);
+  if (route[0] === start) return route;
+  const at = route.indexOf(start);
+  if (at > 0) return route.slice(at);
+  const head = route[0];
+  if (head == null) return null;
+  const bridge = tokenSpacesBetween(start, head);
+  if (bridge.length < 2 || bridge[bridge.length - 1] !== head) return null;
+  return [...bridge.slice(0, -1), ...route];
 }

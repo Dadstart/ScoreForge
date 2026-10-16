@@ -4,10 +4,16 @@ const SETTINGS_KEY = 'scoreforge.settings';
 
 export type Settings = {
   showOpolyBoard: boolean;
+  /** Dice and other effect sounds. On unless the player turns them off. */
+  soundEffects: boolean;
+  /** Vibration during a roll. On unless the player turns it off. */
+  haptics: boolean;
 };
 
 export const defaultSettings: Settings = {
   showOpolyBoard: false,
+  soundEffects: true,
+  haptics: true,
 };
 
 type Listener = (settings: Settings) => void;
@@ -29,6 +35,8 @@ function parseSettings(raw: string | null): Settings {
     return {
       ...defaultSettings,
       showOpolyBoard: parsed.showOpolyBoard === true,
+      soundEffects: parsed.soundEffects !== false,
+      haptics: parsed.haptics !== false,
     };
   } catch {
     return { ...defaultSettings };

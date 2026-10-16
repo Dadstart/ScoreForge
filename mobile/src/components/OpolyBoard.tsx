@@ -3,7 +3,6 @@ import {
   Animated,
   Dimensions,
   Easing,
-  useWindowDimensions,
   PanResponder,
   Platform,
   Pressable,
@@ -16,6 +15,7 @@ import {
 } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import type { Player } from '../domain/models';
+import { boardCamera, projectTiltedPoint } from '../domain/dieProjection';
 import {
   boardSpaces,
   boardViewForTurn,
@@ -30,11 +30,13 @@ import {
   cornerFacing,
   CORNER_FIT,
   placeCornerToken,
+  boardTurnForSpace,
   nearestBoardTurn,
   nearestTokenFacing,
   ownerMarkPlacement,
   spaceToCell,
   tokenFacingDegrees,
+  followRoute,
   tokenSpace,
   tokenSpacesBetween,
   TRACK_DEPTH,
@@ -43,8 +45,8 @@ import {
 } from '../domain/opolyBoard';
 import { contrastInk, getProperty, playerLabel, playerToken } from '../domain/opoly';
 import { facingPropertyLabel, fitBoardLabel, fitSize } from '../domain/opolyLabel';
-import { clampPan, clampZoom, panForZoom, stepZoom } from '../domain/opolyZoom';
-import { diceMotionMs, OpolyDice } from './OpolyDice';
+import { cameraAlong, centeredZoomShift, clampPan, clampZoom, frameToken, panForZoom, stepZoom, twistStep } from '../domain/opolyZoom';
+import { diceMotionMs, diceUseFlatCamera, FlatDice, OpolyDice } from './OpolyDice';
 import { CARD_REVEAL_MS, OpolyCardTable } from './OpolyCards';
 import { MoneyBills, type MoneyFlight } from './MoneyBills';
 import { colors, fonts, radii } from '../theme';
@@ -52,7 +54,8 @@ import { useSetPageScroll } from './ui';
 import type { DrawnCard } from '../domain/opolyPlay';
 
 const TOKEN_COLORS = ['#e86a5c', '#6fbf8a', '#7eb6ff', '#d4a84b', '#d93a96', '#f7941d', '#c5d0c9', '#f2e3a0'];
-/** Cells at least this wide show names and prices. Smaller cells are a color map. */
+const NO_FLIGHTS: MoneyFlight[] = [];
+/** Cells at least this wide show names. Smaller cells are a color map. */
 const CLOSE_CELL = 96;
 
 type DiceRollView = { id: number; faces: [number, number] };
@@ -72,27 +75,27 @@ type Props = {
   onAcceptCard?: () => void;
   chanceCount?: number;
   chestCount?: number;
-  moneyFlight?: MoneyFlight | null;
+  moneyFlights?: MoneyFlight[];
   onDragging: (dragging: boolean) => void;
   /** True while the board is enlarged and a drag should pan it instead of the page. */
   onZoomed?: (zoomed: boolean) => void;
   diceRoll?: DiceRollView | null;
   /**
-   * Roll, pay, and buy controls. On a large board they sit on the green.
-   * `docked` is true on a small screen, where they sit in a row under the board.
+   * Roll, pay, and buy controls. They sit in a row just under the board.
    */
   roll?: ReactNode | ((docked: boolean) => ReactNode);
-  /** Place roll, pay, buy, and zoom under the board instead of on the green. */
-  dockControls?: boolean;
+  /** Controls that sit just under the near edge of the tilted board. */
+  footer?: ReactNode;
   /** Space to face when nothing is moving. The side this space is on becomes the near edge. */
   focusSpace?: number;
 };
 
 /** Table angle. The near edge, where the piece is walking, is the large one. */
 const BOARD_TILT = '50deg';
-const BOARD_TILT_RAD = (50 * Math.PI) / 180;
 /** Spin back to the player whose turn it is, slow enough to keep the dice in view. */
 const RETURN_MS = 1200;
+/** Slide or turn so a moving piece stays readable on the near edge. */
+const FOLLOW_MS = 720;
 const RETURN_EASE = Easing.bezier(0.42, 0.02, 0.18, 1);
 /** After a move finishes, let the landing sit before the board turns. */
 const POST_MOVE_PAUSE_MS = 2000;
@@ -104,15 +107,11 @@ const preserve3d = { transformStyle: 'preserve-3d' } as ViewStyle;
  * stay inside the square frame.
  */
 function boardPerspective(board: number) {
-  return Math.max(900, board * 1.85);
+  return boardCamera(board).perspective;
 }
 
 function boardFitScale(board: number) {
-  if (board <= 0) return 1;
-  const perspective = boardPerspective(board);
-  const margin = 0.92;
-  const sin = Math.sin(BOARD_TILT_RAD);
-  return Math.min(1, (margin * perspective) / (perspective + (margin / 2) * board * sin));
+  return boardCamera(board).scale;
 }
 
 /**
@@ -120,13 +119,8 @@ function boardFitScale(board: number) {
  * board. x and y are origin-centered board pixels after the quarter turn.
  */
 function projectTablePoint(x: number, y: number, board: number) {
-  const scale = boardFitScale(board);
-  const perspective = boardPerspective(board);
-  const w = 1 - (scale * y * Math.sin(BOARD_TILT_RAD)) / perspective;
-  return {
-    x: (scale * x) / w,
-    y: (scale * y * Math.cos(BOARD_TILT_RAD)) / w - board * 0.04,
-  };
+  const point = projectTiltedPoint(x, y, 0, board);
+  return { x: point.x, y: point.y };
 }
 
 /** How far the buttons can rise before they meet the near edge of the tilted board. */
@@ -136,13 +130,53 @@ function dockLift(board: number, panY: number, frameHeight: number) {
   return Math.max(0, Math.round(frameHeight - bottom) - 4);
 }
 
+/**
+ * Empty pixels above the tilted board. The square frame is tall enough for the
+ * near corners; the far edge sits well below the top of that square.
+ */
+function boardTopGap(board: number, turnDeg: number, panY: number) {
+  if (board <= 0) return 0;
+  const rad = (turnDeg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const half = board / 2;
+  let top = Infinity;
+  for (const cx of [-half, half]) {
+    for (const cy of [-half, half]) {
+      const x = cx * cos - cy * sin;
+      const y = cx * sin + cy * cos;
+      const projected = projectTablePoint(x, y, board).y;
+      if (projected < top) top = projected;
+    }
+  }
+  return Math.max(0, Math.round(panY + half + top) - 2);
+}
+
 const VIEW_FRAME = 0;
 
 function touchDistance(a: { pageX: number; pageY: number }, b: { pageX: number; pageY: number }) {
   return Math.hypot(a.pageX - b.pageX, a.pageY - b.pageY);
 }
 
-/** A zoomed-in drag pans the board. A pinch does too, so the page and the back swipe do not take it. */
+/** Screen angle of the line between two fingers. Clockwise is positive, matching rotateZ. */
+function touchAngle(a: { pageX: number; pageY: number }, b: { pageX: number; pageY: number }) {
+  return (Math.atan2(b.pageY - a.pageY, b.pageX - a.pageX) * 180) / Math.PI;
+}
+
+type Finger = { pageX: number; pageY: number; identifier?: string | number };
+
+/** Keep the same two fingers when the touch list swaps their order. */
+function pairFingers(touches: readonly Finger[], ids: [string | number, string | number] | null): [Finger, Finger] | null {
+  if (touches.length < 2) return null;
+  if (ids) {
+    const a = touches.find((touch) => touch.identifier === ids[0]);
+    const b = touches.find((touch) => touch.identifier === ids[1]);
+    if (a && b) return [a, b];
+  }
+  return [touches[0], touches[1]];
+}
+
+/** A zoomed-in drag pans the board. Two fingers pinch and turn it, so the page does not take them. */
 function claimsBoardGesture(
   zoom: number,
   evt: GestureResponderEvent,
@@ -157,64 +191,29 @@ export function OpolyBoard(props: Props) {
   return <PhoneBoard {...props} />;
 }
 
-const ZOOM_BTN = 44;
-const ZOOM_GAP = 8;
-const ZOOM_INSET = 12;
-  /** Below this board width, the tilted green cannot hold the roll and zoom controls. */
-const COMPACT_BOARD = 560;
-/** Phone-width windows keep roll, zoom, and actions under the board. */
-export const COMPACT_SCREEN = 640;
-
 function renderRoll(roll: Props['roll'], docked: boolean) {
   if (!roll) return null;
   return typeof roll === 'function' ? roll(docked) : roll;
 }
 
-/** How far owner marks hang into the green from the track. */
-function ownerClearance(board: number) {
-  const along = (board * (1 - 2 * TRACK_DEPTH)) / 9;
-  return Math.round(along * 0.62 + board * TRACK_DEPTH * 0.04) + 10;
-}
-
-/** Where the controls sit on the green, just inside the far edge, after the tilt. */
-function feltControlPoint(board: number, xFromLeft: number) {
-  const y = TRACK_DEPTH * board + ownerClearance(board);
-  return projectTablePoint(xFromLeft - board / 2, y - board / 2, board);
-}
-
-/** Keep + and − on the green, clear of the corner squares. */
-function zoomDockSpot(pan: { x: number; y: number }, zoom: number, viewport: number) {
-  const board = viewport * zoom;
-  const stack = ZOOM_BTN * 2 + ZOOM_GAP;
-  const x = board - TRACK_DEPTH * board - ownerClearance(board) - ZOOM_BTN;
-  const projected = feltControlPoint(board, x);
-  let top = pan.y + board / 2 + projected.y;
-  let right = viewport - (pan.x + board / 2 + projected.x + ZOOM_BTN);
-  top = Math.min(Math.max(ZOOM_INSET, top), Math.max(ZOOM_INSET, viewport - stack - ZOOM_INSET));
-  right = Math.min(Math.max(ZOOM_INSET, right), Math.max(ZOOM_INSET, viewport - ZOOM_BTN - ZOOM_INSET));
-  return { top, right };
-}
-
-/** Top middle of the green, below the far row, in the tilted view. */
-function rollDockBox(pan: { x: number; y: number }, zoom: number, viewport: number) {
-  const board = viewport * zoom;
-  const projected = feltControlPoint(board, board / 2);
-  const top = pan.y + board / 2 + projected.y;
-  return {
-    left: pan.x,
-    top: Math.min(Math.max(8, top), Math.max(8, viewport - 56)),
-    width: board,
-  };
-}
-
-function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false, focusSpace = 0, tokenRoute, ...props }: Props) {
-  const windowWidth = useWindowDimensions().width;
+function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, tokenRoute, footer, ...props }: Props) {
   const viewportRef = useRef<View>(null);
   const [viewport, setViewport] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const zoomRef = useRef(zoom);
+  const zoomStateRef = useRef(zoom);
   const panRef = useRef(pan);
+  const touching = useRef(false);
+  const pinchSnap = useRef<{ x: number; y: number } | null>(null);
+  const panX = useRef(new Animated.Value(0)).current;
+  const panY = useRef(new Animated.Value(0)).current;
+  const gestureScale = useRef(new Animated.Value(1)).current;
+  const liftAnim = useRef(new Animated.Value(0)).current;
+  const cameraProgress = useRef(new Animated.Value(0)).current;
+  const cameraListener = useRef<string | null>(null);
+  const cameraRun = useRef(0);
+  const cameraActive = useRef(false);
   const viewportRefSize = useRef(0);
   const onDraggingRef = useRef(onDragging);
   const onZoomedRef = useRef(onZoomed);
@@ -222,6 +221,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
   const setPageScrollRef = useRef(setPageScroll);
   const boardTurn = useRef(new Animated.Value(0)).current;
   const boardTurnRef = useRef(0);
+  const topCrop = useRef(new Animated.Value(0)).current;
   const boardTurnAnim = useRef<Animated.CompositeAnimation | null>(null);
   const boardSpin = useMemo(
     () => boardTurn.interpolate({
@@ -230,8 +230,8 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
     }),
     [boardTurn],
   );
-  zoomRef.current = zoom;
-  panRef.current = pan;
+  zoomStateRef.current = zoom;
+  if (!touching.current) zoomRef.current = zoom;
   viewportRefSize.current = viewport;
   onDraggingRef.current = onDragging;
   onZoomedRef.current = onZoomed;
@@ -241,17 +241,97 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
     pan: { x: 0, y: 0 },
     dx: 0,
     dy: 0,
-    pinch: null as null | { dist: number; zoom: number; pan: { x: number; y: number }; x: number; y: number },
+    pinch: null as null | {
+      dist: number;
+      zoom: number;
+      pan: { x: number; y: number };
+      x: number;
+      y: number;
+      angle: number;
+      turn: number;
+      ids: [string | number, string | number] | null;
+    },
     origin: { x: 0, y: 0 },
   });
+
+  const syncLift = (panYValue: number) => {
+    const view = viewportRefSize.current;
+    const zoomNow = zoomRef.current;
+    const board = view * zoomNow;
+    liftAnim.setValue(dockLift(board, panYValue, zoomNow < 1 ? board : view));
+  };
+
+  const writePan = (next: { x: number; y: number }) => {
+    panRef.current = next;
+    panX.setValue(next.x);
+    panY.setValue(next.y);
+    syncLift(next.y);
+  };
+
+  // Pinch keeps the laid-out board still and scales it. Rebuilding every cell
+  // on each finger move flashes the tilted board on iPhone.
+  const showBoard = (logicalPan: { x: number; y: number }, zoomNow: number) => {
+    const layoutZoom = zoomStateRef.current;
+    const scale = layoutZoom > 0 ? zoomNow / layoutZoom : 1;
+    const shift = centeredZoomShift(layoutZoom, zoomNow, viewportRefSize.current);
+    panRef.current = logicalPan;
+    zoomRef.current = zoomNow;
+    panX.setValue(logicalPan.x + shift);
+    panY.setValue(logicalPan.y + shift);
+    gestureScale.setValue(scale);
+    const board = viewportRefSize.current * zoomNow;
+    topCrop.setValue(zoomNow > 1 ? 0 : boardTopGap(board, boardTurnRef.current, logicalPan.y));
+    syncLift(logicalPan.y + shift);
+  };
+
+  const endGesture = () => {
+    gesture.current.pinch = null;
+    onDraggingRef.current(false);
+    if (!touching.current) return;
+    touching.current = false;
+    const nextZoom = zoomRef.current;
+    const nextPan = { x: panRef.current.x, y: panRef.current.y };
+    if (Math.abs(nextZoom - zoomStateRef.current) > 1e-6) {
+      pinchSnap.current = nextPan;
+    } else {
+      gestureScale.setValue(1);
+      panX.setValue(nextPan.x);
+      panY.setValue(nextPan.y);
+      syncLift(nextPan.y);
+    }
+    setZoom(nextZoom);
+    setPan(nextPan);
+  };
+
+  const stopCamera = () => {
+    cameraRun.current += 1;
+    const was = cameraActive.current;
+    cameraActive.current = false;
+    boardTurnAnim.current?.stop();
+    boardTurnAnim.current = null;
+    if (cameraListener.current) {
+      cameraProgress.removeListener(cameraListener.current);
+      cameraListener.current = null;
+    }
+    if (was) {
+      const settled = { ...panRef.current };
+      writePan(settled);
+      setPan(settled);
+    }
+  };
 
   const responder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (evt, g) => claimsBoardGesture(zoomRef.current, evt, g.dx, g.dy),
       onMoveShouldSetPanResponderCapture: (evt, g) => claimsBoardGesture(zoomRef.current, evt, g.dx, g.dy),
-      onPanResponderTerminationRequest: () => zoomRef.current <= 1,
+      onPanResponderTerminationRequest: (evt) => {
+        if ((evt.nativeEvent.touches?.length ?? 0) >= 2) return false;
+        return zoomRef.current <= 1;
+      },
       onPanResponderGrant: (evt) => {
+        touching.current = true;
+        stopCamera();
         onDraggingRef.current(true);
         gesture.current.pan = panRef.current;
         gesture.current.dx = 0;
@@ -284,19 +364,35 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
           zoomRef.current,
           viewportRefSize.current,
         );
-        panRef.current = next;
-        setPan(next);
+        showBoard(next, zoomRef.current);
       },
-      onPanResponderRelease: () => {
-        gesture.current.pinch = null;
-        onDraggingRef.current(false);
-      },
-      onPanResponderTerminate: () => {
-        gesture.current.pinch = null;
-        onDraggingRef.current(false);
-      },
+      onPanResponderRelease: () => endGesture(),
+      onPanResponderTerminate: () => endGesture(),
     }),
   ).current;
+
+  useLayoutEffect(() => {
+    const snap = pinchSnap.current;
+    if (!snap) return;
+    gestureScale.setValue(1);
+    panX.setValue(snap.x);
+    panY.setValue(snap.y);
+    pinchSnap.current = null;
+    syncLift(snap.y);
+    setPan((current) => ({ x: current.x, y: current.y }));
+  }, [zoom, pan.x, pan.y, gestureScale, panX, panY]);
+
+  useLayoutEffect(() => {
+    const apply = (turn: number) => {
+      const zoomNow = zoomRef.current;
+      const board = viewportRefSize.current * zoomNow;
+      topCrop.setValue(zoomNow > 1 ? 0 : boardTopGap(board, turn, panRef.current.y));
+    };
+    apply(boardTurnRef.current);
+    syncLift(panRef.current.y);
+    const id = boardTurn.addListener(({ value }) => apply(value));
+    return () => boardTurn.removeListener(id);
+  }, [boardTurn, topCrop, viewport, zoom, pan.y]);
 
   useEffect(() => {
     onZoomedRef.current?.(zoom > 1);
@@ -330,23 +426,36 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
 
   const beginPinch = (evt: GestureResponderEvent) => {
     const touches = evt.nativeEvent.touches ?? [];
-    if (touches.length < 2) return;
-    const [a, b] = touches;
+    const pair = pairFingers(touches, null);
+    if (!pair) return;
+    const [a, b] = pair;
     const midX = (a.pageX + b.pageX) / 2 - gesture.current.origin.x;
     const midY = (a.pageY + b.pageY) / 2 - gesture.current.origin.y;
+    const ids: [string | number, string | number] | null =
+      a.identifier == null || b.identifier == null ? null : [a.identifier, b.identifier];
     gesture.current.pinch = {
       dist: Math.max(1, touchDistance(a, b)),
       zoom: zoomRef.current,
       pan: panRef.current,
       x: midX,
       y: midY,
+      angle: touchAngle(a, b),
+      turn: boardTurnRef.current,
+      ids,
     };
   };
 
-  const applyPinch = (touches: ReadonlyArray<{ pageX: number; pageY: number }>) => {
+  const applyPinch = (touches: ReadonlyArray<Finger>) => {
     const pinch = gesture.current.pinch;
-    const [a, b] = touches;
-    if (!pinch || !a || !b) return;
+    const pair = pairFingers(touches, pinch?.ids ?? null);
+    if (!pinch || !pair) return;
+    const [a, b] = pair;
+    const angle = touchAngle(a, b);
+    const nextTurn = pinch.turn + twistStep(pinch.angle, angle);
+    pinch.angle = angle;
+    pinch.turn = nextTurn;
+    boardTurnRef.current = nextTurn;
+    boardTurn.setValue(nextTurn);
     const nextZoom = clampZoom((touchDistance(a, b) / pinch.dist) * pinch.zoom);
     const midX = (a.pageX + b.pageX) / 2 - gesture.current.origin.x;
     const midY = (a.pageY + b.pageY) / 2 - gesture.current.origin.y;
@@ -359,43 +468,97 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
       nextZoom,
       viewportRefSize.current,
     );
-    zoomRef.current = nextZoom;
-    panRef.current = nextPan;
-    setZoom(nextZoom);
-    setPan(nextPan);
+    showBoard(nextPan, nextZoom);
   };
 
   const changeZoom = (direction: -1 | 1) => {
+    stopCamera();
     const prev = zoomRef.current;
     const next = stepZoom(prev, direction, viewportRefSize.current);
     const nextPan = panForZoom(panRef.current, prev, next, viewportRefSize.current);
     zoomRef.current = next;
-    panRef.current = nextPan;
-    setZoom(next);
+    gestureScale.setValue(1);
+    writePan(nextPan);
     setPan(nextPan);
+    setZoom(next);
   };
 
-  const faceSpace = (space: number, duration: number, easing: (value: number) => number = Easing.inOut(Easing.quad)) => {
-    const next = nearestBoardTurn(boardTurnRef.current, space);
-    if (Math.abs(next - boardTurnRef.current) < 1) return false;
-    boardTurnRef.current = next;
-    boardTurnAnim.current?.stop();
-    if (duration <= 0) {
-      boardTurn.setValue(next);
+  const presentSpace = (
+    space: number,
+    duration: number,
+    fromSpace = space,
+    easing: (value: number) => number = Easing.inOut(Easing.quad),
+  ) => {
+    const viewportNow = viewportRefSize.current;
+    if (viewportNow <= 0) return false;
+    const zoomNow = zoomRef.current;
+    const startTurn = boardTurnRef.current;
+    const startPan = { ...panRef.current };
+    const framed = frameToken({
+      space,
+      turn: startTurn,
+      pan: startPan,
+      zoom: zoomNow,
+      viewport: viewportNow,
+    });
+    const turnSame = Math.abs(framed.turn - startTurn) < 1;
+    const panSame = Math.hypot(framed.pan.x - startPan.x, framed.pan.y - startPan.y) < 1;
+    if (turnSame && panSame) return false;
+
+    stopCamera();
+    const run = cameraRun.current;
+    const shot = {
+      fromSpace,
+      toSpace: space,
+      startTurn,
+      endTurn: framed.turn,
+      startPan,
+      endPan: framed.pan,
+      zoom: zoomNow,
+      viewport: viewportNow,
+    };
+    const apply = (t: number) => {
+      const camera = cameraAlong(shot, t);
+      boardTurnRef.current = camera.turn;
+      boardTurn.setValue(camera.turn);
+      panRef.current = camera.pan;
+      panX.setValue(camera.pan.x);
+      panY.setValue(camera.pan.y);
+      syncLift(camera.pan.y);
+    };
+    if (duration <= 0 || diceMotionMs() === 0) {
+      apply(1);
+      setPan(framed.pan);
       return true;
     }
-    const anim = Animated.timing(boardTurn, {
-      toValue: next,
+    cameraActive.current = true;
+    cameraProgress.setValue(0);
+    apply(0);
+    cameraListener.current = cameraProgress.addListener(({ value }) => {
+      if (run !== cameraRun.current) return;
+      apply(value);
+    });
+    const anim = Animated.timing(cameraProgress, {
+      toValue: 1,
       duration,
       easing,
       useNativeDriver: false,
     });
     boardTurnAnim.current = anim;
-    anim.start();
+    anim.start(({ finished }) => {
+      if (!finished || run !== cameraRun.current) return;
+      cameraActive.current = false;
+      apply(1);
+      if (cameraListener.current) {
+        cameraProgress.removeListener(cameraListener.current);
+        cameraListener.current = null;
+      }
+      setPan(framed.pan);
+    });
     return true;
   };
-  const faceSpaceRef = useRef(faceSpace);
-  faceSpaceRef.current = faceSpace;
+  const faceSpaceRef = useRef(presentSpace);
+  faceSpaceRef.current = presentSpace;
   const focusRef = useRef(focusSpace);
   focusRef.current = focusSpace;
   const routeIdRef = useRef(tokenRoute?.id ?? 0);
@@ -409,7 +572,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
 
   const faceCurrent = (space: number) => {
     const motion = diceMotionMs() > 0;
-    faceSpaceRef.current(space, motion ? RETURN_MS : 0, motion ? RETURN_EASE : Easing.linear);
+    faceSpaceRef.current(space, motion ? RETURN_MS : 0, space, motion ? RETURN_EASE : Easing.linear);
   };
   const turnHold = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearTurnHold = () => {
@@ -422,7 +585,16 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
     return Math.abs(next - boardTurnRef.current) >= 1;
   };
 
-  useEffect(() => () => clearTurnHold(), []);
+  useEffect(() => () => {
+    clearTurnHold();
+    cameraRun.current += 1;
+    cameraActive.current = false;
+    boardTurnAnim.current?.stop();
+    if (cameraListener.current) {
+      cameraProgress.removeListener(cameraListener.current);
+      cameraListener.current = null;
+    }
+  }, [boardTurnAnim, cameraProgress]);
 
   useEffect(() => {
     if ((tokenRoute?.id ?? 0) !== finishedHop.current) clearTurnHold();
@@ -430,6 +602,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
 
   useEffect(() => {
     if (hopping.current !== 0) return;
+    if (viewportRefSize.current <= 0) return;
     const first = !hasFaced.current;
     hasFaced.current = true;
     if (first) {
@@ -439,7 +612,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
     }
     if (turnHold.current) return;
     faceCurrent(focusSpace);
-  }, [focusSpace]);
+  }, [focusSpace, viewport]);
 
   const onWalkEnd = () => {
     finishedHop.current = routeIdRef.current;
@@ -457,27 +630,34 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
   };
 
   const boardSize = viewport * zoom;
-  const [diceWindow, setDiceWindow] = useState<{ id: number; view: BoardView; turn: number } | null>(null);
+  const [diceWindow, setDiceWindow] = useState<{ id: number; view: BoardView } | null>(null);
   const diceView = diceRoll && diceWindow?.id === diceRoll.id ? diceWindow.view : null;
-  const diceHomeTurn = diceRoll && diceWindow?.id === diceRoll.id ? diceWindow.turn : 0;
 
   useLayoutEffect(() => {
     const id = diceRoll?.id;
     if (!id) return;
     const viewportNow = viewportRefSize.current;
     if (viewportNow <= 0) return;
-    const panNow = panRef.current;
     const zoomNow = zoomRef.current;
+    const framed = frameToken({
+      space: focusRef.current,
+      turn: boardTurnRef.current,
+      pan: panRef.current,
+      zoom: zoomNow,
+      viewport: viewportNow,
+    });
+    const motion = diceMotionMs();
+    faceSpaceRef.current(focusRef.current, motion === 0 ? 0 : FOLLOW_MS);
     const boardNow = viewportNow * zoomNow;
     const viewportBox = {
       width: viewportNow,
       height: zoomNow < 1 ? boardNow : viewportNow,
     };
-    const seen = (view: BoardView) => boardViewForTurn(view, boardTurnRef.current, boardNow);
-    const fallback = seen(visibleBoardRect({ pan: panNow, viewport: viewportBox }));
+    const seen = (view: BoardView) => boardViewForTurn(view, framed.turn, boardNow);
+    const fallback = seen(visibleBoardRect({ pan: framed.pan, viewport: viewportBox }));
     const node = viewportRef.current;
     if (!node || typeof node.measureInWindow !== 'function') {
-      setDiceWindow({ id, view: fallback, turn: boardTurnRef.current });
+      setDiceWindow({ id, view: fallback });
       return;
     }
     let cancelled = false;
@@ -485,7 +665,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
       if (cancelled) return;
       const frame = Dimensions.get('window');
       const measured = visibleBoardRect({
-        pan: panNow,
+        pan: framed.pan,
         viewport: {
           width: width > 0 ? width : viewportBox.width,
           height: height > 0 ? height : viewportBox.height,
@@ -497,7 +677,6 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
       setDiceWindow({
         id,
         view: oriented.width > 1 && oriented.height > 1 ? oriented : fallback,
-        turn: boardTurnRef.current,
       });
     });
     return () => {
@@ -505,10 +684,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
     };
   }, [diceRoll?.id, viewport > 0]);
 
-  const frameWidth = viewport > 0 ? viewport : windowWidth;
-  const docked = dockControls || (frameWidth > 0 && frameWidth < COMPACT_BOARD);
-  const frameHeight = zoom < 1 ? boardSize : viewport;
-  const lift = docked ? dockLift(boardSize, pan.y, frameHeight) : 0;
+  const square = zoom < 1 ? boardSize : viewport;
   const zoomPair = (
     <>
       <Pressable
@@ -532,12 +708,23 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
 
   return (
     <View style={styles.frame}>
-      <View
+      <Animated.View
+        style={[
+          styles.clip,
+          viewport > 0 ? { height: Animated.subtract(square, topCrop) } : styles.viewportSquare,
+          zoom > 1 && styles.viewportHold,
+        ]}
+      >
+      <Animated.View
         ref={viewportRef}
         style={[
           styles.viewport,
-          zoom < 1 && viewport > 0 ? { height: boardSize } : styles.viewportSquare,
+          viewport > 0 && {
+            height: square,
+            marginTop: Animated.multiply(topCrop, -1),
+          },
           zoom > 1 && styles.viewportHold,
+          preserve3d,
         ]}
         onLayout={(event) => {
           const width = Math.max(0, event.nativeEvent.layout.width - VIEW_FRAME * 2);
@@ -545,8 +732,9 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
           viewportRefSize.current = width;
           setViewport(width);
         }}
-        onTouchStart={() => {
-          if (zoomRef.current > 1) setPageScrollRef.current(false);
+        onTouchStart={(event) => {
+          const fingers = event.nativeEvent.touches?.length ?? 0;
+          if (zoomRef.current > 1 || fingers >= 2) setPageScrollRef.current(false);
         }}
         onTouchEnd={() => setPageScrollRef.current(true)}
         onTouchCancel={() => setPageScrollRef.current(true)}
@@ -554,19 +742,24 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
       >
         {viewport > 0 ? (
           <Animated.View
+            collapsable={false}
             style={[
               {
                 position: 'absolute',
                 width: boardSize,
                 height: boardSize,
-                left: pan.x,
-                top: pan.y,
+                left: pinchSnap.current ? pinchSnap.current.x : panX,
+                top: pinchSnap.current ? pinchSnap.current.y : panY,
                 transform: [
                   { translateY: -boardSize * 0.04 },
                   { perspective: boardPerspective(boardSize) },
                   { rotateX: BOARD_TILT },
                   { rotateZ: boardSpin },
-                  { scale: boardFitScale(boardSize) },
+                  {
+                    scale: pinchSnap.current
+                      ? boardFitScale(boardSize)
+                      : Animated.multiply(gestureScale, boardFitScale(boardSize)),
+                  },
                 ],
                 pointerEvents: 'box-none',
               },
@@ -576,40 +769,53 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, dockControls = false
             <BoardCanvas
               {...props}
               tokenRoute={tokenRoute}
-              onArrive={(space, duration) => faceSpaceRef.current(space, duration)}
+              onArrive={(from, to, duration) => faceSpaceRef.current(to, duration, from)}
               onWalkEnd={onWalkEnd}
               diceRoll={props.cardOffer ? null : diceRoll}
-              pinDice
+              pinDice={!diceUseFlatCamera()}
               diceBoard={boardSize}
               diceView={diceView}
               diceTurn={boardTurn}
-              diceHomeTurn={diceHomeTurn}
+              zoom={zoom}
               style={{ width: boardSize, height: boardSize }}
             />
           </Animated.View>
         ) : null}
-        {!docked && viewport > 0 && roll ? (
-          <View style={[styles.rollDock, rollDockBox(pan, zoom, viewport), { pointerEvents: 'box-none' }]}>
-            {renderRoll(roll, false)}
-          </View>
-        ) : null}
-        {!docked ? (
-          <View
-            style={[styles.zoomDock, zoomDockSpot(pan, zoom, viewport), { pointerEvents: 'box-none' }]}
-          >
-            {zoomPair}
-          </View>
-        ) : null}
-      </View>
-      {docked ? (
-        <View style={[styles.actionBar, lift > 0 && { marginTop: -lift }, { pointerEvents: 'box-none' }]}>
-          {renderRoll(roll, true)}
-          <View style={styles.zoomRow}>{zoomPair}</View>
-        </View>
+      </Animated.View>
+      </Animated.View>
+      {diceUseFlatCamera() && diceRoll && boardSize > 0 && square > 0 ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.flatDice,
+            {
+              height: square,
+              top: Animated.multiply(topCrop, -1),
+            },
+          ]}
+        >
+          <FlatDice
+            roll={diceRoll}
+            view={diceView}
+            boardSize={boardSize}
+            panX={panX}
+            panY={panY}
+            turn={boardTurn}
+            width={viewport}
+            height={square}
+          />
+        </Animated.View>
       ) : null}
-      {zoom > 1 ? (
-        <Text style={styles.phoneHint}>Drag the board to look around. Pinch, or use + and −, to zoom.</Text>
-      ) : null}
+      <Animated.View style={[styles.actionBar, { marginTop: Animated.multiply(liftAnim, -1) }, { pointerEvents: 'box-none' }]}>
+        {renderRoll(roll, true)}
+        <View style={styles.zoomRow}>{zoomPair}</View>
+        {footer}
+      </Animated.View>
+      <Text style={styles.phoneHint}>
+        {zoom > 1
+          ? 'Drag the board to look around. Pinch to zoom, or twist with two fingers to turn it.'
+          : 'Twist with two fingers to turn the board.'}
+      </Text>
     </View>
   );
 }
@@ -625,14 +831,14 @@ function BoardCanvas({
   onAcceptCard,
   chanceCount = 16,
   chestCount = 16,
-  moneyFlight = null,
+  moneyFlights = NO_FLIGHTS,
   style,
   diceRoll = null,
   pinDice = false,
   diceView = null,
   diceBoard = 0,
   diceTurn = null,
-  diceHomeTurn = 0,
+  zoom = 1,
   onArrive,
   onWalkEnd,
 }: Omit<Props, 'onDragging' | 'onZoomed' | 'focusSpace'> & {
@@ -641,13 +847,23 @@ function BoardCanvas({
   diceView?: BoardView | null;
   diceBoard?: number;
   diceTurn?: Animated.Value | null;
-  diceHomeTurn?: number;
-  onArrive?: (space: number, duration: number) => boolean;
+  zoom?: number;
+  onArrive?: (from: number, to: number, duration: number) => boolean;
   onWalkEnd?: () => void;
 }) {
-  const flightRef = useRef(moneyFlight);
-  flightRef.current = moneyFlight;
-  const [burst, setBurst] = useState<{ id: number; space: number } | null>(null);
+  const flightRef = useRef(moneyFlights);
+  flightRef.current = moneyFlights;
+  const flightKey = moneyFlights.map((flight) => flight.id).join('|');
+  const [flightKeySeen, setFlightKeySeen] = useState(flightKey);
+  const [landed, setLanded] = useState<MoneyFlight[]>([]);
+  if (flightKeySeen !== flightKey) {
+    setFlightKeySeen(flightKey);
+    setLanded([]);
+  }
+  const bursts =
+    flightKeySeen === flightKey
+      ? [...moneyFlights.filter((flight) => flight.routeId == null), ...landed]
+      : moneyFlights.filter((flight) => flight.routeId == null);
   const [size, setSize] = useState(0);
   const drawnRef = useRef(drawnCards);
   drawnRef.current = drawnCards;
@@ -669,20 +885,15 @@ function BoardCanvas({
     drawCursor.current = index + 1;
   };
 
-  useEffect(() => {
-    if (!moneyFlight) {
-      setBurst(null);
-      return;
-    }
-    if (moneyFlight.routeId != null) return;
-    setBurst({ id: moneyFlight.id, space: moneyFlight.space });
-  }, [moneyFlight]);
-
   const onTokenSettled = (playerId: string) => {
     onWalkEnd?.();
-    const flight = flightRef.current;
-    if (!flight || flight.routeId == null || flight.playerId !== playerId) return;
-    setBurst({ id: flight.id, space: flight.space });
+    const waiting = flightRef.current.filter((flight) => flight.routeId != null && flight.playerId === playerId);
+    if (waiting.length === 0) return;
+    setLanded((current) => {
+      const seen = new Set(current.map((flight) => flight.id));
+      const added = waiting.filter((flight) => !seen.has(flight.id));
+      return added.length > 0 ? [...current, ...added] : current;
+    });
   };
 
   const cell = size > 0 ? size * TRACK_DEPTH : 48;
@@ -717,7 +928,7 @@ function BoardCanvas({
         const label = Math.max(8, Math.round(cell * (detail ? 0.08 : 0.14)));
         const lane = !isCorner && (col === 0 || col === 10) ? sideLane(cell) : tokenLane(cell);
         const mark = space.name === 'Chance' ? 'chance' : space.name === 'Chest' ? 'chest' : null;
-        const priceLine = detail && (property || space.tax) ? Math.max(9, Math.round(cell * 0.07)) : 0;
+        const priceLine = detail && space.tax ? Math.max(9, Math.round(cell * 0.07)) : 0;
         const priceBand = priceLine > 0 && (row === 0 || row === 10)
           ? priceLine + 2
           : priceLine > 0
@@ -771,7 +982,7 @@ function BoardCanvas({
             trainH = Math.max(8, Math.round(trainW * (36 / 64)));
           }
         }
-        const amount = priceLine > 0 && (barColor || compact || fitted) ? (property?.price ?? space.tax) : undefined;
+        const amount = priceLine > 0 ? space.tax : undefined;
         return (
           <View
             key={space.index}
@@ -925,20 +1136,30 @@ function BoardCanvas({
                       },
                     ]}
                   >
-                    <Text
-                      style={[
-                        styles.cellText,
-                        {
-                          fontSize: compact.fontSize,
-                          lineHeight: compact.fontSize + 1,
-                          width: quarter ? nameBox.height : nameBox.width,
-                          textAlign: 'center',
-                        },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {compact.text}
-                    </Text>
+                    {isUtility ? (
+                      <UtilityMark
+                        kind={property?.id === 'water' ? 'water' : 'electric'}
+                        size={Math.max(
+                          14,
+                          Math.min(quarter ? nameBox.height : nameBox.width, quarter ? nameBox.width : nameBox.height) - 2,
+                        )}
+                      />
+                    ) : (
+                      <Text
+                        style={[
+                          styles.cellText,
+                          {
+                            fontSize: compact.fontSize,
+                            lineHeight: compact.fontSize + 1,
+                            width: quarter ? nameBox.height : nameBox.width,
+                            textAlign: 'center',
+                          },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {compact.text}
+                      </Text>
+                    )}
                   </View>
                 ) : null}
                 {fitted ? (
@@ -960,20 +1181,6 @@ function BoardCanvas({
                       </Text>
                     ))}
                   </View>
-                ) : null}
-                {detail && mark ? (
-                  <Text
-                    style={[
-                      styles.cellText,
-                      {
-                        fontSize: Math.max(8, Math.round(cell * 0.08)),
-                        lineHeight: Math.max(10, Math.round(cell * 0.1)),
-                        width: '100%',
-                      },
-                    ]}
-                  >
-                    {mark === 'chance' ? 'Chance' : 'Chest'}
-                  </Text>
                 ) : null}
                 {amount != null ? (
                   <Text
@@ -1007,15 +1214,19 @@ function BoardCanvas({
           { pointerEvents: 'none' },
         ]}
       >
-        <Text
-          style={[
-            styles.centerTitle,
-            { fontSize: centerTitleFont(cell), letterSpacing: 1 },
-          ]}
-        >
-          OPOLY
-        </Text>
-        <View style={styles.centerRule} />
+        {cardOffer ? null : (
+          <>
+            <Text
+              style={[
+                styles.centerTitle,
+                { fontSize: centerTitleFont(cell), letterSpacing: 1 },
+              ]}
+            >
+              OPOLY
+            </Text>
+            <View style={styles.centerRule} />
+          </>
+        )}
       </View>
       {size > 0
         ? boardSpaces.map((space) => {
@@ -1052,7 +1263,7 @@ function BoardCanvas({
                     transform: [{ rotate: nameFacing(row, col) }],
                   }}
                 >
-                  <Text style={[styles.ownerEmoji, { fontSize: Math.round(spot.size * 0.82), lineHeight: Math.round(spot.size * 0.92) }]}>
+                  <Text allowFontScaling={false} style={[styles.ownerEmoji, emojiGlyph(spot.size)]}>
                     {glyph}
                   </Text>
                 </View>
@@ -1111,17 +1322,16 @@ function BoardCanvas({
           }
           onAccept={cardOffer ? onAcceptCard : undefined}
           turn={diceTurn}
+          zoom={zoom}
         />
       ) : null}
-      <MoneyBills flight={burst} boardSize={size} />
+      <MoneyBills flights={bursts} boardSize={size} />
       {pinDice && diceRoll ? (
         <View style={[styles.diceLayer, preserve3d, { pointerEvents: 'none' }]}>
           <OpolyDice
             roll={diceRoll}
             view={diceView}
             boardSize={diceBoard > 0 ? diceBoard : size}
-            turn={diceTurn}
-            homeTurn={diceHomeTurn}
           />
         </View>
       ) : null}
@@ -1135,7 +1345,7 @@ function spaceTint(name: string, kind?: string) {
   if (name === 'Income Tax' || name === 'Luxury Tax') return '#f6e0dc';
   if (kind === 'railroad') return '#e3ebf1';
   if (kind === 'utility') return '#f6f0d2';
-  if (name === 'Go' || name === 'Jail' || name === 'Free Parking' || name === 'Go to Jail') return '#f3ead8';
+  if (name === 'Go' || name === 'Jail' || name === 'Free Park' || name === 'Go to Jail') return '#f3ead8';
   return '#f7f1e6';
 }
 
@@ -1232,7 +1442,7 @@ function ParkingCar({ width, height }: { width: number; height: number }) {
 function FreeParkingCorner({ cell, detail }: { cell: number; detail: boolean }) {
   const pad = Math.round(cell * 0.04);
   const width = cell - pad * 2;
-  const title = displaySize('PARKING', width, Math.round(cell * (detail ? 0.22 : 0.28)));
+  const title = displaySize('PARK', width, Math.round(cell * (detail ? 0.22 : 0.28)));
   const carH = Math.round(cell * (detail ? 0.42 : 0.48));
   return (
     <View style={[styles.corner, { padding: pad }]}>
@@ -1241,7 +1451,7 @@ function FreeParkingCorner({ cell, detail }: { cell: number; detail: boolean }) 
         FREE
       </Text>
       <Text style={[styles.cornerTitle, { fontSize: title, lineHeight: title }]} numberOfLines={1}>
-        PARKING
+        PARK
       </Text>
     </View>
   );
@@ -1453,31 +1663,36 @@ function cardMarkSize(row: number, col: number, cell: number, detail: boolean) {
 function UtilityMark({ kind, size }: { kind: 'electric' | 'water'; size: number }) {
   return (
     <View style={{ width: size, height: size, pointerEvents: 'none' }}>
-      {kind === 'water' ? <WaterSvg size={size} /> : <BulbSvg size={size} />}
+      {kind === 'water' ? <SpigotSvg size={size} /> : <BoltSvg size={size} />}
     </View>
   );
 }
 
-function BulbSvg({ size }: { size: number }) {
+function BoltSvg({ size }: { size: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 32 32">
       <Path
-        d="M16 1.5c-5.4 0-9.2 4.1-9.2 9.4 0 3.3 1.7 5.8 3.6 7.6.9.9 1.4 1.9 1.4 3v1.3h8.4v-1.3c0-1.1.5-2.1 1.4-3 1.9-1.8 3.6-4.3 3.6-7.6 0-5.3-3.8-9.4-9.2-9.4z"
-        fill="#f2c14b"
+        d="M18.2 1.2 6.2 17.4h7.4L11.2 30.8 26.4 13h-7.8L20.6 1.2z"
+        fill="#f5c400"
+        stroke="#8a5a00"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
       />
-      <Path d="M11.2 9.2c1-2.4 2.8-3.8 4.8-3.8" fill="none" stroke="#fff6d4" strokeWidth="1.6" strokeLinecap="round" />
-      <Rect x="11.6" y="23.2" width="8.8" height="2.1" rx="0.4" fill="#7a5a22" />
-      <Rect x="12.2" y="26" width="7.6" height="1.8" rx="0.4" fill="#7a5a22" />
-      <Rect x="13" y="28.4" width="6" height="2.2" rx="0.7" fill="#4e3912" />
     </Svg>
   );
 }
 
-function WaterSvg({ size }: { size: number }) {
+function SpigotSvg({ size }: { size: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 32 32">
-      <Path d="M16 2c5.2 7.2 11 12.2 11 18.2a11 11 0 1 1-22 0C5 14.2 10.8 9.2 16 2z" fill="#2b86c4" />
-      <Path d="M11.5 18.5c1.2 4 3.4 6 6.8 6.8" fill="none" stroke="#d7f1fb" strokeWidth="1.8" strokeLinecap="round" />
+      <Circle cx="8.5" cy="7.2" r="4.6" fill="#e8eef3" stroke="#2f3d4a" strokeWidth="1.7" />
+      <Path d="M8.5 3.8v6.8M5.4 7.2h6.2" stroke="#2f3d4a" strokeWidth="1.4" strokeLinecap="round" />
+      <Rect x="7.2" y="11.2" width="2.6" height="3.2" fill="#4b5966" />
+      <Rect x="2.4" y="14" width="17.4" height="6.2" rx="1.6" fill="#7f8d9c" />
+      <Rect x="3.4" y="15" width="15" height="1.6" rx="0.7" fill="#f4f7fa" />
+      <Path d="M18.2 14.4h6.4c1.2 0 2.2 1 2.2 2.2V23h-3.8v-5.2h-4.8z" fill="#4b5966" />
+      <Rect x="22.2" y="22.6" width="4.4" height="2.2" rx="0.5" fill="#2f3d4a" />
+      <Path d="M24.4 25.6c0 0 2.1 1.9 2.1 3.3a2.1 2.1 0 1 1-4.2 0c0-1.4 2.1-3.3 2.1-3.3z" fill="#2b86c4" />
     </Svg>
   );
 }
@@ -1640,6 +1855,22 @@ function spacePadding(row: number, col: number, lane: number, bar: number, cell:
 /** A token smaller than this stops reading as an emoji on a phone. */
 const MIN_PIECE = 28;
 
+/**
+ * Emoji ink is taller and wider than the font's em box, and iOS clips the
+ * Text to that box. Keep the glyph inside the piece so a rotated token is
+ * not cut off.
+ */
+function emojiGlyph(piece: number) {
+  const box = Math.max(1, Math.round(piece));
+  return {
+    width: box,
+    height: box,
+    fontSize: Math.max(1, Math.round(box * 0.68)),
+    lineHeight: box,
+    textAlignVertical: 'center' as const,
+  };
+}
+
 function pieceSize(cell: number) {
   if (cell < CLOSE_CELL) return Math.max(MIN_PIECE, Math.round(cell * 0.5));
   return Math.max(28, Math.round(cell * 0.34));
@@ -1732,8 +1963,25 @@ function stepMs(spaces: number[]) {
   return 180;
 }
 
-function travelSpaces(from: number, to: number, route: number[] | null, last: number[] | null) {
-  if (route && route.length > 1 && route[0] === from && route[route.length - 1] === to) return route;
+/** Long enough to watch a corner turn, and a straight jump across the board. */
+function hopDuration(from: number, to: number, pace: number) {
+  const along = adjacentSpaces(from, to);
+  const glide = along ? pace : Math.max(FOLLOW_MS, Math.round(pace * 2.4));
+  if (boardTurnForSpace(from) === boardTurnForSpace(to)) return glide;
+  return Math.max(glide, FOLLOW_MS);
+}
+
+function travelSpaces(
+  from: number,
+  to: number,
+  route: number[] | null,
+  last: number[] | null,
+  toJail = false,
+) {
+  // Sent to jail — slide straight in. A track walk from e.g. 38 would pass GO.
+  if (toJail && to === 10 && from !== 10) return [from, 10];
+  const along = followRoute(from, to, route);
+  if (along && along.length > 1) return along;
   if (last && last.length > 1 && last[last.length - 1] === from && last[0] === to) return [...last].reverse();
   return tokenSpacesBetween(from, to);
 }
@@ -1769,7 +2017,7 @@ function Piece({
   holdSpaces: number[];
   onCardStop: (space: number) => void;
   onSettled: (playerId: string) => void;
-  onArrive?: (space: number, duration: number) => boolean;
+  onArrive?: (from: number, to: number, duration: number) => boolean;
 }) {
   const [flying, setFlying] = useState(false);
   const resting = piecePlace(spaceIndex, size, slot, crowd, inJail);
@@ -1837,18 +2085,24 @@ function Piece({
       parkFacing(spaceIndex);
       const holds = holdRef.current;
       if (holds.length > 0) cardNotice.current(holds[holds.length - 1]);
-      arriveNotice.current?.(spaceIndex, 0);
+      arriveNotice.current?.(from, spaceIndex, 0);
       settledNotice.current(playerId);
       return;
     }
-    const spaces = travelSpaces(from, spaceIndex, routeRef.current, lastPath.current);
+    const spaces = travelSpaces(
+      from,
+      spaceIndex,
+      routeRef.current,
+      lastPath.current,
+      spaceIndex === 10 && jailedRef.current,
+    );
     if (spaces.length < 2) {
       settled.current = spaceIndex;
       const place = placeAt(spaceIndex, slotRef.current, countRef.current);
       left.setValue(place.left);
       top.setValue(place.top);
       parkFacing(spaceIndex);
-      arriveNotice.current?.(spaceIndex, 0);
+      arriveNotice.current?.(from, spaceIndex, 0);
       settledNotice.current(playerId);
       return;
     }
@@ -1863,6 +2117,7 @@ function Piece({
     let finishWait: (() => void) | null = null;
     let finished = false;
     let cancelled = false;
+    let reached = from;
     const play = (animation: Animated.CompositeAnimation) =>
       new Promise<boolean>((resolve) => {
         current = animation;
@@ -1887,7 +2142,8 @@ function Piece({
         );
         const along = adjacentSpaces(spaces[step - 1], index);
         const dir = along ? inwardHop(spaces[step - 1]) : { x: 0, y: 0 };
-        const duration = along ? pace : Math.round(pace * 2.4);
+        const duration = hopDuration(spaces[step - 1], index, pace);
+        arriveNotice.current?.(spaces[step - 1], index, duration);
         const half = duration / 2;
         const turn = nearestTokenFacing(facingNow.current, index);
         facingNow.current = turn;
@@ -1911,6 +2167,7 @@ function Piece({
           ]),
         );
         if (cancelled || !done) return;
+        reached = index;
         const holdAt = holds.indexOf(index);
         if (holdAt >= 0) {
           holds.splice(holdAt, 1);
@@ -1941,15 +2198,15 @@ function Piece({
       current?.stop();
       if (!finished) {
         flyingRef.current = false;
-        settled.current = from;
+        settled.current = reached;
         setFlying(false);
-        const place = placeAt(from, slotRef.current, countRef.current);
+        const place = placeAt(reached, slotRef.current, countRef.current);
         left.setValue(place.left);
         top.setValue(place.top);
         liftX.setValue(0);
         liftY.setValue(0);
         bulge.setValue(1);
-        parkFacing(from);
+        parkFacing(reached);
       }
     };
   }, [bulge, facingDeg, left, liftX, liftY, playerId, routeId, spaceIndex, top]);
@@ -1974,9 +2231,10 @@ function Piece({
       ]}
     >
       <Text
+        allowFontScaling={false}
         style={
           emoji
-            ? [styles.tokenEmojiText, { fontSize: Math.round(piece * 0.88), lineHeight: Math.round(piece) }]
+            ? [styles.tokenEmojiText, emojiGlyph(piece)]
             : [styles.tokenText, { fontSize: Math.round(piece * 0.72), color }]
         }
       >
@@ -1987,7 +2245,16 @@ function Piece({
 }
 
 const styles = StyleSheet.create({
-  frame: { width: '100%', alignSelf: 'stretch', gap: 8 },
+  frame: { width: '100%', alignSelf: 'stretch', gap: 8, position: 'relative' },
+  flatDice: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    zIndex: 30,
+    overflow: 'visible',
+  },
+  clip: { width: '100%', overflow: 'hidden' },
   viewport: {
     width: '100%',
     overflow: 'hidden',
@@ -2009,16 +2276,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  zoomDock: {
-    position: 'absolute',
-    gap: 8,
-    zIndex: 40,
-  },
-  rollDock: {
-    position: 'absolute',
-    zIndex: 32,
-    alignItems: 'center',
   },
   diceLayer: {
     position: 'absolute',
@@ -2190,6 +2447,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'transparent',
+    overflow: 'visible',
   },
   tokenText: {
     fontWeight: '800',

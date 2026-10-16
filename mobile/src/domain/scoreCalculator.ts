@@ -7,6 +7,7 @@ import { foundationCount } from './klondike';
 import { clearedCount } from './pyramid';
 import { completedCount } from './spider';
 import { homeCount } from './sorry';
+import { cashFromDelta, soleSolventPlayer } from './opoly';
 import { grandTotal, isScorecardComplete } from './yahtzee';
 
 export interface PlayerStanding {
@@ -121,7 +122,13 @@ function roundsEveryoneReached(game: Game): number {
   return least;
 }
 
+function opolySoleSurvivor(game: Game, totals: Map<string, number>): string | null {
+  if (game.templateId !== 'monopoly') return null;
+  return soleSolventPlayer(game.players, (playerId) => cashFromDelta(totals.get(playerId) ?? 0));
+}
+
 function detectCompletion(game: Game, template: GameTemplate, totals: Map<string, number>): boolean {
+  if (opolySoleSurvivor(game, totals)) return true;
   if (template.id === 'yahtzee') return isScorecardComplete(game);
   if (template.id === 'backgammon') return Boolean(game.backgammon?.winnerSide);
   if (template.id === 'checkers') return Boolean(game.checkers?.winnerSide || game.checkers?.draw);
@@ -162,6 +169,9 @@ function getWinnerIds(
   game: Game,
 ): Set<string> {
   if (ordered.length === 0) return new Set();
+
+  const soleSurvivor = opolySoleSurvivor(game, totals);
+  if (soleSurvivor) return new Set([soleSurvivor]);
 
   if (template.id === 'backgammon') {
     if (!game.backgammon?.winnerSide) return new Set();

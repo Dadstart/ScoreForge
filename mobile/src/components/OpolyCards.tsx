@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import Svg, { Path, Rect } from 'react-native-svg';
 import { cardCopy, type CardDeck } from '../domain/opolyCards';
-import { DECK_TILT, TRACK_DEPTH, deckPileLayout } from '../domain/opolyBoard';
+import { TRACK_DEPTH, cardReadScale, deckPileLayout, drawnCardFrame } from '../domain/opolyBoard';
 import { fonts } from '../theme';
 import { diceMotionMs } from './OpolyDice';
 
@@ -22,9 +22,19 @@ type Props = {
   onAccept?: () => void;
   /** Board spin in degrees. Cards counter-rotate so their bottoms stay on the near edge. */
   turn?: Animated.Value | null;
+  /** Board zoom. Face-up cards grow when zoomed out so copy stays readable. */
+  zoom?: number;
 };
 
-export function OpolyCardTable({ boardSize, chanceCount, chestCount, face, onAccept, turn = null }: Props) {
+export function OpolyCardTable({
+  boardSize,
+  chanceCount,
+  chestCount,
+  face,
+  onAccept,
+  turn = null,
+  zoom = 1,
+}: Props) {
   const center = boardSize * (1 - 2 * TRACK_DEPTH);
   const origin = boardSize * TRACK_DEPTH;
   const piles = deckPileLayout(boardSize);
@@ -32,11 +42,13 @@ export function OpolyCardTable({ boardSize, chanceCount, chestCount, face, onAcc
   const faceTop = face?.deck === 'chance' ? piles.chanceTop : piles.chestTop;
 
   const facing = useFacingBottom(turn);
+  const frame = drawnCardFrame(boardSize);
+  const fit = Math.min(center * 0.92 / Math.max(1, frame.height), center * 0.92 / Math.max(1, frame.width));
+  const readScale = Math.min(cardReadScale(zoom), fit);
   return (
     <View
       style={[
         styles.table,
-        preserve3d,
         {
           left: origin,
           top: origin,
@@ -46,26 +58,28 @@ export function OpolyCardTable({ boardSize, chanceCount, chestCount, face, onAcc
         { pointerEvents: 'box-none' },
       ]}
     >
-      <CardPile
-        deck="chest"
-        count={chestCount}
-        width={piles.width}
-        height={piles.height}
-        left={piles.chestLeft}
-        top={piles.chestTop}
-        angle={-DECK_TILT}
-        facing={facing}
-      />
-      <CardPile
-        deck="chance"
-        count={chanceCount}
-        width={piles.width}
-        height={piles.height}
-        left={piles.chanceLeft}
-        top={piles.chanceTop}
-        angle={DECK_TILT}
-        facing={facing}
-      />
+      {face ? null : (
+        <>
+          <CardPile
+            deck="chest"
+            count={chestCount}
+            width={piles.width}
+            height={piles.height}
+            left={piles.chestLeft}
+            top={piles.chestTop}
+            facing={facing}
+          />
+          <CardPile
+            deck="chance"
+            count={chanceCount}
+            width={piles.width}
+            height={piles.height}
+            left={piles.chanceLeft}
+            top={piles.chanceTop}
+            facing={facing}
+          />
+        </>
+      )}
       {face ? (
         <FlippedCard
           key={face.nonce}
@@ -76,7 +90,9 @@ export function OpolyCardTable({ boardSize, chanceCount, chestCount, face, onAcc
           pileHeight={piles.height}
           pileLeft={faceLeft}
           pileTop={faceTop}
-          angle={face.deck === 'chance' ? DECK_TILT : -DECK_TILT}
+          faceWidth={frame.width}
+          faceHeight={frame.height}
+          readScale={readScale}
           facing={facing}
           onAccept={onAccept}
         />
@@ -99,8 +115,6 @@ function useFacingBottom(turn: Animated.Value | null) {
   );
 }
 
-const preserve3d = { transformStyle: 'preserve-3d' } as ViewStyle;
-
 function CardPile({
   deck,
   count,
@@ -108,7 +122,6 @@ function CardPile({
   height,
   left,
   top,
-  angle,
   facing,
 }: {
   deck: CardDeck;
@@ -117,11 +130,9 @@ function CardPile({
   height: number;
   left: number;
   top: number;
-  angle: number;
   facing: ReturnType<typeof useFacingBottom>;
 }) {
   const layers = Math.max(1, Math.min(LAYERS, count));
-  const tilt = `${angle}deg`;
   return (
     <Animated.View
       accessibilityLabel={deck === 'chance' ? 'Chance deck' : 'Chest deck'}
@@ -132,7 +143,7 @@ function CardPile({
           top,
           width,
           height,
-          transform: facing ? [{ rotateZ: facing }, { rotate: tilt }] : [{ rotate: tilt }],
+          transform: facing ? [{ rotateZ: facing }] : undefined,
         },
         { pointerEvents: 'none' },
       ]}
@@ -160,7 +171,9 @@ function FlippedCard({
   pileHeight,
   pileLeft,
   pileTop,
-  angle,
+  faceWidth,
+  faceHeight,
+  readScale,
   facing,
   onAccept,
 }: {
@@ -171,7 +184,9 @@ function FlippedCard({
   pileHeight: number;
   pileLeft: number;
   pileTop: number;
-  angle: number;
+  faceWidth: number;
+  faceHeight: number;
+  readScale: number;
   facing: ReturnType<typeof useFacingBottom>;
   onAccept?: () => void;
 }) {
@@ -179,8 +194,6 @@ function FlippedCard({
   const motion = diceMotionMs() > 0;
   const progress = useRef(new Animated.Value(motion ? 0 : 1)).current;
   const [showFace, setShowFace] = useState(!motion);
-  const faceWidth = Math.max(120, center * 0.34);
-  const faceHeight = faceWidth / 0.68;
   const pileCenterX = pileLeft + pileWidth / 2;
   const pileCenterY = pileTop + pileHeight / 2;
   const faceCenterX = center / 2;
@@ -189,11 +202,11 @@ function FlippedCard({
   useEffect(() => {
     if (!motion) return;
     progress.setValue(0);
-    let facing = false;
+    let facingUp = false;
     const listener = progress.addListener(({ value }) => {
       const next = value >= 0.5;
-      if (next === facing) return;
-      facing = next;
+      if (next === facingUp) return;
+      facingUp = next;
       setShowFace(next);
     });
     const animation = Animated.timing(progress, {
@@ -219,20 +232,14 @@ function FlippedCard({
   });
   const scale = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: [pileWidth / faceWidth, 1],
+    outputRange: [pileWidth / Math.max(1, faceWidth), readScale],
   });
   const spin = progress.interpolate({
     inputRange: [0, 0.5, 1],
     outputRange: ['0deg', '90deg', '0deg'],
   });
-  const straighten = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [`${angle}deg`, '0deg'],
-  });
   const pose = [
     ...(facing ? [{ rotateZ: facing }] : []),
-    { perspective: 900 },
-    { rotate: straighten },
     { rotateY: spin },
     { scale },
   ] as unknown as NonNullable<ViewStyle['transform']>;
@@ -242,7 +249,6 @@ function FlippedCard({
       accessibilityLabel={`${copy.name}. ${copy.text}`}
       style={[
         styles.flipping,
-        preserve3d,
         {
           left,
           top,
@@ -314,12 +320,12 @@ function CardFront({
   onAccept?: () => void;
 }) {
   const long = text.length > 120;
-  const body = Math.max(11, Math.round(height * (long ? 0.046 : 0.052)));
+  const body = Math.max(12, Math.round(height * (long ? 0.05 : 0.056)));
   const radius = Math.round(width * 0.06);
   return (
     <View style={[styles.front, { width, height, borderRadius: radius }, { pointerEvents: 'box-none' }]}>
       <View style={[styles.band, { backgroundColor: deck === 'chance' ? '#e06a1f' : '#1d4f92' }]}>
-        <Text style={[styles.bandText, { fontSize: Math.max(11, Math.round(height * 0.055)) }]}>{name.toUpperCase()}</Text>
+        <Text style={[styles.bandText, { fontSize: Math.max(12, Math.round(height * 0.058)) }]}>{name.toUpperCase()}</Text>
       </View>
       <Text style={[styles.frontText, { fontSize: body, lineHeight: Math.round(body * 1.28) }]}>{text}</Text>
       {onAccept ? (
@@ -329,7 +335,7 @@ function CardFront({
           onPress={onAccept}
           style={({ pressed }) => [styles.accept, pressed && styles.acceptPressed]}
         >
-          <Text style={[styles.acceptText, { fontSize: Math.max(13, Math.round(height * 0.055)) }]}>Accept</Text>
+          <Text style={[styles.acceptText, { fontSize: Math.max(14, Math.round(height * 0.058)) }]}>Accept</Text>
         </Pressable>
       ) : null}
     </View>

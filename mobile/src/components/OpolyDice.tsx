@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, Platform, StyleSheet, View, type ViewStyle } from 'react-native';
-import { diceHopPoints, diceRollCurves, monopolyDieSize, pointHeldOnTurn, type BoardView, type Point } from '../domain/opolyBoard';
+import { projectDie, type DiePose } from '../domain/dieProjection';
+import { diceHopPoints, diceRollCurves, monopolyDieSize, type BoardView, type Point } from '../domain/opolyBoard';
+import Svg, { Ellipse, G, Polygon } from 'react-native-svg';
 
 const ROLL_MS = 1700;
 const STAGGER_MS = 160;
@@ -24,6 +26,15 @@ if (Platform.OS !== 'web') {
   });
 }
 
+/** iPhone flattens CSS cubes, so the die is drawn as projected faces instead. */
+export function diceUseFlatCamera(): boolean {
+  if (Platform.OS !== 'web') return true;
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  if (/iPhone|iPad|iPod/i.test(ua)) return true;
+  return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+}
+
 export function diceMotionMs(): number {
   if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return 0;
@@ -45,18 +56,12 @@ export function OpolyDice({
   roll,
   view,
   boardSize = 0,
-  turn = null,
-  homeTurn = 0,
 }: {
   roll: Roll;
   /** Null until the on-screen board rect for this roll is known. */
   view?: BoardView | null;
   /** Board canvas size. The visible rect uses this same coordinate space. */
   boardSize?: number;
-  /** Board spin, in degrees. Dice ride this so they stay on screen as the table turns. */
-  turn?: Animated.Value | null;
-  /** Board spin when this roll was placed. */
-  homeTurn?: number;
 }) {
   const [box, setBox] = useState({ width: 0, height: 0 });
   const flight = useRef<{
@@ -90,8 +95,8 @@ export function OpolyDice({
     >
       {curves ? (
         <>
-          <TravelDie face={roll.faces[0]} rollId={roll.id} board={flightBoard} curve={curves[0]} lane={0} delay={0} view={landedView} turn={turn} homeTurn={homeTurn} />
-          <TravelDie face={roll.faces[1]} rollId={roll.id} board={flightBoard} curve={curves[1]} lane={1} delay={STAGGER_MS} view={landedView} turn={turn} homeTurn={homeTurn} />
+          <TravelDie face={roll.faces[0]} rollId={roll.id} board={flightBoard} curve={curves[0]} lane={0} delay={0} view={landedView} />
+          <TravelDie face={roll.faces[1]} rollId={roll.id} board={flightBoard} curve={curves[1]} lane={1} delay={STAGGER_MS} view={landedView} />
         </>
       ) : null}
     </View>
@@ -106,8 +111,6 @@ function TravelDie({
   lane,
   delay,
   view,
-  turn,
-  homeTurn,
 }: {
   face: number;
   rollId: number;
@@ -116,20 +119,10 @@ function TravelDie({
   lane: number;
   delay: number;
   view?: BoardView;
-  turn: Animated.Value | null;
-  homeTurn: number;
 }) {
   const progress = useRef(new Animated.Value(diceMotionMs() === 0 ? 1 : 0)).current;
   const size = monopolyDieSize(board);
   const points = diceHopPoints(curve, board, view);
-  const landed = points[points.length - 1] ?? curve[3];
-  const shiftX = useRef(new Animated.Value(0)).current;
-  const shiftY = useRef(new Animated.Value(0)).current;
-  const holdSpin = useRef(new Animated.Value(0)).current;
-  const holdAngle = holdSpin.interpolate({
-    inputRange: [-1, 1],
-    outputRange: ['-1deg', '1deg'],
-  });
   const input = points.map((_, index) => index / (points.length - 1));
   const travelX = progress.interpolate({
     inputRange: input,
@@ -173,24 +166,6 @@ function TravelDie({
     };
   }, [rollId, face, delay, lane, progress]);
 
-  useEffect(() => {
-    const place = (value: number) => {
-      const held = pointHeldOnTurn(landed, homeTurn, value, board);
-      shiftX.setValue(held.x - landed.x);
-      shiftY.setValue(held.y - landed.y);
-      holdSpin.setValue(homeTurn - value);
-    };
-    if (!turn) {
-      place(homeTurn);
-      return;
-    }
-    place(animatedNow(turn));
-    const id = turn.addListener(({ value }) => place(value));
-    return () => {
-      turn.removeListener(id);
-    };
-  }, [turn, homeTurn, board, landed.x, landed.y, shiftX, shiftY, holdSpin]);
-
   return (
     <Animated.View
       style={[
@@ -201,9 +176,8 @@ function TravelDie({
           width: size,
           height: size,
           transform: [
-            { translateX: Animated.add(travelX, shiftX) },
-            { translateY: Animated.add(travelY, shiftY) },
-            { rotateZ: holdAngle },
+            { translateX: travelX },
+            { translateY: travelY },
           ],
         },
         preserve3d,
@@ -231,13 +205,15 @@ function TravelDie({
   );
 }
 
-const preserve3d = { transformStyle: 'preserve-3d' } as ViewStyle;
+const preserve3d = {
+  transformStyle: 'preserve-3d',
+  ...(Platform.OS === 'web' ? { WebkitTransformStyle: 'preserve-3d' } : null),
+} as ViewStyle;
+/** iOS drops children of a 3D face unless those children have their own transform. */
+const pipPaint =
+  Platform.OS === 'web' ? ({ transform: [{ translateZ: 1 }] } as unknown as ViewStyle) : null;
 
-function animatedNow(value: Animated.Value): number {
-  return (value as unknown as { __getValue(): number }).__getValue();
-}
-
-/** The other four faces. Opposites sum to 7, so the hidden bottom is left out. */
+/** The four side faces. The opposite face is drawn separately; opposites sum to 7. */
 function neighborFaces(top: number): number[] {
   const opposite = 7 - top;
   return [1, 2, 3, 4, 5, 6].filter((value) => value !== top && value !== opposite);
@@ -262,6 +238,7 @@ function DieCube({ face, settled, size }: { face: number; settled: number; size:
       ]}
     >
       <DieFace value={face} size={size} color="#f7f1e6" transform={cubeTransform([{ translateZ: half }])} />
+      <DieFace value={7 - settled} size={size} color="#d9cbb3" transform={cubeTransform([{ rotateX: '180deg' }, { translateZ: half }])} />
       <DieFace value={sides[0]} size={size} color="#e6d7be" transform={cubeTransform([{ rotateX: '90deg' }, { translateZ: half }])} />
       <DieFace value={sides[1]} size={size} color="#efe6d4" transform={cubeTransform([{ rotateX: '-90deg' }, { translateZ: half }])} />
       <DieFace value={sides[2]} size={size} color="#ddd0b6" transform={cubeTransform([{ rotateY: '90deg' }, { translateZ: half }])} />
@@ -282,26 +259,43 @@ function DieFace({
   transform: NonNullable<ViewStyle['transform']>;
 }) {
   const pips = PIPS[value] ?? PIPS[1];
+  const cell = size / 3;
+  const pip = Math.max(3, Math.round(cell * 0.58));
   return (
     <View
-      style={{
-        position: 'absolute',
-        width: size,
-        height: size,
-        borderRadius: size * 0.16,
-        backgroundColor: color,
-        borderWidth: 1,
-        borderColor: 'rgba(90, 64, 36, 0.4)',
-        backfaceVisibility: 'hidden',
-        transform,
-      }}
+      style={[
+        {
+          position: 'absolute',
+          width: size,
+          height: size,
+          borderRadius: size * 0.16,
+          backgroundColor: color,
+          borderWidth: 1,
+          borderColor: 'rgba(90, 64, 36, 0.4)',
+          backfaceVisibility: 'hidden',
+          transform,
+        },
+        Platform.OS === 'web' ? ({ WebkitBackfaceVisibility: 'hidden' } as ViewStyle) : null,
+        preserve3d,
+      ]}
     >
-      <View style={styles.pips}>
-        {pips.map((on, index) => (
-          <View key={index} style={styles.slot}>
-            {on ? <View style={styles.pip} /> : null}
-          </View>
-        ))}
+      <View style={[styles.pipLayer, pipPaint]} pointerEvents="none">
+        {pips.map((on, index) =>
+          on ? (
+            <View
+              key={index}
+              style={{
+                position: 'absolute',
+                width: pip,
+                height: pip,
+                borderRadius: pip / 2,
+                backgroundColor: '#1a1408',
+                left: (index % 3) * cell + (cell - pip) / 2,
+                top: Math.floor(index / 3) * cell + (cell - pip) / 2,
+              }}
+            />
+          ) : null,
+        )}
       </View>
     </View>
   );
@@ -315,22 +309,12 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
   },
-  pips: {
-    flex: 1,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  slot: {
-    width: '33.33%',
-    height: '33.33%',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pip: {
-    width: '58%',
-    height: '58%',
-    borderRadius: 99,
-    backgroundColor: '#1a1408',
+  pipLayer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
   },
   shadow: {
     position: 'absolute',
@@ -340,4 +324,196 @@ const styles = StyleSheet.create({
     height: 10,
     backgroundColor: 'rgba(8, 14, 12, 0.45)',
   },
+  flatLayer: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    zIndex: 26,
+  },
 });
+
+const LANE_SPIN = [
+  { x: 360, y: -360, z: 720 },
+  { x: -360, y: 720, z: -360 },
+] as const;
+
+function pointOnPath(points: Point[], t: number): Point {
+  if (points.length === 0) return { x: 0, y: 0 };
+  if (points.length === 1) return points[0];
+  const scaled = Math.min(1, Math.max(0, t)) * (points.length - 1);
+  const index = Math.min(points.length - 2, Math.floor(scaled));
+  const frac = scaled - index;
+  const a = points[index];
+  const b = points[index + 1];
+  return { x: a.x + (b.x - a.x) * frac, y: a.y + (b.y - a.y) * frac };
+}
+
+function readAnimated(value: Animated.Value) {
+  return (value as unknown as { __getValue(): number }).__getValue();
+}
+
+function useDieProgress(rollId: number, delay: number) {
+  const [progress, setProgress] = useState(diceMotionMs() === 0 ? 1 : 0);
+  const motion = useRef(new Animated.Value(diceMotionMs() === 0 ? 1 : 0)).current;
+  useEffect(() => {
+    const id = motion.addListener(({ value }) => setProgress(value));
+    if (diceMotionMs() === 0) {
+      motion.setValue(1);
+      setProgress(1);
+      return () => motion.removeListener(id);
+    }
+    motion.setValue(0);
+    setProgress(0);
+    const animation = Animated.timing(motion, {
+      toValue: 1,
+      duration: ROLL_MS,
+      delay,
+      easing: Easing.bezier(0.22, 0.8, 0.3, 1),
+      isInteraction: false,
+      useNativeDriver: false,
+    });
+    animation.start();
+    return () => {
+      animation.stop();
+      motion.removeListener(id);
+    };
+  }, [rollId, delay, motion]);
+  return progress;
+}
+
+/** Dice drawn in the board's perspective. Used where a CSS cube is flattened. */
+export function FlatDice({
+  roll,
+  view,
+  boardSize,
+  panX,
+  panY,
+  turn,
+  width,
+  height,
+}: {
+  roll: Roll;
+  view?: BoardView | null;
+  boardSize: number;
+  panX: Animated.Value;
+  panY: Animated.Value;
+  turn: Animated.Value;
+  width: number;
+  height: number;
+}) {
+  const [boardTurn, setBoardTurn] = useState(0);
+  const [pan, setPan] = useState(() => ({ x: readAnimated(panX), y: readAnimated(panY) }));
+  const flight = useRef<{
+    id: number;
+    board: number;
+    curves: [Point, Point, Point, Point][];
+    view?: BoardView;
+  } | null>(null);
+  const lead = useDieProgress(roll.id, 0);
+  const follow = useDieProgress(roll.id, STAGGER_MS);
+  if (boardSize > 0 && view && flight.current?.id !== roll.id) {
+    flight.current = {
+      id: roll.id,
+      board: boardSize,
+      curves: diceRollCurves(boardSize, monopolyDieSize(boardSize), Math.random, view),
+      view,
+    };
+  }
+  const ready = flight.current?.id === roll.id ? flight.current : null;
+
+  useEffect(() => {
+    setBoardTurn(readAnimated(turn));
+    const id = turn.addListener(({ value }) => setBoardTurn(value));
+    return () => turn.removeListener(id);
+  }, [turn]);
+
+  useEffect(() => {
+    const pull = () => {
+      const next = { x: readAnimated(panX), y: readAnimated(panY) };
+      setPan((current) => (current.x === next.x && current.y === next.y ? current : next));
+    };
+    pull();
+    const xId = panX.addListener(pull);
+    const yId = panY.addListener(pull);
+    return () => {
+      panX.removeListener(xId);
+      panY.removeListener(yId);
+    };
+  }, [panX, panY]);
+
+  if (!ready || width <= 0 || height <= 0) return null;
+  const place = (x: number, y: number) => ({
+    x: pan.x + ready.board / 2 + x,
+    y: pan.y + ready.board / 2 + y,
+  });
+  const dice = [0, 1].map((lane) => {
+    const center = pointOnPath(ready.curves[lane] ? diceHopPoints(ready.curves[lane], ready.board, ready.view) : [], lane === 0 ? lead : follow);
+    const spin = LANE_SPIN[lane];
+    const progress = lane === 0 ? lead : follow;
+    const size = monopolyDieSize(ready.board);
+    const pose: DiePose = {
+      x: center.x - ready.board / 2,
+      y: center.y - ready.board / 2,
+      hop: Math.sin(Math.PI * progress) * size * 1.15,
+      spinX: progress * spin.x,
+      spinY: progress * spin.y,
+      spinZ: progress * spin.z,
+      turn: boardTurn,
+      size,
+      face: roll.faces[lane],
+    };
+    const mesh = projectDie(pose, ready.board);
+    const depth = mesh.faces.reduce((highest, face) => Math.max(highest, face.depth), -Infinity);
+    return { lane, mesh, depth };
+  });
+  dice.sort((a, b) => a.depth - b.depth);
+
+  return (
+    <View style={[styles.flatLayer, { width, height }]} pointerEvents="none">
+      <Svg
+        width={width}
+        height={height}
+        viewBox={`0 0 ${width} ${height}`}
+        style={{ overflow: 'visible' }}
+      >
+        {dice.map(({ lane, mesh }) => {
+          const shadow = place(mesh.shadow.x, mesh.shadow.y);
+          return (
+            <G key={lane}>
+              <Ellipse
+                cx={shadow.x}
+                cy={shadow.y}
+                rx={mesh.shadow.rx}
+                ry={mesh.shadow.ry}
+                fill="rgba(8, 14, 12, 0.45)"
+              />
+              {mesh.faces.map((drawn) => {
+                const points = drawn.points
+                  .map((point) => {
+                    const at = place(point.x, point.y);
+                    return `${at.x},${at.y}`;
+                  })
+                  .join(' ');
+                return (
+                  <G key={`${lane}-${drawn.value}`}>
+                    <Polygon
+                      points={points}
+                      fill={drawn.color}
+                      stroke="rgba(90, 64, 36, 0.4)"
+                      strokeWidth={1}
+                      strokeLinejoin="round"
+                    />
+                    {drawn.pips.map((pip, index) => {
+                      const at = place(pip.x, pip.y);
+                      return <Ellipse key={index} cx={at.x} cy={at.y} rx={pip.rx} ry={pip.ry} fill="#1a1408" />;
+                    })}
+                  </G>
+                );
+              })}
+            </G>
+          );
+        })}
+      </Svg>
+    </View>
+  );
+}
