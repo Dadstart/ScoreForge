@@ -492,7 +492,7 @@ export function OpolyScreen({ navigation, route }: Props) {
       {inJail && !play.pending ? (
         <>
           <Button
-            label="Pay $50"
+            label="Pay the bank $50"
             disabled={!canBank || turnCash < 50}
             onPress={() => void commitPlay(payToLeaveJail(play, game.tokenSpaces ?? {}, game.players, turnCash))}
           />
@@ -590,7 +590,7 @@ export function OpolyScreen({ navigation, route }: Props) {
               />
               {play.pending?.kind === 'pay' ? (
                 <Button
-                  label={`Pay ${formatMoney(play.pending.amount)}`}
+                  label={`Pay ${play.pending.payeeId === BANK_PARTY_ID ? 'the bank' : partyName(play.pending.payeeId)} ${formatMoney(play.pending.amount)}`}
                   variant="primary"
                   disabled={!canBank}
                   onPress={() => void commitPlay(payDue(play, game.tokenSpaces ?? {}, game.players))}
