@@ -37,6 +37,7 @@ import {
 } from '../domain/opoly';
 import { diceSettleMs } from '../components/OpolyDice';
 import { playDiceRoll, prepareDiceRoll } from '../audio/diceRollSound';
+import { playDiceRollHaptic, stopDiceRollHaptic } from '../audio/diceRollHaptic';
 import { useShake } from '../sensors/useShake';
 import { rollOpolyDice, type DiceRoll } from '../domain/opolyDice';
 import {
@@ -121,6 +122,7 @@ export function OpolyScreen({ navigation, route }: Props) {
   const rollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     prepareDiceRoll();
+    return () => stopDiceRollHaptic();
   }, []);
   const [boardZoomed, setBoardZoomed] = useState(false);
   useEffect(() => {
@@ -350,6 +352,7 @@ export function OpolyScreen({ navigation, route }: Props) {
     if (!canBank || rollingDice || !play || play.pending || !turnPlayer) return;
     const rolled = rollOpolyDice();
     playDiceRoll();
+    playDiceRollHaptic();
     setDice(String(rolled.total));
     setDiceRoll({ id: Date.now(), faces: rolled.faces });
     setRollingDice(true);
