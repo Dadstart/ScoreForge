@@ -54,7 +54,7 @@ import type { DrawnCard } from '../domain/opolyPlay';
 
 const TOKEN_COLORS = ['#e86a5c', '#6fbf8a', '#7eb6ff', '#d4a84b', '#d93a96', '#f7941d', '#c5d0c9', '#f2e3a0'];
 const NO_FLIGHTS: MoneyFlight[] = [];
-/** Cells at least this wide show names and prices. Smaller cells are a color map. */
+/** Cells at least this wide show names. Smaller cells are a color map. */
 const CLOSE_CELL = 96;
 
 type DiceRollView = { id: number; faces: [number, number] };
@@ -924,7 +924,7 @@ function BoardCanvas({
         const label = Math.max(8, Math.round(cell * (detail ? 0.08 : 0.14)));
         const lane = !isCorner && (col === 0 || col === 10) ? sideLane(cell) : tokenLane(cell);
         const mark = space.name === 'Chance' ? 'chance' : space.name === 'Chest' ? 'chest' : null;
-        const priceLine = detail && (property || space.tax) ? Math.max(9, Math.round(cell * 0.07)) : 0;
+        const priceLine = detail && space.tax ? Math.max(9, Math.round(cell * 0.07)) : 0;
         const priceBand = priceLine > 0 && (row === 0 || row === 10)
           ? priceLine + 2
           : priceLine > 0
@@ -978,7 +978,7 @@ function BoardCanvas({
             trainH = Math.max(8, Math.round(trainW * (36 / 64)));
           }
         }
-        const amount = priceLine > 0 && (barColor || compact || fitted) ? (property?.price ?? space.tax) : undefined;
+        const amount = priceLine > 0 ? space.tax : undefined;
         return (
           <View
             key={space.index}
