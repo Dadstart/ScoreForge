@@ -131,6 +131,47 @@ describe('calculate', () => {
     assert.equal(snapshot.standings.find((row) => row.playerId === 'a')?.isWinner, true);
     assert.equal(snapshot.standings.find((row) => row.playerId === 'b')?.isWinner, false);
   });
+
+  it('crowns the last Opoly player who still has cash', () => {
+    const template = getTemplate('monopoly');
+    assert.ok(template);
+    const won = calculate(
+      game({
+        templateId: 'monopoly',
+        players: [player('a', 'Ada'), player('b', 'Bea'), player('c', 'Cal')],
+        events: [
+          event({ id: '1', playerId: 'b', points: -1500, timestamp: '2026-01-01T00:00:01.000Z' }),
+          event({ id: '2', playerId: 'c', points: -1600, timestamp: '2026-01-01T00:00:02.000Z' }),
+        ],
+      }),
+      template,
+    );
+    assert.equal(won.isComplete, true);
+    assert.equal(won.winnerName, 'Ada');
+    assert.equal(won.standings.find((row) => row.playerId === 'a')?.isWinner, true);
+    assert.equal(won.standings.find((row) => row.playerId === 'b')?.isWinner, false);
+
+    const playing = calculate(
+      game({
+        templateId: 'monopoly',
+        players: [player('a', 'Ada'), player('b', 'Bea')],
+        events: [event({ id: '1', playerId: 'b', points: -1499, timestamp: '2026-01-01T00:00:01.000Z' })],
+      }),
+      template,
+    );
+    assert.equal(playing.isComplete, false);
+    assert.equal(playing.winnerName, null);
+
+    const solo = calculate(
+      game({
+        templateId: 'monopoly',
+        players: [player('a', 'Ada')],
+        events: [],
+      }),
+      template,
+    );
+    assert.equal(solo.isComplete, false);
+  });
 });
 
 describe('yahtzee bonuses', () => {

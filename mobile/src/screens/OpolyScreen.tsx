@@ -30,6 +30,7 @@ import {
   RAILROAD_COUNTS,
   RAILROAD_RENTS,
   singleEmoji,
+  soleSolventPlayer,
   STREET_LEVELS,
   transferEvents,
   UTILITY_COUNTS,
@@ -171,6 +172,7 @@ export function OpolyScreen({ navigation, route }: Props) {
     ((mutator: (g: Game) => Game, opts?: { suppressWin?: boolean }) => Promise<boolean>) | null
   >(null);
   const skippedBankrupt = useRef<string | null>(null);
+  const declaredWin = useRef<string | null>(null);
 
   useEffect(() => {
     return () => {
@@ -253,7 +255,7 @@ export function OpolyScreen({ navigation, route }: Props) {
   }, Boolean(play) && snapshot != null && !snapshot.isComplete);
 
   useEffect(() => {
-    if (!game || !play || game.status === 'Completed' || play.pending || rollingDice || editingPlayerId) return;
+    if (!game || !play || game.status === 'Completed' || snapshot?.isComplete || play.pending || rollingDice || editingPlayerId) return;
     if (cashOf(game.events, play.turn) > 0) {
       skippedBankrupt.current = null;
       return;
@@ -275,7 +277,19 @@ export function OpolyScreen({ navigation, route }: Props) {
       if (!saved) skippedBankrupt.current = null;
       else setLandNote(result.note);
     });
-  }, [game, play, rollingDice, editingPlayerId]);
+  }, [game, play, snapshot?.isComplete, rollingDice, editingPlayerId]);
+
+  useEffect(() => {
+    if (!game || !snapshot?.isComplete || game.status === 'Completed') return;
+    const apply = applyGameRef.current;
+    if (!apply) return;
+    const key = `${game.id}:${game.revision}`;
+    if (declaredWin.current === key) return;
+    declaredWin.current = key;
+    void apply((g) => g).then((saved) => {
+      if (!saved) declaredWin.current = null;
+    });
+  }, [game, snapshot?.isComplete]);
 
   if (!game || !template || !snapshot || !play) {
     return (
@@ -301,7 +315,8 @@ export function OpolyScreen({ navigation, route }: Props) {
     if (snap.isComplete) next.status = 'Completed';
     else if (next.status === 'Completed' && !snap.isComplete) next.status = 'InProgress';
 
-    if (opts?.suppressWin || !snap.isComplete) {
+    const newlyComplete = snap.isComplete && game.status !== 'Completed';
+    if ((opts?.suppressWin && !newlyComplete) || !snap.isComplete) {
       beginSuppress();
       try {
         noteLocalResult(snap);
@@ -506,9 +521,13 @@ export function OpolyScreen({ navigation, route }: Props) {
 
   const winner = game.players.find((player) => player.name === snapshot.winnerName);
   const winnerLabel = winner ? playerLabel(winner.name, winner.token) : snapshot.winnerName;
+  const lastPlayerStanding =
+    soleSolventPlayer(game.players, (playerId) => cashOf(game.events, playerId)) != null;
   const banner = complete
     ? winnerLabel
-      ? `${winnerLabel} wins with the most cash`
+      ? lastPlayerStanding
+        ? `${winnerLabel} wins`
+        : `${winnerLabel} wins with the most cash`
       : 'Game complete'
     : turnPrompt(play, game.players, game.events);
 

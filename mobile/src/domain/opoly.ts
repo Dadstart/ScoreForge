@@ -159,6 +159,21 @@ export function cashFromDelta(delta: number): number {
   return STARTING_CASH + delta;
 }
 
+/** The only player who still has cash, once someone else is at the table. */
+export function soleSolventPlayer(
+  players: readonly { id: string }[],
+  cashFor: (playerId: string) => number,
+): string | null {
+  if (players.length < 2) return null;
+  let sole: string | null = null;
+  for (const player of players) {
+    if (cashFor(player.id) <= 0) continue;
+    if (sole) return null;
+    sole = player.id;
+  }
+  return sole;
+}
+
 export type RentQuote = {
   amount: number;
   summary: string;
