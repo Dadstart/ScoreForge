@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import Svg, { Path, Rect } from 'react-native-svg';
 import { cardCopy, type CardDeck } from '../domain/opolyCards';
-import { DECK_TILT, TRACK_DEPTH, deckPileLayout } from '../domain/opolyBoard';
+import { DECK_TILT, TRACK_DEPTH, deckPileLayout, drawnCardFrame } from '../domain/opolyBoard';
 import { fonts } from '../theme';
 import { diceMotionMs } from './OpolyDice';
 
@@ -32,6 +32,7 @@ export function OpolyCardTable({ boardSize, chanceCount, chestCount, face, onAcc
   const faceTop = face?.deck === 'chance' ? piles.chanceTop : piles.chestTop;
 
   const facing = useFacingBottom(turn);
+  const frame = drawnCardFrame(boardSize);
   return (
     <View
       style={[
@@ -46,26 +47,30 @@ export function OpolyCardTable({ boardSize, chanceCount, chestCount, face, onAcc
         { pointerEvents: 'box-none' },
       ]}
     >
-      <CardPile
-        deck="chest"
-        count={chestCount}
-        width={piles.width}
-        height={piles.height}
-        left={piles.chestLeft}
-        top={piles.chestTop}
-        angle={-DECK_TILT}
-        facing={facing}
-      />
-      <CardPile
-        deck="chance"
-        count={chanceCount}
-        width={piles.width}
-        height={piles.height}
-        left={piles.chanceLeft}
-        top={piles.chanceTop}
-        angle={DECK_TILT}
-        facing={facing}
-      />
+      {face ? null : (
+        <>
+          <CardPile
+            deck="chest"
+            count={chestCount}
+            width={piles.width}
+            height={piles.height}
+            left={piles.chestLeft}
+            top={piles.chestTop}
+            angle={-DECK_TILT}
+            facing={facing}
+          />
+          <CardPile
+            deck="chance"
+            count={chanceCount}
+            width={piles.width}
+            height={piles.height}
+            left={piles.chanceLeft}
+            top={piles.chanceTop}
+            angle={DECK_TILT}
+            facing={facing}
+          />
+        </>
+      )}
       {face ? (
         <FlippedCard
           key={face.nonce}
@@ -77,6 +82,10 @@ export function OpolyCardTable({ boardSize, chanceCount, chestCount, face, onAcc
           pileLeft={faceLeft}
           pileTop={faceTop}
           angle={face.deck === 'chance' ? DECK_TILT : -DECK_TILT}
+          faceWidth={frame.width}
+          faceHeight={frame.height}
+          lift={frame.lift}
+          hover={frame.hover}
           facing={facing}
           onAccept={onAccept}
         />
@@ -161,6 +170,10 @@ function FlippedCard({
   pileLeft,
   pileTop,
   angle,
+  faceWidth,
+  faceHeight,
+  lift,
+  hover,
   facing,
   onAccept,
 }: {
@@ -172,6 +185,10 @@ function FlippedCard({
   pileLeft: number;
   pileTop: number;
   angle: number;
+  faceWidth: number;
+  faceHeight: number;
+  lift: number;
+  hover: number;
   facing: ReturnType<typeof useFacingBottom>;
   onAccept?: () => void;
 }) {
@@ -179,8 +196,6 @@ function FlippedCard({
   const motion = diceMotionMs() > 0;
   const progress = useRef(new Animated.Value(motion ? 0 : 1)).current;
   const [showFace, setShowFace] = useState(!motion);
-  const faceWidth = Math.max(120, center * 0.34);
-  const faceHeight = faceWidth / 0.68;
   const pileCenterX = pileLeft + pileWidth / 2;
   const pileCenterY = pileTop + pileHeight / 2;
   const faceCenterX = center / 2;
@@ -229,10 +244,24 @@ function FlippedCard({
     inputRange: [0, 1],
     outputRange: [`${angle}deg`, '0deg'],
   });
+  const readTilt = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', `${-lift}deg`],
+  });
+  const rise = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, hover],
+  });
+  // Last transform runs first. Lift around the bottom edge so the card rises
+  // toward the camera and stays above the felt.
   const pose = [
     ...(facing ? [{ rotateZ: facing }] : []),
     { perspective: 900 },
     { rotate: straighten },
+    { translateY: faceHeight / 2 },
+    { rotateX: readTilt },
+    { translateY: -faceHeight / 2 },
+    { translateZ: rise },
     { rotateY: spin },
     { scale },
   ] as unknown as NonNullable<ViewStyle['transform']>;

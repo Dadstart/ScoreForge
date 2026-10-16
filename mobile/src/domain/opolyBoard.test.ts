@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { projectTiltedPoint } from './dieProjection';
 import {
   cellBox,
   colorBarThickness,
   centerTitleBounds,
+  CARD_READ_TILT,
   DECK_TILT,
   deckPileLayout,
   deckVisualBox,
+  drawnCardCorners,
+  drawnCardFrame,
   diceHopPoints,
   diceRollCurves,
   jailCell,
@@ -150,6 +154,26 @@ describe('deckPileLayout', () => {
         assert.ok(box.right <= title.felt + 0.5, 'right of the green');
         assert.ok(box.bottom <= title.felt + 0.5, 'below the green');
         assert.ok(boxesMiss(box, title, 4), `covers OPOLY (${JSON.stringify(box)})`);
+      }
+    });
+  }
+});
+
+describe('drawn card', () => {
+  for (const board of [280, 360, 480, 720, 851, 1100, 1277, 1702, 2200]) {
+    it(`lifts the card toward the camera without leaving a ${board}px board`, () => {
+      const frame = drawnCardFrame(board);
+      assert.equal(frame.lift, CARD_READ_TILT);
+      assert.ok(frame.lift > DECK_TILT);
+      const corners = drawnCardCorners(board);
+      assert.ok(corners.every((corner) => corner.z > 0));
+      const top = Math.max(...corners.map((corner) => corner.z));
+      assert.ok(top > board * 0.12, `lift ${top}`);
+      const half = board / 2;
+      for (const corner of corners) {
+        const projected = projectTiltedPoint(corner.x, corner.y, corner.z, board);
+        assert.ok(projected.x >= -half && projected.x <= half, `x ${projected.x}`);
+        assert.ok(projected.y >= -half && projected.y <= half, `y ${projected.y}`);
       }
     });
   }

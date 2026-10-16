@@ -590,6 +590,58 @@ export function deckPileLayout(board: number): DeckPileLayout {
   return best;
 }
 
+/** How far a drawn card lifts off the felt, top toward the camera. */
+export const CARD_READ_TILT = 40;
+
+export type DrawnCardFrame = {
+  width: number;
+  height: number;
+  /** Positive degrees. The top of the card rises toward the camera. */
+  lift: number;
+  /** Pixels the card sits above the felt so the tilt cannot pass through it. */
+  hover: number;
+};
+
+/** A single face-up card, large enough to read, inside the green. */
+export function drawnCardFrame(board: number): DrawnCardFrame {
+  const felt = board * (1 - 2 * TRACK_DEPTH);
+  const margin = Math.max(12, felt * 0.07);
+  const span = Math.max(0, felt - margin * 2);
+  let height = span;
+  let width = height * DECK_ASPECT;
+  if (width > span) {
+    width = span;
+    height = width / DECK_ASPECT;
+  }
+  return { width, height, lift: CARD_READ_TILT, hover: Math.max(6, board * 0.012) };
+}
+
+/**
+ * Corners of the lifted card. Origin is the board center, y grows toward the
+ * near edge, and z grows off the felt toward the camera.
+ */
+export function drawnCardCorners(board: number): { x: number; y: number; z: number }[] {
+  const frame = drawnCardFrame(board);
+  const lift = (frame.lift * Math.PI) / 180;
+  const cos = Math.cos(lift);
+  const sin = Math.sin(lift);
+  const halfW = frame.width / 2;
+  const halfH = frame.height / 2;
+  return [
+    { x: -halfW, y: -halfH },
+    { x: halfW, y: -halfH },
+    { x: halfW, y: halfH },
+    { x: -halfW, y: halfH },
+  ].map((corner) => {
+    const fromBottom = corner.y - halfH;
+    return {
+      x: corner.x,
+      y: fromBottom * cos + frame.hover * sin + halfH,
+      z: -fromBottom * sin + frame.hover * cos,
+    };
+  });
+}
+
 export type Point = { x: number; y: number };
 
 /** Die face size for a square board. */

@@ -1224,15 +1224,19 @@ function BoardCanvas({
           { pointerEvents: 'none' },
         ]}
       >
-        <Text
-          style={[
-            styles.centerTitle,
-            { fontSize: centerTitleFont(cell), letterSpacing: 1 },
-          ]}
-        >
-          OPOLY
-        </Text>
-        <View style={styles.centerRule} />
+        {cardOffer ? null : (
+          <>
+            <Text
+              style={[
+                styles.centerTitle,
+                { fontSize: centerTitleFont(cell), letterSpacing: 1 },
+              ]}
+            >
+              OPOLY
+            </Text>
+            <View style={styles.centerRule} />
+          </>
+        )}
       </View>
       {size > 0
         ? boardSpaces.map((space) => {
