@@ -271,14 +271,93 @@ export function layoutJailedTokens(cell: number, count: number): TokenSpot[] {
   return shiftSpots(layoutSharedTokens(width, height, 10, 0, count), box.x + pad, box.y + title);
 }
 
-/** Just Visiting stays on the track under the jail, not in the cell. */
+/**
+ * Just Visiting stands on the walkway outside the bars — the lane beside the
+ * jail (where the JUST VISITING label sits) and the strip under it, never in
+ * the cell.
+ */
 export function layoutVisitingTokens(cell: number, count: number): TokenSpot[] {
   const box = jailCell(cell);
   const gap = Math.max(2, Math.round(cell * 0.04));
-  const y = box.y + box.height + gap;
-  const height = Math.max(8, cell - y - gap);
-  const width = Math.max(8, cell - gap * 2);
-  return shiftSpots(layoutSharedTokens(width, height, 10, 0, count), gap, y);
+  const leftWidth = Math.max(8, box.x - gap);
+  const bottomTop = box.y + box.height + gap;
+  const bottomHeight = Math.max(8, cell - bottomTop - gap);
+  const yardWidth = Math.max(8, cell - gap * 2);
+  const yardHeight = Math.max(8, cell - gap * 2);
+
+  // Prefer the left walkway (clear of the bars after the corner turn). When
+  // that lane is too tight for the crowd, pack into the full L-yard outside
+  // the jail by using the bottom strip, which is wider.
+  const leftSpots = shiftSpots(
+    layoutSharedTokens(leftWidth, yardHeight, 10, 0, count),
+    gap,
+    gap,
+  );
+  const leftFits = leftSpots.every(
+    (spot) => spot.x + spot.piece <= box.x - 0.5 && spot.piece >= 10,
+  );
+  if (leftFits) return leftSpots;
+
+  const bottomSpots = shiftSpots(
+    layoutSharedTokens(yardWidth, bottomHeight, 10, 0, count),
+    gap,
+    bottomTop,
+  );
+  const bottomFits = bottomSpots.every(
+    (spot) => spot.y >= box.y + box.height + 0.5 && !overlapsJail(spot, box),
+  );
+  if (bottomFits) return bottomSpots;
+
+  // L-pack: fill the left lane first, then the bottom strip under the jail.
+  return packVisitL(cell, count, box, gap, leftWidth, bottomTop, bottomHeight, yardWidth);
+}
+
+function overlapsJail(spot: TokenSpot, box: JailBox): boolean {
+  return !(
+    spot.x + spot.piece <= box.x ||
+    spot.x >= box.x + box.width ||
+    spot.y + spot.piece <= box.y ||
+    spot.y >= box.y + box.height
+  );
+}
+
+function packVisitL(
+  cell: number,
+  count: number,
+  box: JailBox,
+  gap: number,
+  leftWidth: number,
+  bottomTop: number,
+  bottomHeight: number,
+  yardWidth: number,
+): TokenSpot[] {
+  const n = Math.max(1, Math.floor(count));
+  let best: TokenSpot[] = [];
+  let bestPiece = -1;
+  for (let leftCount = 0; leftCount <= n; leftCount += 1) {
+    const bottomCount = n - leftCount;
+    const left =
+      leftCount > 0
+        ? shiftSpots(layoutSharedTokens(leftWidth, cell - gap * 2, 10, 0, leftCount), gap, gap)
+        : [];
+    const bottom =
+      bottomCount > 0
+        ? shiftSpots(layoutSharedTokens(yardWidth, bottomHeight, 10, 0, bottomCount), gap, bottomTop)
+        : [];
+    const spots = [...left, ...bottom];
+    if (spots.some((spot) => overlapsJail(spot, box))) continue;
+    if (spots.some((spot) => spot.x < -0.01 || spot.y < -0.01 || spot.x + spot.piece > cell + 0.01 || spot.y + spot.piece > cell + 0.01)) {
+      continue;
+    }
+    const piece = Math.min(...spots.map((spot) => spot.piece));
+    if (piece > bestPiece) {
+      bestPiece = piece;
+      best = spots;
+    }
+  }
+  if (best.length === n) return best;
+  // Last resort: bottom strip only (still outside the bars in local space).
+  return shiftSpots(layoutSharedTokens(yardWidth, bottomHeight, 10, 0, n), gap, bottomTop);
 }
 
 export type OwnerMark = {

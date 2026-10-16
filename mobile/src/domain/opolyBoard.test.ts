@@ -125,12 +125,26 @@ describe('jail tokens', () => {
       const box = jailCell(cell);
       for (const count of [1, 2, 4]) {
         const spots = layoutVisitingTokens(cell, count);
+        assert.equal(spots.length, count);
         for (const spot of spots) {
           assert.ok(spot.x >= -0.01);
           assert.ok(spot.y >= -0.01);
           assert.ok(spot.x + spot.piece <= cell + 0.01);
           assert.ok(spot.y + spot.piece <= cell + 0.01);
           assert.equal(overlaps(spot, box), false);
+        }
+        for (const spot of spots.map((raw) => placeCornerToken(cell, raw, cornerFacing(10)))) {
+          const cx = spot.x + spot.piece / 2;
+          const cy = spot.y + spot.piece / 2;
+          const dx = cx - cell / 2;
+          const dy = cy - cell / 2;
+          const localX = cell / 2 + (dx + dy);
+          const localY = cell / 2 + (dy - dx);
+          assert.equal(
+            localX >= box.x && localX <= box.x + box.width && localY >= box.y && localY <= box.y + box.height,
+            false,
+            `visitor center landed in the bars at ${localX},${localY}`,
+          );
         }
       }
     });
