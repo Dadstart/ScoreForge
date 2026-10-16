@@ -43,21 +43,28 @@ import { playDiceRollHaptic, stopDiceRollHaptic } from '../audio/diceRollHaptic'
 import { useShake } from '../sensors/useShake';
 import { rollOpolyDice, type DiceRoll } from '../domain/opolyDice';
 import {
+  applyTrade,
+  bidAuction,
   buildHouse,
   buildingCost,
   buyProperty,
   canBuild,
   canMortgage,
+  canRaiseFunds,
   canSellBuilding,
   cashOf,
   acceptCard,
+  chooseIncomeTax,
   createOpolyPlay,
   declineProperty,
+  declareBankruptcy,
   landedPropertyId,
   cashSplashes,
   mortgageProperty,
   mortgageValue,
+  netWorth,
   ownsOpoly,
+  passAuction,
   payToLeaveJail,
   payDue,
   rentDue,
@@ -139,6 +146,12 @@ export function OpolyScreen({ navigation, route }: Props) {
   const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
+  const [auctionBid, setAuctionBid] = useState('');
+  const [tradePartnerId, setTradePartnerId] = useState<string | null>(null);
+  const [tradeGiveCash, setTradeGiveCash] = useState('');
+  const [tradeTakeCash, setTradeTakeCash] = useState('');
+  const [tradeGiveDeeds, setTradeGiveDeeds] = useState<string[]>([]);
+  const [tradeTakeDeeds, setTradeTakeDeeds] = useState<string[]>([]);
   const [payerId, setPayerId] = useState<string | null>(null);
   const [receiverId, setReceiverId] = useState(BANK_PARTY_ID);
   const [propertyId, setPropertyId] = useState(properties[0].id);
@@ -612,11 +625,24 @@ export function OpolyScreen({ navigation, route }: Props) {
 
   const ownedDeeds = properties.filter((entry) => play.owned[entry.id]);
   const landedProperty = getProperty(landedPropertyId(play, shownSpaces) ?? '');
-  const pendingProperty = play.pending?.kind === 'buy' ? getProperty(play.pending.propertyId) : undefined;
+  const pendingProperty =
+    play.pending?.kind === 'buy' || play.pending?.kind === 'auction'
+      ? getProperty(play.pending.propertyId)
+      : undefined;
   const pendingCard = play.pending?.kind === 'card' ? play.pending : null;
+  const pendingAuction = play.pending?.kind === 'auction' ? play.pending : null;
+  const auctionBidderId = pendingAuction?.bidderIds[pendingAuction.bidderIndex] ?? null;
   const cardOpen = pendingCard != null && closedCard !== cardKey(pendingCard);
   const jailCards = (play.chanceFree[turnId] ?? 0) + (play.chestFree[turnId] ?? 0);
+  const raisingFunds = canRaiseFunds(play);
   const canDevelop = canBank && !play.pending && play.doubles === 0;
+  const canFund = canBank && (canDevelop || raisingFunds);
+  const parsedAuctionBid = parsePositiveAmount(auctionBid);
+  const taxWorth = play.pending?.kind === 'tax' ? netWorth(play, turnId, game.events) : 0;
+  const tradePartner =
+    tradePartnerId && game.players.some((player) => player.id === tradePartnerId)
+      ? tradePartnerId
+      : game.players.find((player) => player.id !== turnId)?.id ?? null;
   const quoteDice = diceTotal ?? 7;
   const quoteOwner = play.owned[property.id];
   const quoteRentAmount = quoteOwner ? rentDue(play, property.id, quoteDice) : null;
@@ -761,15 +787,43 @@ export function OpolyScreen({ navigation, route }: Props) {
                   }
                 />
               ) : null}
-              {play.pending?.kind === 'pay' ? (
-                <Button
-                  label={`Pay ${play.pending.payeeId === BANK_PARTY_ID ? 'the bank' : partyName(play.pending.payeeId)} ${formatMoney(play.pending.amount)}`}
-                  variant="primary"
-                  disabled={!canBank}
-                  onPress={() => void commitPlay(payDue(play, game.tokenSpaces ?? {}, game.players, game.events))}
-                />
+              {play.pending?.kind === 'tax' ? (
+                <>
+                  <Button
+                    label="Pay $200"
+                    variant="primary"
+                    disabled={!canBank}
+                    onPress={() =>
+                      void commitPlay(chooseIncomeTax(play, shownSpaces, game.players, 'flat', game.events))
+                    }
+                  />
+                  <Button
+                    label={`Pay 10% (${formatMoney(Math.ceil(taxWorth * 0.1))})`}
+                    disabled={!canBank}
+                    onPress={() =>
+                      void commitPlay(chooseIncomeTax(play, shownSpaces, game.players, 'percent', game.events))
+                    }
+                  />
+                </>
               ) : null}
-              {play.pending && pendingProperty ? (
+              {play.pending?.kind === 'pay' ? (
+                <>
+                  <Button
+                    label={`Pay ${play.pending.payeeId === BANK_PARTY_ID ? 'the bank' : partyName(play.pending.payeeId)} ${formatMoney(play.pending.amount)}`}
+                    variant="primary"
+                    disabled={!canBank || turnCash < play.pending.amount}
+                    onPress={() => void commitPlay(payDue(play, game.tokenSpaces ?? {}, game.players, game.events))}
+                  />
+                  <Button
+                    label="Declare bankruptcy"
+                    disabled={!canBank}
+                    onPress={() =>
+                      void commitPlay(declareBankruptcy(play, game.tokenSpaces ?? {}, game.players, game.events))
+                    }
+                  />
+                </>
+              ) : null}
+              {play.pending?.kind === 'buy' && pendingProperty ? (
                 <>
                   <Button
                     label={`Buy ${formatMoney(pendingProperty.price)}`}
@@ -778,9 +832,40 @@ export function OpolyScreen({ navigation, route }: Props) {
                     onPress={() => void commitPlay(buyProperty(play, game.tokenSpaces ?? {}, game.players, turnCash, game.events))}
                   />
                   <Button
-                    label="No thanks"
+                    label="Auction"
                     disabled={!canBank}
                     onPress={() => void commitPlay(declineProperty(play, game.tokenSpaces ?? {}, game.players, game.events))}
+                  />
+                </>
+              ) : null}
+              {pendingAuction && pendingProperty ? (
+                <>
+                  <Field
+                    value={auctionBid}
+                    onChangeText={setAuctionBid}
+                    keyboardType="number-pad"
+                    placeholder={`Bid over ${formatMoney(pendingAuction.highBid)}`}
+                    editable={canBank}
+                    style={styles.amountField}
+                  />
+                  <Button
+                    label={`Bid for ${partyName(auctionBidderId ?? turnId)}`}
+                    variant="primary"
+                    disabled={!canBank || !parsedAuctionBid || !auctionBidderId}
+                    onPress={() => {
+                      if (!parsedAuctionBid) return;
+                      setAuctionBid('');
+                      void commitPlay(
+                        bidAuction(play, game.tokenSpaces ?? {}, game.players, parsedAuctionBid, game.events),
+                      );
+                    }}
+                  />
+                  <Button
+                    label={`Pass (${partyName(auctionBidderId ?? turnId)})`}
+                    disabled={!canBank || !auctionBidderId}
+                    onPress={() =>
+                      void commitPlay(passAuction(play, game.tokenSpaces ?? {}, game.players, game.events))
+                    }
                   />
                 </>
               ) : null}
@@ -1008,9 +1093,126 @@ export function OpolyScreen({ navigation, route }: Props) {
           {paymentPreview ? <Text style={styles.error}>{paymentPreview}</Text> : null}
         </Card>
 
+        {canBank && !play.pending && game.players.length > 1 ? (
+          <Card style={styles.panel}>
+            <Text style={[typography.section, styles.centerText]}>Trade</Text>
+            <Text style={[typography.body, styles.centerText]}>
+              {turnPlayer ? `${playerLabel(turnPlayer.name, turnPlayer.token)} deals with another player.` : 'Trade deeds and cash.'}
+            </Text>
+            <OptionSelect
+              label="With"
+              value={tradePartner ?? ''}
+              disabled={!canBank}
+              options={game.players
+                .filter((player) => player.id !== turnId)
+                .map((player) => ({
+                  id: player.id,
+                  label: playerLabel(player.name, player.token),
+                }))}
+              onChange={(id) => {
+                setTradePartnerId(id);
+                setTradeGiveDeeds([]);
+                setTradeTakeDeeds([]);
+              }}
+              centered
+            />
+            <Text style={styles.rentPreview}>You give</Text>
+            <View style={styles.row}>
+              {properties
+                .filter((entry) => play.owned[entry.id] === turnId)
+                .map((entry) => {
+                  const on = tradeGiveDeeds.includes(entry.id);
+                  return (
+                    <Button
+                      key={entry.id}
+                      label={`${on ? '✓ ' : ''}${entry.name}`}
+                      disabled={!canBank}
+                      onPress={() =>
+                        setTradeGiveDeeds((current) =>
+                          current.includes(entry.id)
+                            ? current.filter((id) => id !== entry.id)
+                            : [...current, entry.id],
+                        )
+                      }
+                    />
+                  );
+                })}
+            </View>
+            <Field
+              value={tradeGiveCash}
+              onChangeText={(text) => setTradeGiveCash(text.replace(/[^\d]/g, ''))}
+              keyboardType="number-pad"
+              placeholder="Cash you give"
+              editable={canBank}
+              style={styles.amountField}
+            />
+            <Text style={styles.rentPreview}>You take</Text>
+            <View style={styles.row}>
+              {properties
+                .filter((entry) => tradePartner != null && play.owned[entry.id] === tradePartner)
+                .map((entry) => {
+                  const on = tradeTakeDeeds.includes(entry.id);
+                  return (
+                    <Button
+                      key={entry.id}
+                      label={`${on ? '✓ ' : ''}${entry.name}`}
+                      disabled={!canBank}
+                      onPress={() =>
+                        setTradeTakeDeeds((current) =>
+                          current.includes(entry.id)
+                            ? current.filter((id) => id !== entry.id)
+                            : [...current, entry.id],
+                        )
+                      }
+                    />
+                  );
+                })}
+            </View>
+            <Field
+              value={tradeTakeCash}
+              onChangeText={(text) => setTradeTakeCash(text.replace(/[^\d]/g, ''))}
+              keyboardType="number-pad"
+              placeholder="Cash you take"
+              editable={canBank}
+              style={styles.amountField}
+            />
+            <Button
+              label="Apply trade"
+              variant="primary"
+              disabled={!canBank || !tradePartner || play.pending != null}
+              onPress={() => {
+                if (!tradePartner) return;
+                void commitPlay(
+                  applyTrade(
+                    play,
+                    game.tokenSpaces ?? {},
+                    game.players,
+                    {
+                      counterpartyId: tradePartner,
+                      givePropertyIds: tradeGiveDeeds,
+                      giveCash: parsePositiveAmount(tradeGiveCash) ?? 0,
+                      giveChanceFree: 0,
+                      giveChestFree: 0,
+                      takePropertyIds: tradeTakeDeeds,
+                      takeCash: parsePositiveAmount(tradeTakeCash) ?? 0,
+                      takeChanceFree: 0,
+                      takeChestFree: 0,
+                    },
+                    game.events,
+                  ),
+                );
+                setTradeGiveDeeds([]);
+                setTradeTakeDeeds([]);
+                setTradeGiveCash('');
+                setTradeTakeCash('');
+              }}
+            />
+          </Card>
+        ) : null}
+
         <Card style={styles.panel}>
           <Text style={[typography.section, styles.centerText]}>Adjust cash</Text>
-          <Text style={[typography.body, styles.centerText]}>A trade, or any other payment the cards do not cover.</Text>
+          <Text style={[typography.body, styles.centerText]}>Manual bank or player payments outside a trade.</Text>
           <Field
             value={amount}
             onChangeText={(text) => {
@@ -1058,9 +1260,9 @@ export function OpolyScreen({ navigation, route }: Props) {
                     <PropertyName name={entry.name} swatch={entry.swatch} />
                     {` · ${owner ? playerLabel(owner.name, owner.token) : 'Owner'} · ${status}`}
                   </Text>
-                  {yours && canDevelop ? (
+                  {yours && canFund ? (
                     <View style={styles.row}>
-                      {canBuild(play, entry.id) ? (
+                      {canDevelop && canBuild(play, entry.id) ? (
                         <Button
                           label={level === 4 ? `Hotel ${formatMoney(buildingCost(entry.id))}` : `House ${formatMoney(buildingCost(entry.id))}`}
                           disabled={turnCash < buildingCost(entry.id)}
@@ -1083,7 +1285,7 @@ export function OpolyScreen({ navigation, route }: Props) {
                           }
                         />
                       ) : null}
-                      {mortgaged ? (
+                      {canDevelop && mortgaged ? (
                         <Button
                           label={`Unmortgage ${formatMoney(unmortgageCost(entry.id))}`}
                           disabled={turnCash < unmortgageCost(entry.id)}

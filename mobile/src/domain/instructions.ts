@@ -55,10 +55,11 @@ const INSTRUCTIONS: Record<string, GameInstructions> = {
     lines: [
       'Everyone starts with $1,500. The first player rolls. The dice move that token.',
       'Passing GO collects $200. Doubles means roll again. Three doubles in a row sends you straight to jail — do not pass GO, do not collect $200.',
-      'An unowned property can be bought or passed. Landing on someone else’s property pays them rent. A full color group with no houses charges double rent.',
+      'An unowned property can be bought or put up for auction. Landing on someone else’s property pays them rent. A full color group with no houses charges double rent.',
       'Build houses evenly on a color you own. Mortgage a property for half its price after the houses on that color are sold.',
+      'If you cannot pay a debt, mortgage or sell buildings first. Otherwise declare bankruptcy — deeds go to the player you owe, or back to the bank.',
       'In jail, roll doubles to leave, pay $50, or use a Get Out of Jail Free card. The third miss makes you pay $50 and move.',
-      'Chance and Chest play themselves. Adjust cash covers a trade or any other payment.',
+      'Income Tax is $200 or 10% of your worth. Trade deeds and cash on your turn. Chance and Chest play themselves.',
       'The last player with cash wins. Marking the game complete crowns the richest player.',
     ],
   },
