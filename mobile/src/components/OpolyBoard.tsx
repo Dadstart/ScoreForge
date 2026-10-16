@@ -1179,20 +1179,6 @@ function BoardCanvas({
                     ))}
                   </View>
                 ) : null}
-                {detail && mark ? (
-                  <Text
-                    style={[
-                      styles.cellText,
-                      {
-                        fontSize: Math.max(8, Math.round(cell * 0.08)),
-                        lineHeight: Math.max(10, Math.round(cell * 0.1)),
-                        width: '100%',
-                      },
-                    ]}
-                  >
-                    {mark === 'chance' ? 'Chance' : 'Chest'}
-                  </Text>
-                ) : null}
                 {amount != null ? (
                   <Text
                     style={[
