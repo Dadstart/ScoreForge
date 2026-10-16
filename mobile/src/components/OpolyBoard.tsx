@@ -44,7 +44,7 @@ import {
 } from '../domain/opolyBoard';
 import { contrastInk, getProperty, playerLabel, playerToken } from '../domain/opoly';
 import { facingPropertyLabel, fitBoardLabel, fitSize } from '../domain/opolyLabel';
-import { cameraAlong, clampPan, clampZoom, frameToken, panForZoom, stepZoom, twistStep } from '../domain/opolyZoom';
+import { cameraAlong, centeredZoomShift, clampPan, clampZoom, frameToken, panForZoom, stepZoom, twistStep } from '../domain/opolyZoom';
 import { diceMotionMs, diceUseFlatCamera, FlatDice, OpolyDice } from './OpolyDice';
 import { CARD_REVEAL_MS, OpolyCardTable } from './OpolyCards';
 import { MoneyBills, type MoneyFlight } from './MoneyBills';
@@ -200,9 +200,13 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const zoomRef = useRef(zoom);
+  const zoomStateRef = useRef(zoom);
   const panRef = useRef(pan);
+  const touching = useRef(false);
+  const pinchSnap = useRef<{ x: number; y: number } | null>(null);
   const panX = useRef(new Animated.Value(0)).current;
   const panY = useRef(new Animated.Value(0)).current;
+  const gestureScale = useRef(new Animated.Value(1)).current;
   const liftAnim = useRef(new Animated.Value(0)).current;
   const cameraProgress = useRef(new Animated.Value(0)).current;
   const cameraListener = useRef<string | null>(null);
@@ -224,7 +228,8 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
     }),
     [boardTurn],
   );
-  zoomRef.current = zoom;
+  zoomStateRef.current = zoom;
+  if (!touching.current) zoomRef.current = zoom;
   viewportRefSize.current = viewport;
   onDraggingRef.current = onDragging;
   onZoomedRef.current = onZoomed;
@@ -259,7 +264,41 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
     panX.setValue(next.x);
     panY.setValue(next.y);
     syncLift(next.y);
-    setPan(next);
+  };
+
+  // Pinch keeps the laid-out board still and scales it. Rebuilding every cell
+  // on each finger move flashes the tilted board on iPhone.
+  const showBoard = (logicalPan: { x: number; y: number }, zoomNow: number) => {
+    const layoutZoom = zoomStateRef.current;
+    const scale = layoutZoom > 0 ? zoomNow / layoutZoom : 1;
+    const shift = centeredZoomShift(layoutZoom, zoomNow, viewportRefSize.current);
+    panRef.current = logicalPan;
+    zoomRef.current = zoomNow;
+    panX.setValue(logicalPan.x + shift);
+    panY.setValue(logicalPan.y + shift);
+    gestureScale.setValue(scale);
+    const board = viewportRefSize.current * zoomNow;
+    topCrop.setValue(zoomNow > 1 ? 0 : boardTopGap(board, boardTurnRef.current, logicalPan.y));
+    syncLift(logicalPan.y + shift);
+  };
+
+  const endGesture = () => {
+    gesture.current.pinch = null;
+    onDraggingRef.current(false);
+    if (!touching.current) return;
+    touching.current = false;
+    const nextZoom = zoomRef.current;
+    const nextPan = { x: panRef.current.x, y: panRef.current.y };
+    if (Math.abs(nextZoom - zoomStateRef.current) > 1e-6) {
+      pinchSnap.current = nextPan;
+    } else {
+      gestureScale.setValue(1);
+      panX.setValue(nextPan.x);
+      panY.setValue(nextPan.y);
+      syncLift(nextPan.y);
+    }
+    setZoom(nextZoom);
+    setPan(nextPan);
   };
 
   const stopCamera = () => {
@@ -272,7 +311,11 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
       cameraProgress.removeListener(cameraListener.current);
       cameraListener.current = null;
     }
-    if (was) writePan({ ...panRef.current });
+    if (was) {
+      const settled = { ...panRef.current };
+      writePan(settled);
+      setPan(settled);
+    }
   };
 
   const responder = useRef(
@@ -285,6 +328,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
         return zoomRef.current <= 1;
       },
       onPanResponderGrant: (evt) => {
+        touching.current = true;
         stopCamera();
         onDraggingRef.current(true);
         gesture.current.pan = panRef.current;
@@ -318,18 +362,23 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
           zoomRef.current,
           viewportRefSize.current,
         );
-        writePan(next);
+        showBoard(next, zoomRef.current);
       },
-      onPanResponderRelease: () => {
-        gesture.current.pinch = null;
-        onDraggingRef.current(false);
-      },
-      onPanResponderTerminate: () => {
-        gesture.current.pinch = null;
-        onDraggingRef.current(false);
-      },
+      onPanResponderRelease: () => endGesture(),
+      onPanResponderTerminate: () => endGesture(),
     }),
   ).current;
+
+  useLayoutEffect(() => {
+    const snap = pinchSnap.current;
+    if (!snap) return;
+    gestureScale.setValue(1);
+    panX.setValue(snap.x);
+    panY.setValue(snap.y);
+    pinchSnap.current = null;
+    syncLift(snap.y);
+    setPan((current) => ({ x: current.x, y: current.y }));
+  }, [zoom, pan.x, pan.y, gestureScale, panX, panY]);
 
   useLayoutEffect(() => {
     const apply = (turn: number) => {
@@ -417,9 +466,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
       nextZoom,
       viewportRefSize.current,
     );
-    zoomRef.current = nextZoom;
-    writePan(nextPan);
-    setZoom(nextZoom);
+    showBoard(nextPan, nextZoom);
   };
 
   const changeZoom = (direction: -1 | 1) => {
@@ -428,7 +475,9 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
     const next = stepZoom(prev, direction, viewportRefSize.current);
     const nextPan = panForZoom(panRef.current, prev, next, viewportRefSize.current);
     zoomRef.current = next;
+    gestureScale.setValue(1);
     writePan(nextPan);
+    setPan(nextPan);
     setZoom(next);
   };
 
@@ -691,19 +740,24 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
       >
         {viewport > 0 ? (
           <Animated.View
+            collapsable={false}
             style={[
               {
                 position: 'absolute',
                 width: boardSize,
                 height: boardSize,
-                left: panX,
-                top: panY,
+                left: pinchSnap.current ? pinchSnap.current.x : panX,
+                top: pinchSnap.current ? pinchSnap.current.y : panY,
                 transform: [
                   { translateY: -boardSize * 0.04 },
                   { perspective: boardPerspective(boardSize) },
                   { rotateX: BOARD_TILT },
                   { rotateZ: boardSpin },
-                  { scale: boardFitScale(boardSize) },
+                  {
+                    scale: pinchSnap.current
+                      ? boardFitScale(boardSize)
+                      : Animated.multiply(gestureScale, boardFitScale(boardSize)),
+                  },
                 ],
                 pointerEvents: 'box-none',
               },

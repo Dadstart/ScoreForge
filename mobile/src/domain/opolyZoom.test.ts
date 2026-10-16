@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { boardTurnForSpace } from './opolyBoard';
-import { frameToken, panForWheel, panForZoom, pieceScreen, readingZoom, spaceScreen, stepZoom, twistStep } from './opolyZoom';
+import { centeredZoomShift, frameToken, panForWheel, panForZoom, pieceScreen, readingZoom, spaceScreen, stepZoom, twistStep } from './opolyZoom';
 
 const viewport = 100;
 const track = 10 / 11;
@@ -100,6 +100,25 @@ describe('monopoly zoom', () => {
     assert.equal(stepZoom(zoom, -1, phone), 1);
     assert.equal(stepZoom(zoom, 1, phone), zoom);
     assert.equal(readingZoom(1100), 1);
+  });
+});
+
+describe('pinch preview', () => {
+  it('scales a fixed board around its center without moving that center', () => {
+    const viewport = 400;
+    const layoutZoom = 1;
+    const zoom = 2;
+    const logical = { x: -200, y: -200 };
+    const shift = centeredZoomShift(layoutZoom, zoom, viewport);
+    assert.equal(shift, 200);
+    const visual = { x: logical.x + shift, y: logical.y + shift };
+    const layout = viewport * layoutZoom;
+    const edge = {
+      x: visual.x + (layout * (1 - zoom / layoutZoom)) / 2,
+      y: visual.y + (layout * (1 - zoom / layoutZoom)) / 2,
+    };
+    assert.deepEqual(edge, logical);
+    assert.equal(centeredZoomShift(layoutZoom, layoutZoom, viewport), 0);
   });
 });
 

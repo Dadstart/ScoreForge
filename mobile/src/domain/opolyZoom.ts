@@ -30,6 +30,16 @@ export function clampZoom(zoom: number) {
 }
 
 /**
+ * How far to slide a board that stays at `layoutZoom` so scaling it around its
+ * center matches a board resized to `zoom`. The resized board is laid out once
+ * when the pinch ends, so the board does not flicker on every finger move.
+ */
+export function centeredZoomShift(layoutZoom: number, zoom: number, viewport: number) {
+  if (layoutZoom <= 0 || viewport <= 0) return 0;
+  return (viewport * (zoom - layoutZoom)) / 2;
+}
+
+/**
  * Closer stop for a phone. The full board stays at zoom 1 and draws compact
  * names; this is how far + goes when those names should be read up close.
  */
