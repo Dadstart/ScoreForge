@@ -36,6 +36,7 @@ import {
   ownerMarkPlacement,
   spaceToCell,
   tokenFacingDegrees,
+  followRoute,
   tokenSpace,
   tokenSpacesBetween,
   TRACK_DEPTH,
@@ -1981,7 +1982,8 @@ function hopDuration(from: number, to: number, pace: number) {
 }
 
 function travelSpaces(from: number, to: number, route: number[] | null, last: number[] | null) {
-  if (route && route.length > 1 && route[0] === from && route[route.length - 1] === to) return route;
+  const along = followRoute(from, to, route);
+  if (along && along.length > 1) return along;
   if (last && last.length > 1 && last[last.length - 1] === from && last[0] === to) return [...last].reverse();
   return tokenSpacesBetween(from, to);
 }
@@ -2111,6 +2113,7 @@ function Piece({
     let finishWait: (() => void) | null = null;
     let finished = false;
     let cancelled = false;
+    let reached = from;
     const play = (animation: Animated.CompositeAnimation) =>
       new Promise<boolean>((resolve) => {
         current = animation;
@@ -2160,6 +2163,7 @@ function Piece({
           ]),
         );
         if (cancelled || !done) return;
+        reached = index;
         const holdAt = holds.indexOf(index);
         if (holdAt >= 0) {
           holds.splice(holdAt, 1);
@@ -2190,15 +2194,15 @@ function Piece({
       current?.stop();
       if (!finished) {
         flyingRef.current = false;
-        settled.current = from;
+        settled.current = reached;
         setFlying(false);
-        const place = placeAt(from, slotRef.current, countRef.current);
+        const place = placeAt(reached, slotRef.current, countRef.current);
         left.setValue(place.left);
         top.setValue(place.top);
         liftX.setValue(0);
         liftY.setValue(0);
         bulge.setValue(1);
-        parkFacing(from);
+        parkFacing(reached);
       }
     };
   }, [bulge, facingDeg, left, liftX, liftY, playerId, routeId, spaceIndex, top]);

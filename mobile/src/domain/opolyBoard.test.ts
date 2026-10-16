@@ -11,6 +11,8 @@ import {
   deckVisualBox,
   drawnCardCorners,
   drawnCardFrame,
+  followRoute,
+  forwardSpaces,
   diceHopPoints,
   diceRollCurves,
   jailCell,
@@ -447,5 +449,22 @@ describe('visible board rect', () => {
       windowSize: { width: 390, height: 800 },
     });
     assert.deepEqual(view, { x: 200, y: 200, width: 390, height: 270 });
+  });
+});
+
+describe('followRoute', () => {
+  it('keeps a card trip that already starts where the piece is', () => {
+    const route = forwardSpaces(7, 39);
+    assert.deepEqual(followRoute(7, 39, route), route);
+  });
+
+  it('joins a piece that is still walking up to the card square', () => {
+    const route = forwardSpaces(7, 39);
+    assert.deepEqual(followRoute(5, 39, route), forwardSpaces(5, 39));
+  });
+
+  it('continues from the square already reached on the trip', () => {
+    const route = forwardSpaces(7, 11);
+    assert.deepEqual(followRoute(9, 11, route), [9, 10, 11]);
   });
 });

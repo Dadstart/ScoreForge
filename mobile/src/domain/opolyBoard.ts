@@ -870,3 +870,20 @@ export function tokenSpacesBetween(from: number, to: number): number[] {
   if (back <= 12) return backwardSpaces(start, end);
   return [start, end];
 }
+
+/**
+ * Path that finishes on `to` by following `route`.
+ * A piece still walking up to the route continues along the track to its start.
+ */
+export function followRoute(from: number, to: number, route: number[] | null): number[] | null {
+  if (!route || route.length < 2 || route[route.length - 1] !== wrapSpace(to)) return null;
+  const start = wrapSpace(from);
+  if (route[0] === start) return route;
+  const at = route.indexOf(start);
+  if (at > 0) return route.slice(at);
+  const head = route[0];
+  if (head == null) return null;
+  const bridge = tokenSpacesBetween(start, head);
+  if (bridge.length < 2 || bridge[bridge.length - 1] !== head) return null;
+  return [...bridge.slice(0, -1), ...route];
+}

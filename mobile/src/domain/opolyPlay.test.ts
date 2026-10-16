@@ -25,6 +25,7 @@ import {
   type PlayPlayer,
 } from './opolyPlay';
 import { CHANCE_CARD_IDS, CHEST_CARD_IDS, cardCopy } from './opolyCards';
+import { backwardSpaces, forwardSpaces } from './opolyBoard';
 import { createScoreEvent } from './models';
 
 const players: PlayPlayer[] = [
@@ -416,6 +417,145 @@ describe('monopoly play', () => {
     assert.equal(turnPrompt(table(), players, [createScoreEvent('ada', -1500)]), 'Ada is bankrupt.');
     const left = withoutOpolyPlayer(table({ turn: 'ada' }), 'ada', seated, [createScoreEvent('bea', -1500)]);
     assert.equal(left.turn, 'cal');
+  });
+
+  it('moves the token to the square named on an accepted card', () => {
+    const moved = (
+      deck: 'chance' | 'chest',
+      id: string,
+      space: number,
+      partial: Partial<OpolyPlay> = {},
+    ) => {
+      const result = acceptCard(
+        table({ pending: { kind: 'card', deck, id, space }, ...partial }),
+        { ada: space },
+        players,
+        [],
+        () => 0,
+      );
+      assert.ok(!('error' in result));
+      if ('error' in result) throw new Error(result.error);
+      return result;
+    };
+    const collected = (result: { events: { playerId: string; points: number }[] }, id = 'ada') =>
+      result.events.filter((event) => event.playerId === id).reduce((sum, event) => sum + event.points, 0);
+
+    const go = moved('chance', 'go', 7);
+    assert.equal(go.tokens.ada, 0);
+    assert.equal(collected(go), 200);
+    assert.deepEqual(go.route?.spaces, forwardSpaces(7, 0));
+
+    const boardwalk = moved('chance', 'boardwalk', 7);
+    assert.equal(boardwalk.tokens.ada, 39);
+    assert.equal(collected(boardwalk), 0);
+    assert.deepEqual(boardwalk.route?.spaces, forwardSpaces(7, 39));
+    assert.equal(boardwalk.play.pending?.kind, 'buy');
+
+    const illinois = moved('chance', 'illinois', 36);
+    assert.equal(illinois.tokens.ada, 24);
+    assert.equal(collected(illinois), 200);
+    assert.deepEqual(illinois.route?.spaces, forwardSpaces(36, 24));
+
+    const charles = moved('chance', 'st-charles', 7);
+    assert.equal(charles.tokens.ada, 11);
+    assert.equal(collected(charles), 0);
+    const charlesLap = moved('chance', 'st-charles', 22);
+    assert.equal(charlesLap.tokens.ada, 11);
+    assert.equal(collected(charlesLap), 200);
+
+    const reading = moved('chance', 'reading', 7);
+    assert.equal(reading.tokens.ada, 5);
+    assert.equal(collected(reading), 200);
+    assert.deepEqual(reading.route?.spaces, forwardSpaces(7, 5));
+
+    const railroad = moved('chance', 'railroad-a', 7);
+    assert.equal(railroad.tokens.ada, 15);
+    assert.equal(railroad.play.pending?.kind, 'buy');
+    const railroadOwned = moved('chance', 'railroad-b', 22, { owned: { bo: 'bea' } });
+    assert.equal(railroadOwned.tokens.ada, 25);
+    assert.equal(railroadOwned.play.pending?.kind, 'pay');
+    if (railroadOwned.play.pending?.kind === 'pay') assert.equal(railroadOwned.play.pending.amount, 50);
+    const railroadLap = moved('chance', 'railroad-a', 36, { owned: { reading: 'bea' } });
+    assert.equal(railroadLap.tokens.ada, 5);
+    assert.equal(collected(railroadLap), 200);
+    if (railroadLap.play.pending?.kind === 'pay') assert.equal(railroadLap.play.pending.amount, 50);
+
+    const utility = moved('chance', 'utility', 7);
+    assert.equal(utility.tokens.ada, 12);
+    assert.equal(utility.play.pending?.kind, 'buy');
+    const utilityOwned = moved('chance', 'utility', 22, { owned: { water: 'bea' } });
+    assert.equal(utilityOwned.tokens.ada, 28);
+    assert.equal(utilityOwned.play.pending?.kind, 'pay');
+    if (utilityOwned.play.pending?.kind === 'pay') assert.equal(utilityOwned.play.pending.amount, 20);
+
+    const back = moved('chance', 'back-3', 7);
+    assert.equal(back.tokens.ada, 4);
+    assert.deepEqual(back.route?.spaces, backwardSpaces(7, 4));
+
+    const jail = moved('chance', 'go-jail', 36);
+    assert.equal(jail.tokens.ada, 10);
+    assert.equal(jail.play.jail.ada, 0);
+    assert.equal(collected(jail), 0);
+    assert.deepEqual(jail.route?.spaces, [36, 10]);
+
+    const chestGo = moved('chest', 'go', 33);
+    assert.equal(chestGo.tokens.ada, 0);
+    assert.equal(collected(chestGo), 200);
+    assert.deepEqual(chestGo.route?.spaces, forwardSpaces(33, 0));
+    const chestJail = moved('chest', 'go-jail', 2);
+    assert.equal(chestJail.tokens.ada, 10);
+    assert.equal(chestJail.play.jail.ada, 0);
+    assert.equal(collected(chestJail), 0);
+  });
+
+  it('collects or pays a money card without moving the token', () => {
+    const stayed = (deck: 'chance' | 'chest', id: string, partial: Partial<OpolyPlay> = {}) => {
+      const result = acceptCard(
+        table({ pending: { kind: 'card', deck, id, space: 7 }, ...partial }),
+        { ada: 7 },
+        players,
+      );
+      assert.ok(!('error' in result));
+      if ('error' in result) throw new Error(result.error);
+      assert.equal(result.tokens.ada, 7);
+      assert.equal(result.route, null);
+      return result;
+    };
+    const collected = (result: { events: { playerId: string; points: number }[] }, id = 'ada') =>
+      result.events.filter((event) => event.playerId === id).reduce((sum, event) => sum + event.points, 0);
+
+    assert.equal(collected(stayed('chance', 'bank-50')), 50);
+    assert.equal(collected(stayed('chance', 'loan')), 150);
+    assert.equal(collected(stayed('chance', 'poor-tax')), -15);
+    assert.equal(collected(stayed('chest', 'bank-error')), 200);
+    assert.equal(collected(stayed('chest', 'stock')), 50);
+    assert.equal(collected(stayed('chest', 'holiday')), 100);
+    assert.equal(collected(stayed('chest', 'refund')), 20);
+    assert.equal(collected(stayed('chest', 'life')), 100);
+    assert.equal(collected(stayed('chest', 'doctor')), -50);
+    assert.equal(collected(stayed('chest', 'hospital')), -100);
+    assert.equal(collected(stayed('chest', 'school')), -50);
+    assert.equal(collected(stayed('chest', 'consultancy')), 25);
+    assert.equal(collected(stayed('chest', 'beauty')), 10);
+    assert.equal(collected(stayed('chest', 'inherit')), 100);
+
+    const chair = stayed('chance', 'chairman');
+    assert.equal(collected(chair, 'ada'), -50);
+    assert.equal(collected(chair, 'bea'), 50);
+    const birthday = stayed('chest', 'birthday');
+    assert.equal(collected(birthday, 'ada'), 10);
+    assert.equal(collected(birthday, 'bea'), -10);
+    assert.equal(
+      collected(stayed('chance', 'repairs', { owned: { mediterranean: 'ada' }, houses: { mediterranean: 2 } })),
+      -50,
+    );
+    assert.equal(
+      collected(stayed('chest', 'repairs', { owned: { mediterranean: 'ada' }, houses: { mediterranean: 5 } })),
+      -115,
+    );
+    const kept = stayed('chance', 'jail-free');
+    assert.equal(kept.play.chanceFree.ada, 1);
+    assert.equal(kept.tokens.ada, 7);
   });
 });
 
