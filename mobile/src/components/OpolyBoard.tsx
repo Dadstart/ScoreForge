@@ -776,6 +776,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
               diceBoard={boardSize}
               diceView={diceView}
               diceTurn={boardTurn}
+              zoom={zoom}
               style={{ width: boardSize, height: boardSize }}
             />
           </Animated.View>
@@ -837,6 +838,7 @@ function BoardCanvas({
   diceView = null,
   diceBoard = 0,
   diceTurn = null,
+  zoom = 1,
   onArrive,
   onWalkEnd,
 }: Omit<Props, 'onDragging' | 'onZoomed' | 'focusSpace'> & {
@@ -845,6 +847,7 @@ function BoardCanvas({
   diceView?: BoardView | null;
   diceBoard?: number;
   diceTurn?: Animated.Value | null;
+  zoom?: number;
   onArrive?: (from: number, to: number, duration: number) => boolean;
   onWalkEnd?: () => void;
 }) {
@@ -1319,6 +1322,7 @@ function BoardCanvas({
           }
           onAccept={cardOffer ? onAcceptCard : undefined}
           turn={diceTurn}
+          zoom={zoom}
         />
       ) : null}
       <MoneyBills flights={bursts} boardSize={size} />

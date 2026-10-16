@@ -7,6 +7,7 @@ import {
   centerTitleBounds,
   CARD_READ_TILT,
   DECK_TILT,
+  cardReadScale,
   deckPileLayout,
   deckVisualBox,
   drawnCardCorners,
@@ -163,32 +164,34 @@ describe('deckPileLayout', () => {
 
 describe('drawn card', () => {
   for (const board of [280, 360, 480, 720, 851, 1100, 1277, 1702, 2200]) {
-    it(`lifts the card toward the camera without leaving a ${board}px board`, () => {
+    it(`lies flat and fills the felt on a ${board}px board`, () => {
       const frame = drawnCardFrame(board);
+      const felt = centerTitleBounds(board).felt;
+      assert.equal(frame.lift, 0);
+      assert.equal(frame.hover, 0);
       assert.equal(frame.lift, CARD_READ_TILT);
-      assert.ok(frame.lift > DECK_TILT);
+      assert.equal(DECK_TILT, 0);
+      assert.ok(frame.width > felt * 0.28, `card width ${frame.width}`);
+      assert.ok(frame.height > felt * 0.4, `card height ${frame.height}`);
+      assert.ok(frame.width <= felt * 0.5 + 0.5, `card width ${frame.width}`);
+      assert.ok(frame.height <= felt * 0.64 + 0.5, `card height ${frame.height}`);
       const corners = drawnCardCorners(board);
-      assert.ok(corners.every((corner) => corner.z > 0));
-      const top = Math.max(...corners.map((corner) => corner.z));
-      assert.ok(top > board * 0.08, `lift ${top}`);
+      assert.ok(corners.every((corner) => corner.z === 0));
       const half = board / 2;
-      let farEdge = Infinity;
-      for (const x of [-half, half]) {
-        for (const y of [-half, half]) {
-          farEdge = Math.min(farEdge, projectTiltedPoint(x, y, 0, board).y);
-        }
-      }
-      let cardTop = Infinity;
       for (const corner of corners) {
         const projected = projectTiltedPoint(corner.x, corner.y, corner.z, board);
-        cardTop = Math.min(cardTop, projected.y);
         assert.ok(projected.x >= -half && projected.x <= half, `x ${projected.x}`);
         assert.ok(projected.y >= -half && projected.y <= half, `y ${projected.y}`);
       }
-      assert.ok(cardTop >= farEdge + 6, `card top ${cardTop} clears the frame ${farEdge}`);
-      assert.ok(frame.height < board * 0.42, `card height ${frame.height}`);
     });
   }
+
+  it('grows face-up cards when the board is zoomed out', () => {
+    assert.equal(cardReadScale(1), 1);
+    assert.equal(cardReadScale(1.5), 1);
+    assert.equal(cardReadScale(0.5), 2);
+    assert.ok(cardReadScale(0.75) > 1);
+  });
 });
 
 describe('nameFacing', () => {
