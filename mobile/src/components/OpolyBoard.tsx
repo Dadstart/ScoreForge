@@ -30,6 +30,7 @@ import {
   cornerFacing,
   CORNER_FIT,
   placeCornerToken,
+  boardTurnForSpace,
   nearestBoardTurn,
   nearestTokenFacing,
   ownerMarkPlacement,
@@ -43,7 +44,7 @@ import {
 } from '../domain/opolyBoard';
 import { contrastInk, getProperty, playerLabel, playerToken } from '../domain/opoly';
 import { facingPropertyLabel, fitBoardLabel, fitSize } from '../domain/opolyLabel';
-import { clampPan, clampZoom, panForZoom, stepZoom } from '../domain/opolyZoom';
+import { cameraAlong, clampPan, clampZoom, frameToken, panForZoom, stepZoom } from '../domain/opolyZoom';
 import { diceMotionMs, diceUseFlatCamera, FlatDice, OpolyDice } from './OpolyDice';
 import { CARD_REVEAL_MS, OpolyCardTable } from './OpolyCards';
 import { MoneyBills, type MoneyFlight } from './MoneyBills';
@@ -91,6 +92,8 @@ type Props = {
 const BOARD_TILT = '50deg';
 /** Spin back to the player whose turn it is, slow enough to keep the dice in view. */
 const RETURN_MS = 1200;
+/** Slide or turn so a moving piece stays readable on the near edge. */
+const FOLLOW_MS = 720;
 const RETURN_EASE = Easing.bezier(0.42, 0.02, 0.18, 1);
 /** After a move finishes, let the landing sit before the board turns. */
 const POST_MOVE_PAUSE_MS = 2000;
@@ -180,6 +183,13 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const zoomRef = useRef(zoom);
   const panRef = useRef(pan);
+  const panX = useRef(new Animated.Value(0)).current;
+  const panY = useRef(new Animated.Value(0)).current;
+  const liftAnim = useRef(new Animated.Value(0)).current;
+  const cameraProgress = useRef(new Animated.Value(0)).current;
+  const cameraListener = useRef<string | null>(null);
+  const cameraRun = useRef(0);
+  const cameraActive = useRef(false);
   const viewportRefSize = useRef(0);
   const onDraggingRef = useRef(onDragging);
   const onZoomedRef = useRef(onZoomed);
@@ -197,7 +207,6 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
     [boardTurn],
   );
   zoomRef.current = zoom;
-  panRef.current = pan;
   viewportRefSize.current = viewport;
   onDraggingRef.current = onDragging;
   onZoomedRef.current = onZoomed;
@@ -211,6 +220,34 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
     origin: { x: 0, y: 0 },
   });
 
+  const syncLift = (panYValue: number) => {
+    const view = viewportRefSize.current;
+    const zoomNow = zoomRef.current;
+    const board = view * zoomNow;
+    liftAnim.setValue(dockLift(board, panYValue, zoomNow < 1 ? board : view));
+  };
+
+  const writePan = (next: { x: number; y: number }) => {
+    panRef.current = next;
+    panX.setValue(next.x);
+    panY.setValue(next.y);
+    syncLift(next.y);
+    setPan(next);
+  };
+
+  const stopCamera = () => {
+    cameraRun.current += 1;
+    const was = cameraActive.current;
+    cameraActive.current = false;
+    boardTurnAnim.current?.stop();
+    boardTurnAnim.current = null;
+    if (cameraListener.current) {
+      cameraProgress.removeListener(cameraListener.current);
+      cameraListener.current = null;
+    }
+    if (was) writePan({ ...panRef.current });
+  };
+
   const responder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
@@ -218,6 +255,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
       onMoveShouldSetPanResponderCapture: (evt, g) => claimsBoardGesture(zoomRef.current, evt, g.dx, g.dy),
       onPanResponderTerminationRequest: () => zoomRef.current <= 1,
       onPanResponderGrant: (evt) => {
+        stopCamera();
         onDraggingRef.current(true);
         gesture.current.pan = panRef.current;
         gesture.current.dx = 0;
@@ -250,8 +288,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
           zoomRef.current,
           viewportRefSize.current,
         );
-        panRef.current = next;
-        setPan(next);
+        writePan(next);
       },
       onPanResponderRelease: () => {
         gesture.current.pinch = null;
@@ -271,6 +308,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
       topCrop.setValue(zoomNow > 1 ? 0 : boardTopGap(board, turn, panRef.current.y));
     };
     apply(boardTurnRef.current);
+    syncLift(panRef.current.y);
     const id = boardTurn.addListener(({ value }) => apply(value));
     return () => boardTurn.removeListener(id);
   }, [boardTurn, topCrop, viewport, zoom, pan.y]);
@@ -337,42 +375,96 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
       viewportRefSize.current,
     );
     zoomRef.current = nextZoom;
-    panRef.current = nextPan;
+    writePan(nextPan);
     setZoom(nextZoom);
-    setPan(nextPan);
   };
 
   const changeZoom = (direction: -1 | 1) => {
+    stopCamera();
     const prev = zoomRef.current;
     const next = stepZoom(prev, direction, viewportRefSize.current);
     const nextPan = panForZoom(panRef.current, prev, next, viewportRefSize.current);
     zoomRef.current = next;
-    panRef.current = nextPan;
+    writePan(nextPan);
     setZoom(next);
-    setPan(nextPan);
   };
 
-  const faceSpace = (space: number, duration: number, easing: (value: number) => number = Easing.inOut(Easing.quad)) => {
-    const next = nearestBoardTurn(boardTurnRef.current, space);
-    if (Math.abs(next - boardTurnRef.current) < 1) return false;
-    boardTurnRef.current = next;
-    boardTurnAnim.current?.stop();
-    if (duration <= 0) {
-      boardTurn.setValue(next);
+  const presentSpace = (
+    space: number,
+    duration: number,
+    fromSpace = space,
+    easing: (value: number) => number = Easing.inOut(Easing.quad),
+  ) => {
+    const viewportNow = viewportRefSize.current;
+    if (viewportNow <= 0) return false;
+    const zoomNow = zoomRef.current;
+    const startTurn = boardTurnRef.current;
+    const startPan = { ...panRef.current };
+    const framed = frameToken({
+      space,
+      turn: startTurn,
+      pan: startPan,
+      zoom: zoomNow,
+      viewport: viewportNow,
+    });
+    const turnSame = Math.abs(framed.turn - startTurn) < 1;
+    const panSame = Math.hypot(framed.pan.x - startPan.x, framed.pan.y - startPan.y) < 1;
+    if (turnSame && panSame) return false;
+
+    stopCamera();
+    const run = cameraRun.current;
+    const shot = {
+      fromSpace,
+      toSpace: space,
+      startTurn,
+      endTurn: framed.turn,
+      startPan,
+      endPan: framed.pan,
+      zoom: zoomNow,
+      viewport: viewportNow,
+    };
+    const apply = (t: number) => {
+      const camera = cameraAlong(shot, t);
+      boardTurnRef.current = camera.turn;
+      boardTurn.setValue(camera.turn);
+      panRef.current = camera.pan;
+      panX.setValue(camera.pan.x);
+      panY.setValue(camera.pan.y);
+      syncLift(camera.pan.y);
+    };
+    if (duration <= 0 || diceMotionMs() === 0) {
+      apply(1);
+      setPan(framed.pan);
       return true;
     }
-    const anim = Animated.timing(boardTurn, {
-      toValue: next,
+    cameraActive.current = true;
+    cameraProgress.setValue(0);
+    apply(0);
+    cameraListener.current = cameraProgress.addListener(({ value }) => {
+      if (run !== cameraRun.current) return;
+      apply(value);
+    });
+    const anim = Animated.timing(cameraProgress, {
+      toValue: 1,
       duration,
       easing,
       useNativeDriver: false,
     });
     boardTurnAnim.current = anim;
-    anim.start();
+    anim.start(({ finished }) => {
+      if (!finished || run !== cameraRun.current) return;
+      cameraActive.current = false;
+      apply(1);
+      if (cameraListener.current) {
+        cameraProgress.removeListener(cameraListener.current);
+        cameraListener.current = null;
+      }
+      setPan(framed.pan);
+    });
     return true;
   };
-  const faceSpaceRef = useRef(faceSpace);
-  faceSpaceRef.current = faceSpace;
+  const faceSpaceRef = useRef(presentSpace);
+  faceSpaceRef.current = presentSpace;
   const focusRef = useRef(focusSpace);
   focusRef.current = focusSpace;
   const routeIdRef = useRef(tokenRoute?.id ?? 0);
@@ -386,7 +478,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
 
   const faceCurrent = (space: number) => {
     const motion = diceMotionMs() > 0;
-    faceSpaceRef.current(space, motion ? RETURN_MS : 0, motion ? RETURN_EASE : Easing.linear);
+    faceSpaceRef.current(space, motion ? RETURN_MS : 0, space, motion ? RETURN_EASE : Easing.linear);
   };
   const turnHold = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearTurnHold = () => {
@@ -399,7 +491,16 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
     return Math.abs(next - boardTurnRef.current) >= 1;
   };
 
-  useEffect(() => () => clearTurnHold(), []);
+  useEffect(() => () => {
+    clearTurnHold();
+    cameraRun.current += 1;
+    cameraActive.current = false;
+    boardTurnAnim.current?.stop();
+    if (cameraListener.current) {
+      cameraProgress.removeListener(cameraListener.current);
+      cameraListener.current = null;
+    }
+  }, [boardTurnAnim, cameraProgress]);
 
   useEffect(() => {
     if ((tokenRoute?.id ?? 0) !== finishedHop.current) clearTurnHold();
@@ -407,6 +508,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
 
   useEffect(() => {
     if (hopping.current !== 0) return;
+    if (viewportRefSize.current <= 0) return;
     const first = !hasFaced.current;
     hasFaced.current = true;
     if (first) {
@@ -416,7 +518,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
     }
     if (turnHold.current) return;
     faceCurrent(focusSpace);
-  }, [focusSpace]);
+  }, [focusSpace, viewport]);
 
   const onWalkEnd = () => {
     finishedHop.current = routeIdRef.current;
@@ -442,15 +544,23 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
     if (!id) return;
     const viewportNow = viewportRefSize.current;
     if (viewportNow <= 0) return;
-    const panNow = panRef.current;
     const zoomNow = zoomRef.current;
+    const framed = frameToken({
+      space: focusRef.current,
+      turn: boardTurnRef.current,
+      pan: panRef.current,
+      zoom: zoomNow,
+      viewport: viewportNow,
+    });
+    const motion = diceMotionMs();
+    faceSpaceRef.current(focusRef.current, motion === 0 ? 0 : FOLLOW_MS);
     const boardNow = viewportNow * zoomNow;
     const viewportBox = {
       width: viewportNow,
       height: zoomNow < 1 ? boardNow : viewportNow,
     };
-    const seen = (view: BoardView) => boardViewForTurn(view, boardTurnRef.current, boardNow);
-    const fallback = seen(visibleBoardRect({ pan: panNow, viewport: viewportBox }));
+    const seen = (view: BoardView) => boardViewForTurn(view, framed.turn, boardNow);
+    const fallback = seen(visibleBoardRect({ pan: framed.pan, viewport: viewportBox }));
     const node = viewportRef.current;
     if (!node || typeof node.measureInWindow !== 'function') {
       setDiceWindow({ id, view: fallback });
@@ -461,7 +571,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
       if (cancelled) return;
       const frame = Dimensions.get('window');
       const measured = visibleBoardRect({
-        pan: panNow,
+        pan: framed.pan,
         viewport: {
           width: width > 0 ? width : viewportBox.width,
           height: height > 0 ? height : viewportBox.height,
@@ -481,7 +591,6 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
   }, [diceRoll?.id, viewport > 0]);
 
   const square = zoom < 1 ? boardSize : viewport;
-  const lift = dockLift(boardSize, pan.y, square);
   const zoomPair = (
     <>
       <Pressable
@@ -543,8 +652,8 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
                 position: 'absolute',
                 width: boardSize,
                 height: boardSize,
-                left: pan.x,
-                top: pan.y,
+                left: panX,
+                top: panY,
                 transform: [
                   { translateY: -boardSize * 0.04 },
                   { perspective: boardPerspective(boardSize) },
@@ -560,7 +669,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
             <BoardCanvas
               {...props}
               tokenRoute={tokenRoute}
-              onArrive={(space, duration) => faceSpaceRef.current(space, duration)}
+              onArrive={(from, to, duration) => faceSpaceRef.current(to, duration, from)}
               onWalkEnd={onWalkEnd}
               diceRoll={props.cardOffer ? null : diceRoll}
               pinDice={!diceUseFlatCamera()}
@@ -588,18 +697,19 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
             roll={diceRoll}
             view={diceView}
             boardSize={boardSize}
-            pan={pan}
+            panX={panX}
+            panY={panY}
             turn={boardTurn}
             width={viewport}
             height={square}
           />
         </Animated.View>
       ) : null}
-      <View style={[styles.actionBar, lift > 0 && { marginTop: -lift }, { pointerEvents: 'box-none' }]}>
+      <Animated.View style={[styles.actionBar, { marginTop: Animated.multiply(liftAnim, -1) }, { pointerEvents: 'box-none' }]}>
         {renderRoll(roll, true)}
         <View style={styles.zoomRow}>{zoomPair}</View>
         {footer}
-      </View>
+      </Animated.View>
       {zoom > 1 ? (
         <Text style={styles.phoneHint}>Drag the board to look around. Pinch, or use + and −, to zoom.</Text>
       ) : null}
@@ -633,7 +743,7 @@ function BoardCanvas({
   diceView?: BoardView | null;
   diceBoard?: number;
   diceTurn?: Animated.Value | null;
-  onArrive?: (space: number, duration: number) => boolean;
+  onArrive?: (from: number, to: number, duration: number) => boolean;
   onWalkEnd?: () => void;
 }) {
   const flightRef = useRef(moneyFlight);
@@ -1721,6 +1831,14 @@ function stepMs(spaces: number[]) {
   return 180;
 }
 
+/** Long enough to watch a corner turn, and a straight jump across the board. */
+function hopDuration(from: number, to: number, pace: number) {
+  const along = adjacentSpaces(from, to);
+  const glide = along ? pace : Math.max(FOLLOW_MS, Math.round(pace * 2.4));
+  if (boardTurnForSpace(from) === boardTurnForSpace(to)) return glide;
+  return Math.max(glide, FOLLOW_MS);
+}
+
 function travelSpaces(from: number, to: number, route: number[] | null, last: number[] | null) {
   if (route && route.length > 1 && route[0] === from && route[route.length - 1] === to) return route;
   if (last && last.length > 1 && last[last.length - 1] === from && last[0] === to) return [...last].reverse();
@@ -1758,7 +1876,7 @@ function Piece({
   holdSpaces: number[];
   onCardStop: (space: number) => void;
   onSettled: (playerId: string) => void;
-  onArrive?: (space: number, duration: number) => boolean;
+  onArrive?: (from: number, to: number, duration: number) => boolean;
 }) {
   const [flying, setFlying] = useState(false);
   const resting = piecePlace(spaceIndex, size, slot, crowd, inJail);
@@ -1826,7 +1944,7 @@ function Piece({
       parkFacing(spaceIndex);
       const holds = holdRef.current;
       if (holds.length > 0) cardNotice.current(holds[holds.length - 1]);
-      arriveNotice.current?.(spaceIndex, 0);
+      arriveNotice.current?.(from, spaceIndex, 0);
       settledNotice.current(playerId);
       return;
     }
@@ -1837,7 +1955,7 @@ function Piece({
       left.setValue(place.left);
       top.setValue(place.top);
       parkFacing(spaceIndex);
-      arriveNotice.current?.(spaceIndex, 0);
+      arriveNotice.current?.(from, spaceIndex, 0);
       settledNotice.current(playerId);
       return;
     }
@@ -1876,7 +1994,8 @@ function Piece({
         );
         const along = adjacentSpaces(spaces[step - 1], index);
         const dir = along ? inwardHop(spaces[step - 1]) : { x: 0, y: 0 };
-        const duration = along ? pace : Math.round(pace * 2.4);
+        const duration = hopDuration(spaces[step - 1], index, pace);
+        arriveNotice.current?.(spaces[step - 1], index, duration);
         const half = duration / 2;
         const turn = nearestTokenFacing(facingNow.current, index);
         facingNow.current = turn;

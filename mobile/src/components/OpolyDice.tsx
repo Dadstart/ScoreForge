@@ -385,7 +385,8 @@ export function FlatDice({
   roll,
   view,
   boardSize,
-  pan,
+  panX,
+  panY,
   turn,
   width,
   height,
@@ -393,12 +394,14 @@ export function FlatDice({
   roll: Roll;
   view?: BoardView | null;
   boardSize: number;
-  pan: { x: number; y: number };
+  panX: Animated.Value;
+  panY: Animated.Value;
   turn: Animated.Value;
   width: number;
   height: number;
 }) {
   const [boardTurn, setBoardTurn] = useState(0);
+  const [pan, setPan] = useState(() => ({ x: readAnimated(panX), y: readAnimated(panY) }));
   const flight = useRef<{
     id: number;
     board: number;
@@ -422,6 +425,20 @@ export function FlatDice({
     const id = turn.addListener(({ value }) => setBoardTurn(value));
     return () => turn.removeListener(id);
   }, [turn]);
+
+  useEffect(() => {
+    const pull = () => {
+      const next = { x: readAnimated(panX), y: readAnimated(panY) };
+      setPan((current) => (current.x === next.x && current.y === next.y ? current : next));
+    };
+    pull();
+    const xId = panX.addListener(pull);
+    const yId = panY.addListener(pull);
+    return () => {
+      panX.removeListener(xId);
+      panY.removeListener(yId);
+    };
+  }, [panX, panY]);
 
   if (!ready || width <= 0 || height <= 0) return null;
   const place = (x: number, y: number) => ({
