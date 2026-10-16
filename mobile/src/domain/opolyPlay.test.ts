@@ -122,6 +122,8 @@ describe('monopoly play', () => {
     assert.equal(third.play.jail.ada, 0);
     assert.equal(third.play.doubles, 0);
     assert.equal(third.play.turn, 'bea');
+    assert.equal(third.events.length, 0);
+    assert.match(third.note, /Do not pass GO/);
   });
 
   it('sends the player to jail on the third doubles without moving there', () => {
@@ -131,7 +133,31 @@ describe('monopoly play', () => {
     assert.equal(jailed.play.jail.ada, 0);
     assert.equal(jailed.play.turn, 'bea');
     assert.match(jailed.note, /jail/);
+    assert.match(jailed.note, /Do not pass GO/);
     assert.deepEqual(jailed.route?.spaces, [0, 10]);
+  });
+
+  it('jails the third doubles without collecting salary when the roll would pass Go', () => {
+    const play = table({ doubles: 2 });
+    // From 38, 4+4 would land on 6 and collect $200 if the move were played out.
+    const jailed = resolveRoll(play, { ada: 38 }, players, roll(4, 4), []);
+    assert.equal(jailed.tokens.ada, 10);
+    assert.equal(jailed.play.jail.ada, 0);
+    assert.equal(jailed.play.turn, 'bea');
+    assert.equal(jailed.events.length, 0);
+    assert.deepEqual(jailed.route?.spaces, [38, 10]);
+    assert.equal(jailed.route?.spaces.includes(0), false);
+  });
+
+  it('sends a player who lands on Go to Jail straight to jail', () => {
+    const jailed = resolveRoll(table(), { ada: 28 }, players, roll(1, 1));
+    assert.equal(jailed.tokens.ada, 10);
+    assert.equal(jailed.play.jail.ada, 0);
+    assert.equal(jailed.play.doubles, 0);
+    assert.equal(jailed.play.turn, 'bea');
+    assert.equal(jailed.events.length, 0);
+    assert.deepEqual(jailed.route?.spaces, [30, 10]);
+    assert.match(jailed.note, /Do not pass GO/);
   });
 
   it('lets doubles out of jail and makes the third miss pay $50', () => {

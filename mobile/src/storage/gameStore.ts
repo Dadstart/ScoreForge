@@ -20,7 +20,7 @@ import { createKlondikeState, packKlondike, unpackKlondike, type DrawCount } fro
 import { createPyramidState, packPyramid, unpackPyramid } from '../domain/pyramid';
 import { createSpiderState, packSpider, unpackSpider, type SuitCount } from '../domain/spider';
 import { createTriPeaksState, packTriPeaks, unpackTriPeaks } from '../domain/tripeaks';
-import { unpackOpoly } from '../domain/opolyPlay';
+import { createOpolyPlay, unpackOpoly } from '../domain/opolyPlay';
 import { createYahtzeeState } from '../domain/yahtzee';
 import {
   isShareCode,
@@ -361,6 +361,10 @@ export async function createAndSaveGame(partial: {
     }
     if (partial.templateId === 'yahtzee') {
       game.yahtzee = createYahtzeeState(partial.players);
+    }
+    if (partial.templateId === 'monopoly') {
+      game.monopoly = createOpolyPlay(partial.players.map((player) => player.id));
+      game.tokenSpaces = Object.fromEntries(partial.players.map((player) => [player.id, 0]));
     }
     try {
       const saved = await runTransaction(db, async (transaction) => {

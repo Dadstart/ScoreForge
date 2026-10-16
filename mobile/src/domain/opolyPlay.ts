@@ -230,7 +230,8 @@ export function normalizeOpolyPlay(value: unknown, playerIds: string[]): OpolyPl
   const ids = new Set(playerIds);
   const turn = typeof raw.turn === 'string' && ids.has(raw.turn) ? raw.turn : playerIds[0] ?? '';
   const play = blankPlay(turn);
-  play.doubles = raw.doubles === 1 || raw.doubles === 2 ? raw.doubles : 0;
+  const streak = Math.trunc(Number(raw.doubles));
+  play.doubles = streak === 1 || streak === 2 ? streak : 0;
   if (raw.jail && typeof raw.jail === 'object') {
     for (const [id, turns] of Object.entries(raw.jail)) {
       if (ids.has(id) && typeof turns === 'number' && turns >= 0 && turns < 3) play.jail[id] = Math.trunc(turns);
@@ -426,12 +427,17 @@ function extendRoute(ctx: Ctx, playerId: string, spaces: number[]) {
 
 function sendToJail(ctx: Ctx, playerId: string) {
   const from = ctx.tokens[playerId] ?? 0;
-  if (from !== 10) extendRoute(ctx, playerId, [from, 10]);
+  // Straight across the board — never along the track past GO.
+  if (from !== 10) {
+    ctx.route = { playerId, spaces: [from, 10] };
+  }
   ctx.tokens[playerId] = 10;
   ctx.play.jail[playerId] = 0;
   ctx.play.doubles = 0;
   ctx.play.pending = null;
-  ctx.notes.push(`${playerName(ctx.players, playerId)} goes to jail.`);
+  ctx.notes.push(
+    `${playerName(ctx.players, playerId)} goes directly to jail. Do not pass GO. Do not collect $200.`,
+  );
 }
 
 function nearest(from: number, targets: number[]): number {
@@ -589,7 +595,7 @@ function applyCard(ctx: Ctx, playerId: string, deck: 'chance' | 'chest', id: str
     return;
   }
   if (id === 'go-jail') {
-    ctx.notes.push(`${label}: Go to jail.`);
+    ctx.notes.push(`${label}:`);
     sendToJail(ctx, playerId);
     return;
   }
@@ -817,6 +823,7 @@ export function resolveRoll(
     return commit(before, tokens, ctx);
   }
   if (roll.doubles && play.doubles >= 2) {
+    // Third doubles: do not move the rolled spaces, do not pass GO, do not collect $200.
     ctx.notes.push('Three doubles.');
     sendToJail(ctx, playerId);
     handOff(ctx, playerId);

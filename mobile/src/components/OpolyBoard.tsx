@@ -1967,7 +1967,15 @@ function hopDuration(from: number, to: number, pace: number) {
   return Math.max(glide, FOLLOW_MS);
 }
 
-function travelSpaces(from: number, to: number, route: number[] | null, last: number[] | null) {
+function travelSpaces(
+  from: number,
+  to: number,
+  route: number[] | null,
+  last: number[] | null,
+  toJail = false,
+) {
+  // Sent to jail — slide straight in. A track walk from e.g. 38 would pass GO.
+  if (toJail && to === 10 && from !== 10) return [from, 10];
   const along = followRoute(from, to, route);
   if (along && along.length > 1) return along;
   if (last && last.length > 1 && last[last.length - 1] === from && last[0] === to) return [...last].reverse();
@@ -2077,7 +2085,13 @@ function Piece({
       settledNotice.current(playerId);
       return;
     }
-    const spaces = travelSpaces(from, spaceIndex, routeRef.current, lastPath.current);
+    const spaces = travelSpaces(
+      from,
+      spaceIndex,
+      routeRef.current,
+      lastPath.current,
+      spaceIndex === 10 && jailedRef.current,
+    );
     if (spaces.length < 2) {
       settled.current = spaceIndex;
       const place = placeAt(spaceIndex, slotRef.current, countRef.current);

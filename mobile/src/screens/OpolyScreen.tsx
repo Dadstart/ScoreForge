@@ -187,7 +187,7 @@ export function OpolyScreen({ navigation, route }: Props) {
   } = useWinCelebration();
   const { sparks, spark } = usePlaySpark();
   const seenTokens = useRef<Record<string, number> | null>(null);
-  const rollRef = useRef<(rolled: DiceRoll) => void>(() => {});
+  const rollRef = useRef<(rolled: DiceRoll, doubles: number) => void>(() => {});
   const applyGameRef = useRef<
     ((mutator: (g: Game) => Game, opts?: { suppressWin?: boolean }) => Promise<boolean>) | null
   >(null);
@@ -486,15 +486,25 @@ export function OpolyScreen({ navigation, route }: Props) {
   const inJail = play?.jail[turnId] != null;
   const turnCash = cashOf(game.events, turnId);
 
-  rollRef.current = (rolled: DiceRoll) => {
+  rollRef.current = (rolled: DiceRoll, doubles: number) => {
     if (committing.current || !play || play.pending) return;
-    const result = resolveRoll(play, shownSpaces, game.players, rolled, game.events);
+    // Keep the streak from when the roll started so a late snapshot cannot
+    // turn a third doubles into a normal move (and a GO salary).
+    const streak = doubles === 1 || doubles === 2 ? doubles : 0;
+    const result = resolveRoll(
+      { ...play, doubles: streak },
+      shownSpaces,
+      game.players,
+      rolled,
+      game.events,
+    );
     void commitPlay(result);
   };
 
   const rollForPlayer = () => {
     if (committing.current || !canBank || rollingDice || !play || play.pending || !turnPlayer || turnCash <= 0) return;
     const rolled = rollOpolyDice();
+    const doubles = play.doubles;
     playDiceRoll();
     playDiceRollHaptic();
     setDice(String(rolled.total));
@@ -503,7 +513,7 @@ export function OpolyScreen({ navigation, route }: Props) {
     setError(null);
     if (rollTimer.current) clearTimeout(rollTimer.current);
     rollTimer.current = setTimeout(() => {
-      rollRef.current(rolled);
+      rollRef.current(rolled, doubles);
       setRollingDice(false);
     }, diceSettleMs());
   };
