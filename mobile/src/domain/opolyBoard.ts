@@ -1,3 +1,5 @@
+import { projectTiltedPoint } from './dieProjection';
+
 /** U.S. board in play order. Index 0 is Go. */
 
 export const INCOME_TAX = 200;
@@ -602,31 +604,25 @@ export type DrawnCardFrame = {
   hover: number;
 };
 
-/** A single face-up card, large enough to read, inside the green. */
-export function drawnCardFrame(board: number): DrawnCardFrame {
-  const felt = board * (1 - 2 * TRACK_DEPTH);
-  const margin = Math.max(12, felt * 0.07);
-  const span = Math.max(0, felt - margin * 2);
-  let height = span;
-  let width = height * DECK_ASPECT;
-  if (width > span) {
-    width = span;
-    height = width / DECK_ASPECT;
+/** Highest projected point of the tilted board. The phone crops everything above it. */
+function boardFarEdge(board: number) {
+  const half = board / 2;
+  let top = Infinity;
+  for (const x of [-half, half]) {
+    for (const y of [-half, half]) {
+      const projected = projectTiltedPoint(x, y, 0, board).y;
+      if (projected < top) top = projected;
+    }
   }
-  return { width, height, lift: CARD_READ_TILT, hover: Math.max(6, board * 0.012) };
+  return top;
 }
 
-/**
- * Corners of the lifted card. Origin is the board center, y grows toward the
- * near edge, and z grows off the felt toward the camera.
- */
-export function drawnCardCorners(board: number): { x: number; y: number; z: number }[] {
-  const frame = drawnCardFrame(board);
-  const lift = (frame.lift * Math.PI) / 180;
+function liftedCardCorners(width: number, height: number, liftDeg: number, hover: number) {
+  const lift = (liftDeg * Math.PI) / 180;
   const cos = Math.cos(lift);
   const sin = Math.sin(lift);
-  const halfW = frame.width / 2;
-  const halfH = frame.height / 2;
+  const halfW = width / 2;
+  const halfH = height / 2;
   return [
     { x: -halfW, y: -halfH },
     { x: halfW, y: -halfH },
@@ -636,10 +632,46 @@ export function drawnCardCorners(board: number): { x: number; y: number; z: numb
     const fromBottom = corner.y - halfH;
     return {
       x: corner.x,
-      y: fromBottom * cos + frame.hover * sin + halfH,
-      z: -fromBottom * sin + frame.hover * cos,
+      y: fromBottom * cos + hover * sin + halfH,
+      z: -fromBottom * sin + hover * cos,
     };
   });
+}
+
+/** A face-up card, small enough that its lifted top stays inside the phone frame. */
+export function drawnCardFrame(board: number): DrawnCardFrame {
+  const felt = board * (1 - 2 * TRACK_DEPTH);
+  const hover = Math.max(6, board * 0.012);
+  if (felt <= 0) return { width: 0, height: 0, lift: CARD_READ_TILT, hover };
+  const half = board / 2;
+  const ceiling = boardFarEdge(board) + Math.max(10, board * 0.03);
+  const fits = (height: number) => {
+    const projected = liftedCardCorners(height * DECK_ASPECT, height, CARD_READ_TILT, hover).map((corner) =>
+      projectTiltedPoint(corner.x, corner.y, corner.z, board),
+    );
+    const top = Math.min(...projected.map((point) => point.y));
+    const bottom = Math.max(...projected.map((point) => point.y));
+    const left = Math.min(...projected.map((point) => point.x));
+    const right = Math.max(...projected.map((point) => point.x));
+    return top >= ceiling && bottom <= half - 4 && left >= -half + 4 && right <= half - 4;
+  };
+  let lo = 0;
+  let hi = felt;
+  for (let step = 0; step < 24; step += 1) {
+    const height = (lo + hi) / 2;
+    if (fits(height)) lo = height;
+    else hi = height;
+  }
+  return { width: lo * DECK_ASPECT, height: lo, lift: CARD_READ_TILT, hover };
+}
+
+/**
+ * Corners of the lifted card. Origin is the board center, y grows toward the
+ * near edge, and z grows off the felt toward the camera.
+ */
+export function drawnCardCorners(board: number): { x: number; y: number; z: number }[] {
+  const frame = drawnCardFrame(board);
+  return liftedCardCorners(frame.width, frame.height, frame.lift, frame.hover);
 }
 
 export type Point = { x: number; y: number };

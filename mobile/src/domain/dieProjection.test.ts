@@ -32,7 +32,27 @@ describe('projected die', () => {
     assert.equal(values.has(5), true);
     assert.equal(values.has(3), true);
     assert.equal(values.has(1), false);
+    assert.equal(values.has(2), false);
     assert.equal(mesh.faces.find((face) => face.value === 5)?.pips.length, 5);
     assert.equal(mesh.faces.find((face) => face.value === 3)?.pips.length, 3);
+  });
+
+  it('draws the opposite face when a roll turns it toward the camera', () => {
+    const tumbling: DiePose = {
+      ...resting,
+      hop: 46,
+      spinX: -90,
+      spinY: 180,
+      spinZ: -90,
+    };
+    const mesh = projectDie(tumbling, 800);
+    const opposite = mesh.faces.find((face) => face.value === 2);
+    assert.ok(opposite, 'the face opposite 5 is visible mid-roll');
+    assert.equal(opposite?.pips.length, 2);
+    const xs = opposite?.points.map((point) => point.x) ?? [];
+    const ys = opposite?.points.map((point) => point.y) ?? [];
+    const span = Math.max(...xs) - Math.min(...xs);
+    const rise = Math.max(...ys) - Math.min(...ys);
+    assert.ok(span > 8 && rise > 8, 'the opposite face has area, so it cannot read as an empty side');
   });
 });

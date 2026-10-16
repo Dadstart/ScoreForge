@@ -170,13 +170,23 @@ describe('drawn card', () => {
       const corners = drawnCardCorners(board);
       assert.ok(corners.every((corner) => corner.z > 0));
       const top = Math.max(...corners.map((corner) => corner.z));
-      assert.ok(top > board * 0.12, `lift ${top}`);
+      assert.ok(top > board * 0.08, `lift ${top}`);
       const half = board / 2;
+      let farEdge = Infinity;
+      for (const x of [-half, half]) {
+        for (const y of [-half, half]) {
+          farEdge = Math.min(farEdge, projectTiltedPoint(x, y, 0, board).y);
+        }
+      }
+      let cardTop = Infinity;
       for (const corner of corners) {
         const projected = projectTiltedPoint(corner.x, corner.y, corner.z, board);
+        cardTop = Math.min(cardTop, projected.y);
         assert.ok(projected.x >= -half && projected.x <= half, `x ${projected.x}`);
         assert.ok(projected.y >= -half && projected.y <= half, `y ${projected.y}`);
       }
+      assert.ok(cardTop >= farEdge + 6, `card top ${cardTop} clears the frame ${farEdge}`);
+      assert.ok(frame.height < board * 0.42, `card height ${frame.height}`);
     });
   }
 });

@@ -132,6 +132,12 @@ function faceSpecs(value: number, size: number): FaceSpec[] {
       at: (u, v) => ({ x: u * h, y: v * h, z: size }),
     },
     {
+      value: 7 - value,
+      color: '#d9cbb3',
+      normal: { x: 0, y: 0, z: -1 },
+      at: (u, v) => ({ x: -u * h, y: -v * h, z: 0 }),
+    },
+    {
       value: sides[0],
       color: '#e6d7be',
       normal: { x: 0, y: -1, z: 0 },

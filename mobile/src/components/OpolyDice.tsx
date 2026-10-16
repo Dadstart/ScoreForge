@@ -213,7 +213,7 @@ const preserve3d = {
 const pipPaint =
   Platform.OS === 'web' ? ({ transform: [{ translateZ: 1 }] } as unknown as ViewStyle) : null;
 
-/** The other four faces. Opposites sum to 7, so the hidden bottom is left out. */
+/** The four side faces. The opposite face is drawn separately; opposites sum to 7. */
 function neighborFaces(top: number): number[] {
   const opposite = 7 - top;
   return [1, 2, 3, 4, 5, 6].filter((value) => value !== top && value !== opposite);
@@ -238,6 +238,7 @@ function DieCube({ face, settled, size }: { face: number; settled: number; size:
       ]}
     >
       <DieFace value={face} size={size} color="#f7f1e6" transform={cubeTransform([{ translateZ: half }])} />
+      <DieFace value={7 - settled} size={size} color="#d9cbb3" transform={cubeTransform([{ rotateX: '180deg' }, { translateZ: half }])} />
       <DieFace value={sides[0]} size={size} color="#e6d7be" transform={cubeTransform([{ rotateX: '90deg' }, { translateZ: half }])} />
       <DieFace value={sides[1]} size={size} color="#efe6d4" transform={cubeTransform([{ rotateX: '-90deg' }, { translateZ: half }])} />
       <DieFace value={sides[2]} size={size} color="#ddd0b6" transform={cubeTransform([{ rotateY: '90deg' }, { translateZ: half }])} />
