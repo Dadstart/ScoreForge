@@ -1253,7 +1253,7 @@ function BoardCanvas({
                     transform: [{ rotate: nameFacing(row, col) }],
                   }}
                 >
-                  <Text style={[styles.ownerEmoji, { fontSize: Math.round(spot.size * 0.82), lineHeight: Math.round(spot.size * 0.92) }]}>
+                  <Text allowFontScaling={false} style={[styles.ownerEmoji, emojiGlyph(spot.size)]}>
                     {glyph}
                   </Text>
                 </View>
@@ -1839,6 +1839,22 @@ function spacePadding(row: number, col: number, lane: number, bar: number, cell:
 /** A token smaller than this stops reading as an emoji on a phone. */
 const MIN_PIECE = 28;
 
+/**
+ * Emoji ink is taller and wider than the font's em box, and iOS clips the
+ * Text to that box. Keep the glyph inside the piece so a rotated token is
+ * not cut off.
+ */
+function emojiGlyph(piece: number) {
+  const box = Math.max(1, Math.round(piece));
+  return {
+    width: box,
+    height: box,
+    fontSize: Math.max(1, Math.round(box * 0.68)),
+    lineHeight: box,
+    textAlignVertical: 'center' as const,
+  };
+}
+
 function pieceSize(cell: number) {
   if (cell < CLOSE_CELL) return Math.max(MIN_PIECE, Math.round(cell * 0.5));
   return Math.max(28, Math.round(cell * 0.34));
@@ -2182,9 +2198,10 @@ function Piece({
       ]}
     >
       <Text
+        allowFontScaling={false}
         style={
           emoji
-            ? [styles.tokenEmojiText, { fontSize: Math.round(piece * 0.88), lineHeight: Math.round(piece) }]
+            ? [styles.tokenEmojiText, emojiGlyph(piece)]
             : [styles.tokenText, { fontSize: Math.round(piece * 0.72), color }]
         }
       >
@@ -2397,6 +2414,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'transparent',
+    overflow: 'visible',
   },
   tokenText: {
     fontWeight: '800',
