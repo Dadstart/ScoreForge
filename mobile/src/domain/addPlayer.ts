@@ -101,14 +101,15 @@ export function withoutPlayer(game: Game, playerId: string): Game {
   const tokenSpaces = { ...(game.tokenSpaces ?? {}) };
   delete tokenSpaces[playerId];
   const remaining = game.players.filter((player) => player.id !== playerId);
-  const monopoly = game.monopoly ? withoutOpolyPlayer(game.monopoly, playerId, game.players) : game.monopoly;
+  const events = game.events.filter((event) => event.playerId !== playerId);
+  const monopoly = game.monopoly ? withoutOpolyPlayer(game.monopoly, playerId, game.players, events) : game.monopoly;
   return ensureChineseState(
     ensureCheckersState(
       ensureSorryState(
         ensureBackgammonState({
           ...game,
           players: remaining,
-          events: game.events.filter((event) => event.playerId !== playerId),
+          events,
           tokenSpaces,
           monopoly,
           updatedAt: new Date().toISOString(),

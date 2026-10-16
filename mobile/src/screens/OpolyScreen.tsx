@@ -62,6 +62,7 @@ import {
   rentDue,
   resolveRoll,
   sellBuilding,
+  skipBankruptTurn,
   turnPrompt,
   undoForCash,
   undoOpoly,
@@ -166,6 +167,10 @@ export function OpolyScreen({ navigation, route }: Props) {
   const { sparks, spark } = usePlaySpark();
   const seenTokens = useRef<Record<string, number> | null>(null);
   const rollRef = useRef<(rolled: DiceRoll) => void>(() => {});
+  const applyGameRef = useRef<
+    ((mutator: (g: Game) => Game, opts?: { suppressWin?: boolean }) => Promise<boolean>) | null
+  >(null);
+  const skippedBankrupt = useRef<string | null>(null);
 
   useEffect(() => {
     return () => {
@@ -235,11 +240,42 @@ export function OpolyScreen({ navigation, route }: Props) {
   const rollForPlayerRef = useRef<() => void>(() => {});
   const canShakeRef = useRef(false);
   canShakeRef.current =
-    Boolean(play) && snapshot != null && !snapshot.isComplete && !addingPlayer && editingPlayerId == null;
+    Boolean(play) &&
+    snapshot != null &&
+    !snapshot.isComplete &&
+    !addingPlayer &&
+    editingPlayerId == null &&
+    play?.pending == null &&
+    cashOf(game?.events ?? [], play?.turn ?? '') > 0;
   useShake(() => {
     if (!canShakeRef.current) return;
     rollForPlayerRef.current();
   }, Boolean(play) && snapshot != null && !snapshot.isComplete);
+
+  useEffect(() => {
+    if (!game || !play || game.status === 'Completed' || play.pending || rollingDice || editingPlayerId) return;
+    if (cashOf(game.events, play.turn) > 0) {
+      skippedBankrupt.current = null;
+      return;
+    }
+    const key = `${game.id}:${game.revision}:${play.turn}`;
+    if (skippedBankrupt.current === key) return;
+    const result = skipBankruptTurn(play, game.tokenSpaces ?? {}, game.players, game.events);
+    if (!result) return;
+    const apply = applyGameRef.current;
+    if (!apply) return;
+    skippedBankrupt.current = key;
+    void apply(
+      (g) => {
+        g.monopoly = result.play;
+        return g;
+      },
+      { suppressWin: true },
+    ).then((saved) => {
+      if (!saved) skippedBankrupt.current = null;
+      else setLandNote(result.note);
+    });
+  }, [game, play, rollingDice, editingPlayerId]);
 
   if (!game || !template || !snapshot || !play) {
     return (
@@ -255,7 +291,7 @@ export function OpolyScreen({ navigation, route }: Props) {
   const canBank = !complete;
   const sameParty = resolvedPayer === resolvedReceiver;
 
-  const applyGame = async (mutator: (g: Game) => Game, opts?: { suppressWin?: boolean }) => {
+  const applyGame = async (mutator: (g: Game) => Game, opts?: { suppressWin?: boolean }): Promise<boolean> => {
     const next = mutator({
       ...game,
       players: [...game.players],
@@ -271,22 +307,26 @@ export function OpolyScreen({ navigation, route }: Props) {
         noteLocalResult(snap);
         await persist(next);
         setError(null);
+        return true;
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Autosave failed');
+        return false;
       } finally {
         endSuppress(snap.isComplete);
       }
-      return;
     }
 
     noteLocalResult(snap);
     try {
       await persist(next);
       setError(null);
+      return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Autosave failed');
+      return false;
     }
   };
+  applyGameRef.current = applyGame;
 
   const partyName = (id: string) => {
     if (id === BANK_PARTY_ID) return 'The Bank';
@@ -380,12 +420,12 @@ export function OpolyScreen({ navigation, route }: Props) {
 
   rollRef.current = (rolled: DiceRoll) => {
     if (!play || play.pending) return;
-    const result = resolveRoll(play, game.tokenSpaces ?? {}, game.players, rolled);
+    const result = resolveRoll(play, game.tokenSpaces ?? {}, game.players, rolled, game.events);
     void commitPlay(result);
   };
 
   const rollForPlayer = () => {
-    if (!canBank || rollingDice || !play || play.pending || !turnPlayer) return;
+    if (!canBank || rollingDice || !play || play.pending || !turnPlayer || turnCash <= 0) return;
     const rolled = rollOpolyDice();
     playDiceRoll();
     playDiceRollHaptic();
@@ -470,7 +510,7 @@ export function OpolyScreen({ navigation, route }: Props) {
     ? winnerLabel
       ? `${winnerLabel} wins with the most cash`
       : 'Game complete'
-    : turnPrompt(play, game.players);
+    : turnPrompt(play, game.players, game.events);
 
   const partyOptions = [
     { id: BANK_PARTY_ID, label: 'The Bank' },
@@ -525,7 +565,7 @@ export function OpolyScreen({ navigation, route }: Props) {
         }}
         disabled={!play.undo && game.events.length === 0}
       />
-      {inJail && !play.pending ? (
+      {inJail && !play.pending && turnCash > 0 ? (
         <>
           <Button
             label="Pay the bank $50"
@@ -599,7 +639,7 @@ export function OpolyScreen({ navigation, route }: Props) {
           cardOffer={pendingCard}
           onAcceptCard={
             pendingCard && canBank
-              ? () => void commitPlay(acceptCard(play, game.tokenSpaces ?? {}, game.players))
+              ? () => void commitPlay(acceptCard(play, game.tokenSpaces ?? {}, game.players, game.events))
               : undefined
           }
           chanceCount={play.chance.length}
@@ -621,7 +661,7 @@ export function OpolyScreen({ navigation, route }: Props) {
                         : `Roll for ${turnPlayer ? playerLabel(turnPlayer.name, turnPlayer.token) : 'player'}`
                 }
                 variant="primary"
-                disabled={!canBank || rollingDice || play.pending != null || !turnPlayer}
+                disabled={!canBank || rollingDice || play.pending != null || !turnPlayer || turnCash <= 0}
                 onPress={rollForPlayer}
               />
               {play.pending?.kind === 'pay' ? (
@@ -629,7 +669,7 @@ export function OpolyScreen({ navigation, route }: Props) {
                   label={`Pay ${play.pending.payeeId === BANK_PARTY_ID ? 'the bank' : partyName(play.pending.payeeId)} ${formatMoney(play.pending.amount)}`}
                   variant="primary"
                   disabled={!canBank}
-                  onPress={() => void commitPlay(payDue(play, game.tokenSpaces ?? {}, game.players))}
+                  onPress={() => void commitPlay(payDue(play, game.tokenSpaces ?? {}, game.players, game.events))}
                 />
               ) : null}
               {play.pending && pendingProperty ? (
@@ -638,12 +678,12 @@ export function OpolyScreen({ navigation, route }: Props) {
                     label={`Buy ${formatMoney(pendingProperty.price)}`}
                     variant="primary"
                     disabled={!canBank || turnCash < pendingProperty.price}
-                    onPress={() => void commitPlay(buyProperty(play, game.tokenSpaces ?? {}, game.players, turnCash))}
+                    onPress={() => void commitPlay(buyProperty(play, game.tokenSpaces ?? {}, game.players, turnCash, game.events))}
                   />
                   <Button
                     label="No thanks"
                     disabled={!canBank}
-                    onPress={() => void commitPlay(declineProperty(play, game.tokenSpaces ?? {}, game.players))}
+                    onPress={() => void commitPlay(declineProperty(play, game.tokenSpaces ?? {}, game.players, game.events))}
                   />
                 </>
               ) : null}
@@ -751,7 +791,7 @@ export function OpolyScreen({ navigation, route }: Props) {
                     })
                   )}
                 </View>
-                {standing.playerId === turnId && !complete ? (
+                {standing.playerId === turnId && !complete && (!broke || play.pending != null) ? (
                   <Badge label="Turn" tone="accent" style={styles.tileBadge} />
                 ) : null}
                 {broke ? <Badge label="Bankrupt" tone="danger" style={styles.tileBadge} /> : null}

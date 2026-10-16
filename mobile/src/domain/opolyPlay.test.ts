@@ -16,13 +16,16 @@ import {
   payDue,
   rentDue,
   resolveRoll,
+  skipBankruptTurn,
   turnPrompt,
   undoOpoly,
   useJailCard,
+  withoutOpolyPlayer,
   type OpolyPlay,
   type PlayPlayer,
 } from './opolyPlay';
 import { CHANCE_CARD_IDS, CHEST_CARD_IDS, cardCopy } from './opolyCards';
+import { createScoreEvent } from './models';
 
 const players: PlayPlayer[] = [
   { id: 'ada', name: 'Ada' },
@@ -369,6 +372,50 @@ describe('monopoly play', () => {
     assert.equal(bought.play.pending, null);
     assert.ok(nestingDepth({ monopoly: passed.play }) <= 20);
     assert.ok(nestingDepth({ monopoly: bought.play }) <= 20);
+  });
+
+  it('skips bankrupt players when the turn moves on', () => {
+    const seated = [...players, { id: 'cal', name: 'Cal' }];
+    const broke = [createScoreEvent('bea', -1500)];
+    const moved = resolveRoll(table(), { ada: 15 }, seated, roll(2, 3), broke);
+    assert.equal(moved.tokens.ada, 20);
+    assert.equal(moved.play.turn, 'cal');
+    assert.match(moved.note, /Bea is bankrupt/);
+
+    const stayed = resolveRoll(table(), { ada: 15 }, players, roll(2, 3), broke);
+    assert.equal(stayed.play.turn, 'ada');
+    assert.match(stayed.note, /Bea is bankrupt/);
+  });
+
+  it('ends a doubles turn when the payment leaves the player bankrupt', () => {
+    const broke = [createScoreEvent('ada', -1400)];
+    const taxed = resolveRoll(table(), { ada: 36 }, players, roll(1, 1), broke);
+    assert.equal(taxed.play.pending?.kind, 'pay');
+    assert.equal(taxed.play.doubles, 1);
+    const paid = payDue(taxed.play, taxed.tokens, players, broke);
+    assert.ok(!('error' in paid));
+    if ('error' in paid) return;
+    assert.equal(paid.play.turn, 'bea');
+    assert.equal(paid.play.doubles, 0);
+    assert.match(paid.note, /Ada is bankrupt/);
+    assert.doesNotMatch(paid.note, /Roll again/);
+  });
+
+  it('moves off a bankrupt player before they roll', () => {
+    const seated = [...players, { id: 'cal', name: 'Cal' }];
+    const broke = [createScoreEvent('bea', -1500), createScoreEvent('cal', -1600)];
+    const skipped = skipBankruptTurn(table({ turn: 'bea' }), { bea: 4 }, seated, broke);
+    assert.ok(skipped);
+    assert.equal(skipped?.play.turn, 'ada');
+    assert.match(skipped?.note ?? '', /Bea is bankrupt/);
+    assert.match(skipped?.note ?? '', /Cal is bankrupt/);
+    assert.equal(
+      skipBankruptTurn(table(), {}, players, [createScoreEvent('ada', -1500), createScoreEvent('bea', -1500)]),
+      null,
+    );
+    assert.equal(turnPrompt(table(), players, [createScoreEvent('ada', -1500)]), 'Ada is bankrupt.');
+    const left = withoutOpolyPlayer(table({ turn: 'ada' }), 'ada', seated, [createScoreEvent('bea', -1500)]);
+    assert.equal(left.turn, 'cal');
   });
 });
 

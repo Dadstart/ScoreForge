@@ -335,10 +335,30 @@ function playerName(players: PlayPlayer[], id: string): string {
   return playerLabel(player.name, player.token);
 }
 
-function nextPlayer(players: PlayPlayer[], current: string): string {
+/** The next player who still has cash, or null when everyone else is bankrupt. */
+function nextSolvent(players: PlayPlayer[], current: string, events: ScoreEvent[]): string | null {
   const index = players.findIndex((player) => player.id === current);
-  if (players.length === 0) return current;
-  return players[(index + 1) % players.length]?.id ?? current;
+  if (index < 0 || players.length === 0) return null;
+  for (let step = 1; step < players.length; step += 1) {
+    const candidate = players[(index + step) % players.length];
+    if (candidate && cashOf(events, candidate.id) > 0) return candidate.id;
+  }
+  return null;
+}
+
+/** Hand the turn to the next player with cash, and say who was skipped. */
+function passTurn(players: PlayPlayer[], current: string, events: ScoreEvent[]): { turn: string; notes: string[] } {
+  const next = nextSolvent(players, current, events) ?? current;
+  const notes: string[] = [];
+  if (cashOf(events, current) <= 0) notes.push(`${playerName(players, current)} is bankrupt.`);
+  const index = players.findIndex((player) => player.id === current);
+  if (index < 0) return { turn: next, notes };
+  for (let step = 1; step < players.length; step += 1) {
+    const candidate = players[(index + step) % players.length];
+    if (!candidate || candidate.id === next || candidate.id === current) break;
+    if (cashOf(events, candidate.id) <= 0) notes.push(`${playerName(players, candidate.id)} is bankrupt.`);
+  }
+  return { turn: next, notes };
 }
 
 type Ctx = {
@@ -354,6 +374,7 @@ type Ctx = {
   depth: number;
   route: TokenRoute | null;
   drawn: DrawnCard[];
+  priorEvents: ScoreEvent[];
 };
 
 function credit(ctx: Ctx, playerId: string, amount: number) {
@@ -432,18 +453,21 @@ function advance(from: number, target: number) {
   return { index: dest, passedGo: start !== dest && dest < start };
 }
 
+function handOff(ctx: Ctx, playerId: string) {
+  const passed = passTurn(ctx.players, playerId, [...ctx.priorEvents, ...ctx.events]);
+  for (const note of passed.notes) ctx.notes.push(note);
+  ctx.play.doubles = 0;
+  ctx.play.turn = passed.turn;
+}
+
 function finish(ctx: Ctx, playerId: string) {
   if (ctx.play.pending) return;
-  if (ctx.play.jail[playerId] != null) {
-    ctx.play.doubles = 0;
-    ctx.play.turn = nextPlayer(ctx.players, playerId);
-    return;
-  }
-  if (ctx.play.doubles > 0) {
+  const events = [...ctx.priorEvents, ...ctx.events];
+  if (ctx.play.jail[playerId] == null && ctx.play.doubles > 0 && cashOf(events, playerId) > 0) {
     ctx.notes.push('Roll again.');
     return;
   }
-  ctx.play.turn = nextPlayer(ctx.players, playerId);
+  handOff(ctx, playerId);
 }
 
 function resolveProperty(ctx: Ctx, playerId: string, propertyId: string) {
@@ -726,6 +750,7 @@ export function resolveRoll(
   tokens: Record<string, number>,
   players: PlayPlayer[],
   roll: DiceRoll,
+  ledger: ScoreEvent[] = [],
   sample: () => number = Math.random,
 ): PlayOutcome {
   const before = play;
@@ -752,6 +777,7 @@ export function resolveRoll(
     depth: 0,
     route: null,
     drawn: [],
+    priorEvents: ledger,
   };
   const playerId = play.turn;
   const name = playerName(players, playerId);
@@ -759,6 +785,11 @@ export function resolveRoll(
   ctx.notes.push(faces);
   if (play.pending || players.every((player) => player.id !== playerId)) {
     return { play, tokens, events: [], note: 'Finish the current decision first.' };
+  }
+  if (cashOf(ledger, playerId) <= 0) {
+    const skipped = skipBankruptTurn(play, tokens, players, ledger);
+    if (skipped) return skipped;
+    return { play, tokens, events: [], note: `${name} is bankrupt.` };
   }
   const from = tokens[playerId] ?? 0;
   if (play.jail[playerId] != null) {
@@ -779,8 +810,8 @@ export function resolveRoll(
         finish(ctx, playerId);
       } else {
         ctx.play.jail[playerId] = spent;
-        ctx.play.turn = nextPlayer(players, playerId);
         ctx.notes.push(`${name} stays in jail.`);
+        handOff(ctx, playerId);
       }
     }
     return commit(before, tokens, ctx);
@@ -788,7 +819,7 @@ export function resolveRoll(
   if (roll.doubles && play.doubles >= 2) {
     ctx.notes.push('Three doubles.');
     sendToJail(ctx, playerId);
-    ctx.play.turn = nextPlayer(players, playerId);
+    handOff(ctx, playerId);
     return commit(before, tokens, ctx);
   }
   ctx.play.doubles = roll.doubles ? play.doubles + 1 : 0;
@@ -804,6 +835,7 @@ function afterChoice(
   players: PlayPlayer[],
   notes: string[],
   events: ScoreEvent[],
+  ledger: ScoreEvent[] = [],
 ): PlayOutcome {
   const ctx: Ctx = {
     play: updated,
@@ -818,6 +850,7 @@ function afterChoice(
     depth: 0,
     route: null,
     drawn: [],
+    priorEvents: ledger,
   };
   finish(ctx, original.turn);
   return commit(original, tokens, ctx);
@@ -827,6 +860,7 @@ export function payDue(
   play: OpolyPlay,
   tokens: Record<string, number>,
   players: PlayPlayer[],
+  ledger: ScoreEvent[] = [],
 ): PlayOutcome | { error: string } {
   const pending = play.pending;
   if (!pending || pending.kind !== 'pay') return { error: 'There is nothing to pay.' };
@@ -840,6 +874,7 @@ export function payDue(
     players,
     [`${name} pays ${payee} ${formatMoney(pending.amount)} for ${pending.label}.`],
     events,
+    ledger,
   );
 }
 
@@ -929,6 +964,7 @@ export function acceptCard(
   play: OpolyPlay,
   tokens: Record<string, number>,
   players: PlayPlayer[],
+  ledger: ScoreEvent[] = [],
   sample: () => number = Math.random,
 ): PlayOutcome | { error: string } {
   const pending = play.pending;
@@ -958,6 +994,7 @@ export function acceptCard(
     depth: 0,
     route: null,
     drawn: [],
+    priorEvents: ledger,
   };
   applyCard(ctx, play.turn, pending.deck, pending.id, pending.space);
   finish(ctx, play.turn);
@@ -969,6 +1006,7 @@ export function buyProperty(
   tokens: Record<string, number>,
   players: PlayPlayer[],
   cash: number,
+  ledger: ScoreEvent[] = [],
 ): PlayOutcome | { error: string } {
   const pending = play.pending;
   if (!pending || pending.kind !== 'buy') return { error: 'There is nothing to buy.' };
@@ -988,10 +1026,16 @@ export function buyProperty(
     players,
     [`${playerName(players, play.turn)} buys ${property.name} for ${formatMoney(property.price)}.`],
     events,
+    ledger,
   );
 }
 
-export function declineProperty(play: OpolyPlay, tokens: Record<string, number>, players: PlayPlayer[]): PlayOutcome | { error: string } {
+export function declineProperty(
+  play: OpolyPlay,
+  tokens: Record<string, number>,
+  players: PlayPlayer[],
+  ledger: ScoreEvent[] = [],
+): PlayOutcome | { error: string } {
   if (play.pending?.kind !== 'buy') return { error: 'There is nothing to pass on.' };
   const property = getProperty(play.pending.propertyId);
   return afterChoice(
@@ -1001,6 +1045,7 @@ export function declineProperty(play: OpolyPlay, tokens: Record<string, number>,
     players,
     [`${playerName(players, play.turn)} passes on ${property?.name ?? 'the property'}.`],
     [],
+    ledger,
   );
 }
 
@@ -1158,7 +1203,12 @@ export function undoForCash(play: OpolyPlay, tokens: Record<string, number>, eve
   return { ...play, undo: packUndo(play, tokens, eventCount) };
 }
 
-export function withoutOpolyPlayer(play: OpolyPlay, playerId: string, players: PlayPlayer[]): OpolyPlay {
+export function withoutOpolyPlayer(
+  play: OpolyPlay,
+  playerId: string,
+  players: PlayPlayer[],
+  events: ScoreEvent[] = [],
+): OpolyPlay {
   const owned: Record<string, string> = {};
   const houses: Record<string, number> = {};
   for (const [propertyId, owner] of Object.entries(play.owned)) {
@@ -1176,7 +1226,15 @@ export function withoutOpolyPlayer(play: OpolyPlay, playerId: string, players: P
   for (let count = countOf(chestFree, playerId); count > 0; count -= 1) chest.push('jail-free');
   delete chanceFree[playerId];
   delete chestFree[playerId];
-  const turn = play.turn === playerId ? nextPlayer(players, playerId) : play.turn;
+  let turn = play.turn;
+  if (play.turn === playerId) {
+    turn = nextSolvent(players, playerId, events) ?? playerId;
+    if (turn === playerId) {
+      const index = Math.max(0, players.findIndex((player) => player.id === playerId));
+      const fallback = players[(index + 1) % players.length];
+      turn = fallback && fallback.id !== playerId ? fallback.id : players.find((player) => player.id !== playerId)?.id ?? playerId;
+    }
+  }
   const pending =
     play.turn === playerId || (play.pending?.kind === 'pay' && play.pending.payeeId === playerId)
       ? null
@@ -1198,8 +1256,27 @@ export function withoutOpolyPlayer(play: OpolyPlay, playerId: string, players: P
   };
 }
 
-export function turnPrompt(play: OpolyPlay, players: PlayPlayer[]): string {
+/** Move off a bankrupt player who has nothing left to resolve. */
+export function skipBankruptTurn(
+  play: OpolyPlay,
+  tokens: Record<string, number>,
+  players: PlayPlayer[],
+  events: ScoreEvent[],
+): PlayOutcome | null {
+  if (play.pending || cashOf(events, play.turn) > 0) return null;
+  const passed = passTurn(players, play.turn, events);
+  if (passed.turn === play.turn) return null;
+  return {
+    play: { ...play, turn: passed.turn, doubles: 0 },
+    tokens,
+    events: [],
+    note: passed.notes.join(' '),
+  };
+}
+
+export function turnPrompt(play: OpolyPlay, players: PlayPlayer[], events: ScoreEvent[] = []): string {
   const name = playerName(players, play.turn);
+  if (!play.pending && cashOf(events, play.turn) <= 0) return `${name} is bankrupt.`;
   if (play.pending?.kind === 'buy') {
     const property = getProperty(play.pending.propertyId);
     return property
