@@ -476,6 +476,22 @@ export type BuildingMark = {
  * House/hotel markers sit in the color bar on the inward edge of a street tile.
  * Levels 1–4 place that many houses; level 5 places one hotel.
  */
+/** Fixed house size — readable on the board without swallowing the street name. */
+export const BUILDING_HOUSE_SIZE = 8;
+/** Hotel is a short wide mark at the same depth as a house. */
+export const BUILDING_HOTEL_ALONG = 14;
+const BUILDING_MARK_PAD = 1;
+
+/** Strip reserved at the reading-top of the color bar for houses/hotels. */
+export function buildingMarkBand(level = 1): number {
+  if (level <= 0) return 0;
+  return BUILDING_HOUSE_SIZE + BUILDING_MARK_PAD * 2;
+}
+
+/**
+ * Pack houses/hotel along the reading-top (inner edge) of the color bar.
+ * Marks stay a fixed small size so they never grow with the cell.
+ */
 export function buildingMarkPlacement(
   row: number,
   col: number,
@@ -489,44 +505,40 @@ export function buildingMarkPlacement(
   const along = horizontal ? width : height;
   const inward = horizontal ? height : width;
   const bar = colorBarThickness(inward);
-  const pad = Math.max(1, Math.round(Math.min(along, bar) * 0.1));
+  const pad = BUILDING_MARK_PAD;
   const usable = Math.max(1, along - pad * 2);
-  const barInner = Math.max(1, bar - pad * 2);
+  const depth = Math.min(BUILDING_HOUSE_SIZE, Math.max(1, bar - pad * 2));
 
-  const place = (alongOffset: number, depthOffset: number, markW: number, markH: number, kind: 'house' | 'hotel'): BuildingMark => {
+  // fromInner is distance from the inner (reading-top) edge of the color bar.
+  const place = (alongOffset: number, fromInner: number, markW: number, markH: number, kind: 'house' | 'hotel'): BuildingMark => {
     if (row === 10) {
-      // Bottom row: color bar along the top edge.
-      return { x: alongOffset, y: depthOffset, w: markW, h: markH, kind };
+      // Bottom row: color bar along the top edge; inner = small y.
+      return { x: alongOffset, y: fromInner, w: markW, h: markH, kind };
     }
     if (row === 0) {
-      // Top row: color bar along the bottom edge.
-      return { x: alongOffset, y: height - bar + depthOffset, w: markW, h: markH, kind };
+      // Top row: color bar along the bottom edge; inner = large y.
+      return { x: alongOffset, y: height - fromInner - markH, w: markW, h: markH, kind };
     }
     if (col === 0) {
-      // Left column: color bar along the right edge; along runs top → bottom.
-      return { x: width - bar + depthOffset, y: alongOffset, w: markH, h: markW, kind };
+      // Left column: color bar along the right edge; inner = large x.
+      return { x: width - fromInner - markH, y: alongOffset, w: markH, h: markW, kind };
     }
-    // Right column: color bar along the left edge.
-    return { x: depthOffset, y: alongOffset, w: markH, h: markW, kind };
+    // Right column: color bar along the left edge; inner = small x.
+    return { x: fromInner, y: alongOffset, w: markH, h: markW, kind };
   };
 
   if (n >= 5) {
-    const h = Math.min(barInner, Math.max(5, Math.round(barInner * 0.7)));
-    const w = Math.min(usable, Math.max(Math.round(h * 1.7), Math.round(usable * 0.5)));
-    return [place((along - w) / 2, pad + (barInner - h) / 2, w, h, 'hotel')];
+    const w = Math.min(usable, BUILDING_HOTEL_ALONG);
+    return [place((along - w) / 2, pad, w, depth, 'hotel')];
   }
 
-  const gap = n > 1 ? Math.max(1, Math.round(usable * 0.05)) : 0;
-  const houseAlong = Math.min(
-    Math.floor((usable - gap * (n - 1)) / n),
-    Math.max(4, Math.round(barInner * 0.9)),
-  );
-  const houseDepth = Math.min(barInner, Math.max(4, houseAlong));
+  const gap = n > 1 ? pad : 0;
+  const houseAlong = Math.min(BUILDING_HOUSE_SIZE, Math.floor((usable - gap * (n - 1)) / n));
   const total = houseAlong * n + gap * (n - 1);
   const start = (along - total) / 2;
   const marks: BuildingMark[] = [];
   for (let i = 0; i < n; i += 1) {
-    marks.push(place(start + i * (houseAlong + gap), pad + (barInner - houseDepth) / 2, houseAlong, houseDepth, 'house'));
+    marks.push(place(start + i * (houseAlong + gap), pad, houseAlong, depth, 'house'));
   }
   return marks;
 }

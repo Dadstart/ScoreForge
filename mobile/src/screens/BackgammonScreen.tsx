@@ -40,7 +40,7 @@ import {
   type Side,
 } from '../domain/backgammon';
 import { findLocalPlayerId } from '../domain/localPlayer';
-import type { Game } from '../domain/models';
+import { playModeOf, type  Game  } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
 import { usePlaySpark } from '../hooks/usePlaySpark';
@@ -258,7 +258,7 @@ export function BackgammonScreen({ navigation, route }: Props) {
             <Badge label="Backgammon" tone="accent" />
           </View>
           <GameHelp templateId="backgammon" />
-          <ShareCodePanel shareCode={game.shareCode} />
+          <ShareCodePanel shareCode={game.shareCode} passAndPlay={playModeOf(game) === 'pass-and-play'} />
           <HomeButton onPress={() => navigation.navigate('Home')} />
         </View>
 

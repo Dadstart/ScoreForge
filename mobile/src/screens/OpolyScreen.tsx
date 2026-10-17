@@ -20,7 +20,7 @@ import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Card, Field, Screen } from '../components/ui';
 import { withoutPlayer } from '../domain/addPlayer';
 import { findLocalPlayerId } from '../domain/localPlayer';
-import { type Game, createScoreEvent } from '../domain/models';
+import { playModeOf,  type Game, createScoreEvent  } from '../domain/models';
 import {
   BANK_PARTY_ID,
   cashFromDelta,
@@ -823,7 +823,7 @@ export function OpolyScreen({ navigation, route }: Props) {
                 }}
               />
             ) : null}
-            <ShareCodePanel shareCode={game.shareCode} />
+            <ShareCodePanel shareCode={game.shareCode} passAndPlay={playModeOf(game) === 'pass-and-play'} />
             <HomeButton onPress={() => navigation.navigate('Home')} />
           </View>
         </View>

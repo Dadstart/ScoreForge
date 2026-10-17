@@ -23,6 +23,9 @@ import {
   monopolyDieSize,
   ownerMarkPlacement,
   buildingMarkPlacement,
+  BUILDING_HOUSE_SIZE,
+  BUILDING_HOTEL_ALONG,
+  buildingMarkBand,
   boardTurnForSpace,
   pointHeldOnTurn,
   nameFacing,
@@ -337,6 +340,23 @@ describe('buildingMarkPlacement', () => {
     assert.ok(mark.y >= 0 && mark.y + mark.h <= spot.height + 0.5);
   }
 
+  function nearTop(spot: ReturnType<typeof marks>, mark: { x: number; y: number; w: number; h: number }) {
+    const band = buildingMarkBand(1);
+    if (spot.row === 10) {
+      assert.ok(mark.y + mark.h <= band + 0.5);
+      return;
+    }
+    if (spot.row === 0) {
+      assert.ok(mark.y >= spot.height - band - 0.5);
+      return;
+    }
+    if (spot.col === 0) {
+      assert.ok(mark.x >= spot.width - band - 0.5);
+      return;
+    }
+    assert.ok(mark.x + mark.w <= band + 0.5);
+  }
+
   it('places houses and a hotel inside the color bar on every edge', () => {
     for (const index of [1, 21, 11, 39]) {
       const empty = marks(index, 0);
@@ -344,12 +364,28 @@ describe('buildingMarkPlacement', () => {
       const houses = marks(index, 3);
       assert.equal(houses.marks.length, 3);
       assert.ok(houses.marks.every((mark) => mark.kind === 'house'));
-      for (const mark of houses.marks) inBar(houses, mark);
+      for (const mark of houses.marks) {
+        inBar(houses, mark);
+        nearTop(houses, mark);
+        assert.equal(Math.min(mark.w, mark.h), BUILDING_HOUSE_SIZE);
+      }
       const hotel = marks(index, 5);
       assert.equal(hotel.marks.length, 1);
       assert.equal(hotel.marks[0]?.kind, 'hotel');
       inBar(hotel, hotel.marks[0]!);
+      nearTop(hotel, hotel.marks[0]!);
+      assert.equal(Math.min(hotel.marks[0]!.w, hotel.marks[0]!.h), BUILDING_HOUSE_SIZE);
+      assert.equal(Math.max(hotel.marks[0]!.w, hotel.marks[0]!.h), BUILDING_HOTEL_ALONG);
     }
+  });
+
+  it('keeps the same small house size on large and small cells', () => {
+    const big = buildingMarkPlacement(10, 5, 120, 80, 2);
+    const small = buildingMarkPlacement(10, 5, 40, 28, 2);
+    assert.equal(big[0]?.w, BUILDING_HOUSE_SIZE);
+    assert.equal(big[0]?.h, BUILDING_HOUSE_SIZE);
+    assert.equal(small[0]?.w, BUILDING_HOUSE_SIZE);
+    assert.equal(small[0]?.h, BUILDING_HOUSE_SIZE);
   });
 });
 

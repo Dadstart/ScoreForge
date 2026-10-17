@@ -35,6 +35,7 @@ import {
   nearestTokenFacing,
   ownerMarkPlacement,
   buildingMarkPlacement,
+  buildingMarkBand,
   spaceToCell,
   tokenFacingDegrees,
   followRoute,
@@ -979,8 +980,13 @@ function BoardCanvas({
             ? fitBoardLabel(nameText, !detail && space.tax ? nameText : space.short, bounds, label)
             : null;
         const shownName = isRailroad ? fullName.replace('🚂', '').trim() : fullName;
-        const barNameSize = letterBand
-          ? Math.max(8, Math.min(letterBand - 4, fitSize(shownName, Math.max(8, along - 4), Math.max(8, letterBand - 4))))
+        const propertyId = space.propertyId;
+        const buildLevel =
+          property?.kind === 'street' && propertyId ? (houses?.[propertyId] ?? 0) : 0;
+        const buildBand = buildingMarkBand(buildLevel);
+        const nameBand = letterBand > 0 ? Math.max(6, letterBand - buildBand) : 0;
+        const barNameSize = nameBand
+          ? Math.max(6, Math.min(nameBand - 2, fitSize(shownName, Math.max(8, along - 4), Math.max(6, nameBand - 2))))
           : 0;
         let trainH = 0;
         let trainW = 0;
@@ -993,7 +999,6 @@ function BoardCanvas({
           }
         }
         const amount = priceLine > 0 ? space.tax : undefined;
-        const propertyId = space.propertyId;
         const selectable =
           Boolean(propertyId && onSelectProperty && selectablePropertyIds?.has(propertyId));
         const cellStyle: StyleProp<ViewStyle> = [
@@ -1067,23 +1072,33 @@ function BoardCanvas({
                           width: '100%',
                           height: letterBand,
                           alignItems: 'center',
-                          justifyContent: 'center',
+                          justifyContent: 'flex-start',
                         }}
                       >
-                        <Text
+                        {buildBand > 0 ? <View style={{ width: '100%', height: buildBand }} /> : null}
+                        <View
                           style={{
-                            color: contrastInk(barColor),
-                            fontFamily: fonts.body,
-                            fontWeight: '800',
-                            fontSize: barNameSize,
-                            lineHeight: barNameSize,
-                            width: along - 2,
-                            textAlign: 'center',
+                            width: '100%',
+                            height: nameBand,
+                            alignItems: 'center',
+                            justifyContent: 'center',
                           }}
-                          numberOfLines={1}
                         >
-                          {shownName}
-                        </Text>
+                          <Text
+                            style={{
+                              color: contrastInk(barColor),
+                              fontFamily: fonts.body,
+                              fontWeight: '800',
+                              fontSize: barNameSize,
+                              lineHeight: barNameSize,
+                              width: along - 2,
+                              textAlign: 'center',
+                            }}
+                            numberOfLines={1}
+                          >
+                            {shownName}
+                          </Text>
+                        </View>
                       </View>
                       {isRailroad && trainW > 0 ? (
                         <View style={{ width: trainW, height: trainH, transform: [{ scaleX: -1 }] }}>

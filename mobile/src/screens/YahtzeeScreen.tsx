@@ -12,7 +12,7 @@ import { YahtzeeDice } from '../components/YahtzeeDice';
 import { YahtzeeScoreboard } from '../components/YahtzeeScoreboard';
 import { Badge, Button, Screen } from '../components/ui';
 import { findLocalPlayerId } from '../domain/localPlayer';
-import type { Game, ScoreEvent } from '../domain/models';
+import { playModeOf, type  Game, ScoreEvent  } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
 import {
@@ -217,7 +217,7 @@ export function YahtzeeScreen({ navigation, route }: Props) {
             <Badge label="Yahtzee" tone="accent" />
           </View>
           <GameHelp templateId="yahtzee" />
-          <ShareCodePanel shareCode={game.shareCode} />
+          <ShareCodePanel shareCode={game.shareCode} passAndPlay={playModeOf(game) === 'pass-and-play'} />
           <HomeButton onPress={() => navigation.navigate('Home')} />
         </View>
 

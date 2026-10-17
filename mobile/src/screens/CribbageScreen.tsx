@@ -17,7 +17,7 @@ import { HomeButton } from '../components/HomeButton';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Screen } from '../components/ui';
 import { findLocalPlayerId } from '../domain/localPlayer';
-import { createScoreEvent, type Game } from '../domain/models';
+import { playModeOf,  createScoreEvent, type Game  } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
 import { usePlaySpark } from '../hooks/usePlaySpark';
@@ -217,7 +217,7 @@ export function CribbageScreen({ navigation, route }: Props) {
             <Badge label="Cribbage" tone="accent" />
           </View>
           <GameHelp templateId="cribbage" />
-          <ShareCodePanel shareCode={game.shareCode} />
+          <ShareCodePanel shareCode={game.shareCode} passAndPlay={playModeOf(game) === 'pass-and-play'} />
           <HomeButton onPress={() => navigation.navigate('Home')} />
         </View>
 

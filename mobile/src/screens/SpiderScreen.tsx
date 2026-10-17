@@ -9,7 +9,7 @@ import { GameHelp } from '../components/GameHelp';
 import { HomeButton } from '../components/HomeButton';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Screen, usePageScroll } from '../components/ui';
-import type { Game } from '../domain/models';
+import { playModeOf, type  Game  } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import {
   completedCount,
@@ -231,7 +231,7 @@ export function SpiderScreen({ navigation, route }: Props) {
             <Badge label={suitLabel(spider.suits)} tone="accent" />
           </View>
           <GameHelp templateId="spider" />
-          <ShareCodePanel shareCode={game.shareCode} />
+          <ShareCodePanel shareCode={game.shareCode} passAndPlay={playModeOf(game) === 'pass-and-play'} />
           <HomeButton onPress={() => navigation.navigate('Home')} />
         </View>
 

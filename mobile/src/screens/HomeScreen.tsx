@@ -10,7 +10,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Card, Screen } from '../components/ui';
 import { getTemplate } from '../domain/templates';
-import type { Game } from '../domain/models';
+import { playModeOf, type Game } from '../domain/models';
 import { deleteGame, loadGames } from '../storage/gameStore';
 import { colors, space, typography } from '../theme';
 import { gameScreenForTemplate, type RootStackParamList } from '../navigation/types';
@@ -71,7 +71,7 @@ export function HomeScreen({ navigation }: Props) {
         ]}
       >
         <Text style={[typography.subtitle, styles.lead]}>
-          Keep score together — share a code, everyone tracks their own points.
+          Keep score together — Pass ’n Play on one device, or share a join code across phones.
         </Text>
 
         <View style={styles.actions}>
@@ -107,7 +107,7 @@ export function HomeScreen({ navigation }: Props) {
           <Card style={styles.empty}>
             <Text style={styles.emptyTitle}>No games yet</Text>
             <Text style={typography.body}>
-              Start a new game, then share the code or QR so friends can join from any device.
+              Start a new game. Choose Pass ’n Play for one device, or separate devices to share a join code.
             </Text>
           </Card>
         ) : null}
@@ -127,6 +127,7 @@ const GameRow = memo(function GameRow({
 }) {
   const templateName = getTemplate(game.templateId)?.name ?? game.templateId;
   const done = game.status === 'Completed';
+  const passAndPlay = playModeOf(game) === 'pass-and-play';
   return (
     <Card style={styles.gameCard}>
       <View style={styles.cardTop}>
@@ -134,11 +135,12 @@ const GameRow = memo(function GameRow({
           <Text style={styles.cardTitle}>{game.name || 'Untitled game'}</Text>
           <View style={styles.metaRow}>
             <Badge label={templateName} tone="accent" />
+            <Badge label={passAndPlay ? 'Pass ’n Play' : 'Shared code'} tone="neutral" />
             <Badge label={done ? 'Completed' : 'In progress'} tone={done ? 'success' : 'neutral'} />
           </View>
           <Text style={styles.muted}>Updated {new Date(game.updatedAt).toLocaleString()}</Text>
         </View>
-        <ShareCodePanel shareCode={game.shareCode} />
+        <ShareCodePanel shareCode={game.shareCode} passAndPlay={passAndPlay} />
       </View>
       <View style={styles.cardActions}>
         <Button label="Resume" variant="primary" onPress={() => onOpen(game)} style={{ flex: 1 }} />

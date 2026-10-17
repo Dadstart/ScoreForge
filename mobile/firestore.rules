@@ -16,6 +16,7 @@ service cloud.firestore {
     //   - shareCode: string (required, immutable, equal to the document id)
     //   - name: string (required, 1-80)
     //   - templateId: string (required, immutable, known template)
+    //   - playMode: 'pass-and-play' | 'multi-device' (required)
     //   - players: list (required, 1-12 maps of id/name/optional token)
     //   - events: list (required, max 800 score maps). Rules cannot walk every
     //     element; the size cap is the guard against a huge write.
@@ -118,6 +119,7 @@ service cloud.firestore {
           'shareCode',
           'name',
           'templateId',
+          'playMode',
           'players',
           'events',
           'status',
@@ -143,6 +145,7 @@ service cloud.firestore {
           'shareCode',
           'name',
           'templateId',
+          'playMode',
           'players',
           'events',
           'status',
@@ -169,6 +172,7 @@ service cloud.firestore {
         && data.name.size() > 0
         && data.name.size() <= 80
         && isKnownTemplate(data.templateId)
+        && data.playMode in ['pass-and-play', 'multi-device']
         && playersValid(data.players)
         && data.events is list
         && data.events.size() <= 800

@@ -15,6 +15,8 @@ import { colors, radii, typography } from '../theme';
 
 type Props = {
   shareCode: string;
+  /** Pass ’n Play games still have a code for backup, but joining is secondary. */
+  passAndPlay?: boolean;
 };
 
 function ShareIcon({ size = 18, color = colors.accent }: { size?: number; color?: string }) {
@@ -28,7 +30,7 @@ function ShareIcon({ size = 18, color = colors.accent }: { size?: number; color?
   );
 }
 
-export function ShareCodePanel({ shareCode }: Props) {
+export function ShareCodePanel({ shareCode, passAndPlay = false }: Props) {
   const [open, setOpen] = useState(false);
   const url = createJoinShareUrl(shareCode);
 
@@ -52,7 +54,11 @@ export function ShareCodePanel({ shareCode }: Props) {
           />
           <View style={styles.sheet}>
             <Text style={styles.sheetTitle}>Share game</Text>
-            <Text style={typography.subtitle}>Friends scan the QR or enter this code.</Text>
+            <Text style={typography.subtitle}>
+              {passAndPlay
+                ? 'This is Pass ’n Play on one device. The code still opens the same game elsewhere if you need it.'
+                : 'Friends scan the QR or enter this code on their device.'}
+            </Text>
             <Text style={typography.code}>{shareCode}</Text>
             <View style={styles.qrFrame}>
               <QRCode
