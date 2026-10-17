@@ -1442,22 +1442,32 @@ export function payToLeaveJail(play: OpolyPlay, tokens: Record<string, number>, 
   };
 }
 
+export function jailCardsHeld(play: OpolyPlay, playerId: string) {
+  const chance = countOf(play.chanceFree, playerId);
+  const chest = countOf(play.chestFree, playerId);
+  return { chance, chest, total: chance + chest };
+}
+
+function setHeldCount(map: Record<string, number>, playerId: string, count: number) {
+  if (count <= 0) delete map[playerId];
+  else map[playerId] = count;
+}
+
 export function useJailCard(play: OpolyPlay, tokens: Record<string, number>, players: PlayPlayer[]): PlayOutcome | { error: string } {
   if (play.jail[play.turn] == null) return { error: 'That player is not in jail.' };
-  const chance = countOf(play.chanceFree, play.turn);
-  const chest = countOf(play.chestFree, play.turn);
-  if (chance + chest <= 0) return { error: 'No Get Out of Jail Free card.' };
+  const held = jailCardsHeld(play, play.turn);
+  if (held.total <= 0) return { error: 'No Get Out of Jail Free card.' };
   const jail = { ...play.jail };
   delete jail[play.turn];
   const chanceFree = { ...play.chanceFree };
   const chestFree = { ...play.chestFree };
   const chanceDeck = [...play.chance];
   const chestDeck = [...play.chest];
-  if (chance > 0) {
-    chanceFree[play.turn] = chance - 1;
+  if (held.chance > 0) {
+    setHeldCount(chanceFree, play.turn, held.chance - 1);
     chanceDeck.push('jail-free');
   } else {
-    chestFree[play.turn] = chest - 1;
+    setHeldCount(chestFree, play.turn, held.chest - 1);
     chestDeck.push('jail-free');
   }
   const next: OpolyPlay = { ...play, jail, chanceFree, chestFree, chance: chanceDeck, chest: chestDeck, doubles: 0 };
@@ -1874,6 +1884,42 @@ export function debugAssignGroup(
   return next;
 }
 
+/** Debug / manual testing: pull a Get Out of Jail Free card from its deck into a player's hand. */
+export function debugGiveJailCard(
+  play: OpolyPlay,
+  playerId: string,
+  deck: 'chance' | 'chest',
+): OpolyPlay | { error: string } {
+  const pile = [...(deck === 'chance' ? play.chance : play.chest)];
+  const free = { ...(deck === 'chance' ? play.chanceFree : play.chestFree) };
+  const at = pile.indexOf('jail-free');
+  if (at < 0) {
+    if (countOf(free, playerId) > 0) return play;
+    return { error: 'That Get Out of Jail Free card is already held.' };
+  }
+  pile.splice(at, 1);
+  setHeldCount(free, playerId, countOf(free, playerId) + 1);
+  return deck === 'chance'
+    ? { ...play, chance: pile, chanceFree: free, undo: null }
+    : { ...play, chest: pile, chestFree: free, undo: null };
+}
+
+/** Debug / manual testing: return a held Get Out of Jail Free card to the bottom of its deck. */
+export function debugReturnJailCard(
+  play: OpolyPlay,
+  playerId: string,
+  deck: 'chance' | 'chest',
+): OpolyPlay | { error: string } {
+  const free = { ...(deck === 'chance' ? play.chanceFree : play.chestFree) };
+  const held = countOf(free, playerId);
+  if (held <= 0) return { error: 'That player does not hold that card.' };
+  setHeldCount(free, playerId, held - 1);
+  const pile = [...(deck === 'chance' ? play.chance : play.chest), 'jail-free'];
+  return deck === 'chance'
+    ? { ...play, chance: pile, chanceFree: free, undo: null }
+    : { ...play, chest: pile, chestFree: free, undo: null };
+}
+
 /**
  * Debug / manual testing: set houses (1–4) or a hotel (5) on an owned street.
  * Skips even-build and cash, but still respects bank supply.
@@ -2022,7 +2068,11 @@ export function turnPrompt(play: OpolyPlay, players: PlayPlayer[], events: Score
   if (play.jail[play.turn] != null) {
     const spent = play.jail[play.turn] ?? 0;
     const left = 3 - spent;
-    return `${name} is in jail. ${left === 1 ? 'One roll left, then pay $50.' : `${left} rolls to throw doubles.`}`;
+    const rolls =
+      left === 1 ? 'One roll left, then pay $50.' : `${left} rolls to throw doubles.`;
+    const card =
+      jailCardsHeld(play, play.turn).total > 0 ? ' Or use Get Out of Jail Free.' : '';
+    return `${name} is in jail. ${rolls}${card}`;
   }
   if (play.doubles > 0) return `${name} rolled doubles. Roll again.`;
   return `${name}'s turn. Roll the dice.`;

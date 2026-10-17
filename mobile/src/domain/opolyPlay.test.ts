@@ -15,6 +15,8 @@ import {
   createOpolyPlay,
   debugAssignGroup,
   debugAssignProperty,
+  debugGiveJailCard,
+  debugReturnJailCard,
   debugSetBuilding,
   declineProperty,
   declareBankruptcy,
@@ -503,8 +505,28 @@ describe('monopoly play', () => {
     assert.ok(!('error' in used));
     if ('error' in used) return;
     assert.equal(used.play.jail.ada, undefined);
-    assert.equal(used.play.chanceFree.ada, 0);
+    assert.equal(used.play.chanceFree.ada, undefined);
     assert.equal(used.play.chance.at(-1), 'jail-free');
+  });
+
+  it('mentions Get Out of Jail Free while jailed with a kept card', () => {
+    const marked = [{ id: 'ada', name: 'Ada', token: 'car' }];
+    const jailed = table({ turn: 'ada', jail: { ada: 0 }, chanceFree: { ada: 1 } });
+    assert.match(turnPrompt(jailed, marked), /Get Out of Jail Free/);
+  });
+
+  it('debug grants and returns Get Out of Jail Free cards', () => {
+    const play = table({ chance: ['go', 'jail-free'], chest: ['jail-free'] });
+    const given = debugGiveJailCard(play, 'ada', 'chance');
+    assert.ok(!('error' in given));
+    if ('error' in given) return;
+    assert.equal(given.chanceFree.ada, 1);
+    assert.equal(given.chance.includes('jail-free'), false);
+    const returned = debugReturnJailCard(given, 'ada', 'chance');
+    assert.ok(!('error' in returned));
+    if ('error' in returned) return;
+    assert.equal(returned.chanceFree.ada, undefined);
+    assert.equal(returned.chance.at(-1), 'jail-free');
   });
 
   it('puts the piece before the player name', () => {

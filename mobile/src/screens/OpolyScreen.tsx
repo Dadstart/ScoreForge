@@ -62,9 +62,12 @@ import {
   createOpolyPlay,
   debugAssignGroup,
   debugAssignProperty,
+  debugGiveJailCard,
+  debugReturnJailCard,
   debugSetBuilding,
   declineProperty,
   declareBankruptcy,
+  jailCardsHeld,
   landedPropertyId,
   cashSplashes,
   mortgageProperty,
@@ -159,6 +162,10 @@ export function OpolyScreen({ navigation, route }: Props) {
   const [tradeTakeCash, setTradeTakeCash] = useState('');
   const [tradeGiveDeeds, setTradeGiveDeeds] = useState<string[]>([]);
   const [tradeTakeDeeds, setTradeTakeDeeds] = useState<string[]>([]);
+  const [tradeGiveChance, setTradeGiveChance] = useState(0);
+  const [tradeGiveChest, setTradeGiveChest] = useState(0);
+  const [tradeTakeChance, setTradeTakeChance] = useState(0);
+  const [tradeTakeChest, setTradeTakeChest] = useState(0);
   const [payerId, setPayerId] = useState<string | null>(null);
   const [receiverId, setReceiverId] = useState(BANK_PARTY_ID);
   const [propertyId, setPropertyId] = useState(properties[0].id);
@@ -660,7 +667,9 @@ export function OpolyScreen({ navigation, route }: Props) {
   const pendingAuction = play.pending?.kind === 'auction' ? play.pending : null;
   const auctionBidderId = pendingAuction?.bidderIds[pendingAuction.bidderIndex] ?? null;
   const cardOpen = pendingCard != null && closedCard !== cardKey(pendingCard);
-  const jailCards = (play.chanceFree[turnId] ?? 0) + (play.chestFree[turnId] ?? 0);
+  const jailCards = jailCardsHeld(play, turnId).total;
+  const partnerJail = tradePartner ? jailCardsHeld(play, tradePartner) : { chance: 0, chest: 0, total: 0 };
+  const turnJail = jailCardsHeld(play, turnId);
   const raisingFunds = canRaiseFunds(play);
   const canDevelop = canBank && !play.pending && play.doubles === 0;
   const canFund = canBank && (canDevelop || raisingFunds);
@@ -707,13 +716,15 @@ export function OpolyScreen({ navigation, route }: Props) {
         }}
         disabled={!play.undo && game.events.length === 0}
       />
-      {inJail && !play.pending && turnCash > 0 ? (
+      {inJail && !play.pending ? (
         <>
-          <Button
-            label="Pay the bank $50"
-            disabled={!canBank || turnCash < 50}
-            onPress={() => void commitPlay(payToLeaveJail(play, game.tokenSpaces ?? {}, game.players, turnCash))}
-          />
+          {turnCash > 0 ? (
+            <Button
+              label="Pay the bank $50"
+              disabled={!canBank || turnCash < 50}
+              onPress={() => void commitPlay(payToLeaveJail(play, game.tokenSpaces ?? {}, game.players, turnCash))}
+            />
+          ) : null}
           {jailCards > 0 ? (
             <Button
               label="Use Get Out of Jail Free"
@@ -809,6 +820,34 @@ export function OpolyScreen({ navigation, route }: Props) {
                 }}
                 onSetBuilding={async (propertyId, level) => {
                   const next = debugSetBuilding(play, propertyId, level);
+                  if ('error' in next) {
+                    setError(next.error);
+                    return;
+                  }
+                  await applyGame(
+                    (g) => {
+                      g.monopoly = next;
+                      return g;
+                    },
+                    { suppressWin: true },
+                  );
+                }}
+                onGiveJailCard={async (playerId, deck) => {
+                  const next = debugGiveJailCard(play, playerId, deck);
+                  if ('error' in next) {
+                    setError(next.error);
+                    return;
+                  }
+                  await applyGame(
+                    (g) => {
+                      g.monopoly = next;
+                      return g;
+                    },
+                    { suppressWin: true },
+                  );
+                }}
+                onReturnJailCard={async (playerId, deck) => {
+                  const next = debugReturnJailCard(play, playerId, deck);
                   if ('error' in next) {
                     setError(next.error);
                     return;
@@ -998,6 +1037,7 @@ export function OpolyScreen({ navigation, route }: Props) {
             const piece = playerToken(player?.token);
             const paying = standing.playerId === resolvedPayer;
             const holdings = properties.filter((entry) => play.owned[entry.id] === standing.playerId);
+            const freeCards = jailCardsHeld(play, standing.playerId);
             const cardFace = (
               <>
                 {editing ? (
@@ -1074,6 +1114,17 @@ export function OpolyScreen({ navigation, route }: Props) {
                 </View>
                 {standing.playerId === turnId && !complete && (!broke || play.pending != null) ? (
                   <Badge label="Turn" tone="accent" style={styles.tileBadge} />
+                ) : null}
+                {freeCards.total > 0 ? (
+                  <Badge
+                    label={
+                      freeCards.total === 1
+                        ? 'Get Out of Jail Free'
+                        : `Get Out of Jail Free ×${freeCards.total}`
+                    }
+                    tone="accent"
+                    style={styles.tileBadge}
+                  />
                 ) : null}
                 {broke ? <Badge label="Bankrupt" tone="danger" style={styles.tileBadge} /> : null}
                 {standing.isLeader && !broke ? (
@@ -1212,6 +1263,10 @@ export function OpolyScreen({ navigation, route }: Props) {
                 setTradePartnerId(id);
                 setTradeGiveDeeds([]);
                 setTradeTakeDeeds([]);
+                setTradeGiveChance(0);
+                setTradeGiveChest(0);
+                setTradeTakeChance(0);
+                setTradeTakeChest(0);
               }}
               centered
             />
@@ -1236,6 +1291,20 @@ export function OpolyScreen({ navigation, route }: Props) {
                     />
                   );
                 })}
+              {turnJail.chance > 0 ? (
+                <Button
+                  label={`${tradeGiveChance > 0 ? '✓ ' : ''}Chance jail card`}
+                  disabled={!canBank}
+                  onPress={() => setTradeGiveChance((current) => (current > 0 ? 0 : 1))}
+                />
+              ) : null}
+              {turnJail.chest > 0 ? (
+                <Button
+                  label={`${tradeGiveChest > 0 ? '✓ ' : ''}Chest jail card`}
+                  disabled={!canBank}
+                  onPress={() => setTradeGiveChest((current) => (current > 0 ? 0 : 1))}
+                />
+              ) : null}
             </View>
             <Field
               value={tradeGiveCash}
@@ -1266,6 +1335,20 @@ export function OpolyScreen({ navigation, route }: Props) {
                     />
                   );
                 })}
+              {partnerJail.chance > 0 ? (
+                <Button
+                  label={`${tradeTakeChance > 0 ? '✓ ' : ''}Chance jail card`}
+                  disabled={!canBank}
+                  onPress={() => setTradeTakeChance((current) => (current > 0 ? 0 : 1))}
+                />
+              ) : null}
+              {partnerJail.chest > 0 ? (
+                <Button
+                  label={`${tradeTakeChest > 0 ? '✓ ' : ''}Chest jail card`}
+                  disabled={!canBank}
+                  onPress={() => setTradeTakeChest((current) => (current > 0 ? 0 : 1))}
+                />
+              ) : null}
             </View>
             <Field
               value={tradeTakeCash}
@@ -1290,12 +1373,12 @@ export function OpolyScreen({ navigation, route }: Props) {
                       counterpartyId: tradePartner,
                       givePropertyIds: tradeGiveDeeds,
                       giveCash: parsePositiveAmount(tradeGiveCash) ?? 0,
-                      giveChanceFree: 0,
-                      giveChestFree: 0,
+                      giveChanceFree: tradeGiveChance,
+                      giveChestFree: tradeGiveChest,
                       takePropertyIds: tradeTakeDeeds,
                       takeCash: parsePositiveAmount(tradeTakeCash) ?? 0,
-                      takeChanceFree: 0,
-                      takeChestFree: 0,
+                      takeChanceFree: tradeTakeChance,
+                      takeChestFree: tradeTakeChest,
                     },
                     game.events,
                   ),
@@ -1304,6 +1387,10 @@ export function OpolyScreen({ navigation, route }: Props) {
                 setTradeTakeDeeds([]);
                 setTradeGiveCash('');
                 setTradeTakeCash('');
+                setTradeGiveChance(0);
+                setTradeGiveChest(0);
+                setTradeTakeChance(0);
+                setTradeTakeChest(0);
               }}
             />
           </Card>

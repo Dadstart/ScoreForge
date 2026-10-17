@@ -28,6 +28,8 @@ type Props = {
   onAssignProperty: (propertyId: string, ownerId: string | null) => void | Promise<void>;
   onAssignGroup: (group: string, ownerId: string | null) => void | Promise<void>;
   onSetBuilding: (propertyId: string, level: number) => void | Promise<void>;
+  onGiveJailCard: (playerId: string, deck: 'chance' | 'chest') => void | Promise<void>;
+  onReturnJailCard: (playerId: string, deck: 'chance' | 'chest') => void | Promise<void>;
 };
 
 function propertyGroups(): { id: string; label: string }[] {
@@ -63,6 +65,8 @@ export function OpolyDebugMenu({
   onAssignProperty,
   onAssignGroup,
   onSetBuilding,
+  onGiveJailCard,
+  onReturnJailCard,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [playerId, setPlayerId] = useState(players[0]?.id ?? '');
@@ -87,6 +91,10 @@ export function OpolyDebugMenu({
   const selectedProperty = properties.find((entry) => entry.id === propertyId) ?? properties[0];
   const buildingLevel = selectedProperty ? play.houses[selectedProperty.id] ?? 0 : 0;
   const canBuildSelected = Boolean(selectedProperty && selectedProperty.kind === 'street' && play.owned[selectedProperty.id]);
+  const chanceHeld = selectedPlayer ? play.chanceFree[selectedPlayer.id] ?? 0 : 0;
+  const chestHeld = selectedPlayer ? play.chestFree[selectedPlayer.id] ?? 0 : 0;
+  const chanceInDeck = play.chance.includes('jail-free');
+  const chestInDeck = play.chest.includes('jail-free');
 
   const close = () => {
     setOpen(false);
@@ -286,6 +294,55 @@ export function OpolyDebugMenu({
                   label="Sell"
                   disabled={disabled || !canBuildSelected || buildingLevel <= 0}
                   onPress={() => void setBuilding(buildingLevel - 1)}
+                />
+              </View>
+
+              <Text style={styles.section}>Get Out of Jail Free</Text>
+              <Text style={styles.meta}>
+                {selectedPlayer
+                  ? `${playerLabel(selectedPlayer.name, selectedPlayer.token)} holds Chance ×${chanceHeld}, Chest ×${chestHeld}.`
+                  : 'Pick a player to grant or return a jail card.'}
+              </Text>
+              <View style={styles.row}>
+                <Button
+                  label="Give Chance card"
+                  variant="primary"
+                  disabled={disabled || !selectedPlayer || !chanceInDeck}
+                  onPress={async () => {
+                    if (!selectedPlayer) return;
+                    await onGiveJailCard(selectedPlayer.id, 'chance');
+                    setMessage(`Gave Chance Get Out of Jail Free to ${playerLabel(selectedPlayer.name, selectedPlayer.token)}.`);
+                  }}
+                />
+                <Button
+                  label="Return Chance"
+                  disabled={disabled || !selectedPlayer || chanceHeld <= 0}
+                  onPress={async () => {
+                    if (!selectedPlayer) return;
+                    await onReturnJailCard(selectedPlayer.id, 'chance');
+                    setMessage('Returned Chance Get Out of Jail Free to the deck.');
+                  }}
+                />
+              </View>
+              <View style={styles.row}>
+                <Button
+                  label="Give Chest card"
+                  variant="primary"
+                  disabled={disabled || !selectedPlayer || !chestInDeck}
+                  onPress={async () => {
+                    if (!selectedPlayer) return;
+                    await onGiveJailCard(selectedPlayer.id, 'chest');
+                    setMessage(`Gave Chest Get Out of Jail Free to ${playerLabel(selectedPlayer.name, selectedPlayer.token)}.`);
+                  }}
+                />
+                <Button
+                  label="Return Chest"
+                  disabled={disabled || !selectedPlayer || chestHeld <= 0}
+                  onPress={async () => {
+                    if (!selectedPlayer) return;
+                    await onReturnJailCard(selectedPlayer.id, 'chest');
+                    setMessage('Returned Chest Get Out of Jail Free to the deck.');
+                  }}
                 />
               </View>
 
