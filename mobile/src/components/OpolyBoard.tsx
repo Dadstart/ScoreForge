@@ -48,7 +48,7 @@ import {
 } from '../domain/opolyBoard';
 import { contrastInk, getProperty, playerLabel, playerToken } from '../domain/opoly';
 import { facingPropertyLabel, fitBoardLabel, fitSize } from '../domain/opolyLabel';
-import { cameraAlong, centeredZoomShift, clampPan, clampZoom, frameToken, panForZoom, stepZoom, twistStep } from '../domain/opolyZoom';
+import { cameraAlong, centeredZoomShift, clampPan, clampZoom, frameToken, panForWheel, panForZoom, stepZoom, twistStep } from '../domain/opolyZoom';
 import { diceMotionMs, diceUseFlatCamera, FlatDice, OpolyDice } from './OpolyDice';
 import { CARD_REVEAL_MS, OpolyCardTable } from './OpolyCards';
 import { MoneyBills, type MoneyFlight } from './MoneyBills';
@@ -425,11 +425,28 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
       if (zoomRef.current <= 1 || !touch || event.touches.length !== 1) return;
       if (touch.clientX <= 28 && event.cancelable) event.preventDefault();
     };
+    let commit: ReturnType<typeof setTimeout> | undefined;
+    const onWheel = (event: WheelEvent) => {
+      if (zoomRef.current <= 1 || event.ctrlKey || event.metaKey) return;
+      if (event.deltaX === 0 && event.deltaY === 0) return;
+      event.preventDefault();
+      stopCamera();
+      const next = panForWheel(panRef.current, event, zoomRef.current, viewportRefSize.current);
+      if (!next || (next.x === panRef.current.x && next.y === panRef.current.y)) return;
+      writePan(next);
+      if (commit) clearTimeout(commit);
+      commit = setTimeout(() => {
+        setPan({ x: panRef.current.x, y: panRef.current.y });
+      }, 80);
+    };
     node.addEventListener('touchmove', blockMove, { passive: false });
     node.addEventListener('touchstart', blockEdge, { passive: false });
+    node.addEventListener('wheel', onWheel, { passive: false });
     return () => {
+      if (commit) clearTimeout(commit);
       node.removeEventListener('touchmove', blockMove);
       node.removeEventListener('touchstart', blockEdge);
+      node.removeEventListener('wheel', onWheel);
     };
   }, []);
 
@@ -822,7 +839,9 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
       </Animated.View>
       <Text style={styles.phoneHint}>
         {zoom > 1
-          ? 'Drag the board to look around. Pinch to zoom, or twist with two fingers to turn it.'
+          ? Platform.OS === 'web'
+            ? 'Drag or roll the mouse wheel to look around. Pinch to zoom, or twist with two fingers to turn it.'
+            : 'Drag the board to look around. Pinch to zoom, or twist with two fingers to turn it.'
           : 'Twist with two fingers to turn the board.'}
       </Text>
     </View>

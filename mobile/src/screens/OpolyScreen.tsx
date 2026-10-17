@@ -668,6 +668,10 @@ export function OpolyScreen({ navigation, route }: Props) {
   const auctionBidderId = pendingAuction?.bidderIds[pendingAuction.bidderIndex] ?? null;
   const cardOpen = pendingCard != null && closedCard !== cardKey(pendingCard);
   const jailCards = jailCardsHeld(play, turnId).total;
+  const tradePartner =
+    tradePartnerId && game.players.some((player) => player.id === tradePartnerId)
+      ? tradePartnerId
+      : game.players.find((player) => player.id !== turnId)?.id ?? null;
   const partnerJail = tradePartner ? jailCardsHeld(play, tradePartner) : { chance: 0, chest: 0, total: 0 };
   const turnJail = jailCardsHeld(play, turnId);
   const raisingFunds = canRaiseFunds(play);
@@ -677,10 +681,6 @@ export function OpolyScreen({ navigation, route }: Props) {
   const buildProperty = getProperty(buildPropertyId ?? '');
   const parsedAuctionBid = parsePositiveAmount(auctionBid);
   const taxWorth = play.pending?.kind === 'tax' ? netWorth(play, turnId, game.events) : 0;
-  const tradePartner =
-    tradePartnerId && game.players.some((player) => player.id === tradePartnerId)
-      ? tradePartnerId
-      : game.players.find((player) => player.id !== turnId)?.id ?? null;
   const quoteDice = diceTotal ?? 7;
   const quoteOwner = play.owned[property.id];
   const quoteRentAmount = quoteOwner ? rentDue(play, property.id, quoteDice) : null;
