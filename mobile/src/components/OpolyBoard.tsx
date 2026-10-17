@@ -13,7 +13,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import Svg, { Circle, Path, Polygon, Rect } from 'react-native-svg';
 import type { Player } from '../domain/models';
 import { boardCamera, projectTiltedPoint } from '../domain/dieProjection';
 import {
@@ -36,6 +36,7 @@ import {
   ownerMarkPlacement,
   buildingMarkPlacement,
   buildingMarkBand,
+  BUILDING_VISUAL_SCALE,
   spaceToCell,
   tokenFacingDegrees,
   followRoute,
@@ -1343,20 +1344,30 @@ function BoardCanvas({
                   { pointerEvents: 'none' },
                 ]}
               >
-                {marks.map((mark, index) => (
-                  <View
-                    key={`${mark.kind}-${index}`}
-                    style={[
-                      mark.kind === 'hotel' ? styles.hotelMark : styles.houseMark,
-                      {
-                        left: mark.x,
-                        top: mark.y,
-                        width: mark.w,
-                        height: mark.h,
-                      },
-                    ]}
-                  />
-                ))}
+                {marks.map((mark, index) => {
+                  const draw = mark.w * BUILDING_VISUAL_SCALE;
+                  const inset = (draw - mark.w) / 2;
+                  return (
+                    <View
+                      key={`${mark.kind}-${index}`}
+                      style={[
+                        styles.buildingMark,
+                        {
+                          left: mark.x - inset,
+                          top: mark.y - inset,
+                          width: draw,
+                          height: draw,
+                        },
+                      ]}
+                    >
+                      {mark.kind === 'hotel' ? (
+                        <HotelSvg size={draw} facing={nameFacing(row, col)} />
+                      ) : (
+                        <HouseSvg size={draw} facing={nameFacing(row, col)} />
+                      )}
+                    </View>
+                  );
+                })}
               </View>
             );
           })
@@ -1883,6 +1894,44 @@ function TrainSvg({ width, height }: { width: number; height: number }) {
       <Rect x="7" y="12" width="8" height="6" rx="1" fill="#b9d7ea" />
       <Circle cx="50" cy="22" r="1.4" fill="#f2d36b" />
     </Svg>
+  );
+}
+
+/** Monopoly-style green house: peaked roof, front, and right face. */
+function HouseSvg({ size, facing }: { size: number; facing: ReturnType<typeof nameFacing> }) {
+  return (
+    <View style={{ width: size, height: size, transform: [{ rotate: facing }] }}>
+      <Svg width={size} height={size} viewBox="0 0 40 40">
+        <Polygon points="6,38 30,38 38,32 14,32" fill="rgba(8,20,12,0.28)" />
+        <Polygon points="28,16 38,10 38,32 28,38" fill="#0F5A2C" />
+        <Polygon points="4,16 28,16 28,38 4,38" fill="#1F9A45" />
+        <Polygon points="28,16 38,10 24,1 18,6" fill="#0A3D1E" />
+        <Polygon points="2,16 18,6 28,16" fill="#2FBF5A" />
+        <Polygon points="18,6 24,1 28,16" fill="#178A3C" />
+        <Rect x="12" y="24" width="8" height="14" fill="#0A3D1E" />
+        <Rect x="22" y="22" width="7" height="7" fill="#C8E8D4" />
+      </Svg>
+    </View>
+  );
+}
+
+/** Monopoly-style red hotel: taller block with roof slab and windows. */
+function HotelSvg({ size, facing }: { size: number; facing: ReturnType<typeof nameFacing> }) {
+  return (
+    <View style={{ width: size, height: size, transform: [{ rotate: facing }] }}>
+      <Svg width={size} height={size} viewBox="0 0 40 40">
+        <Polygon points="6,39 29,39 38,33 15,33" fill="rgba(20,6,6,0.3)" />
+        <Polygon points="26,8 38,2 38,33 26,39" fill="#7A1612" />
+        <Polygon points="4,8 26,8 26,39 4,39" fill="#D03228" />
+        <Polygon points="2,8 26,8 38,2 14,2" fill="#9A1E18" />
+        <Polygon points="14,2 38,2 36,0 12,0" fill="#B8261E" />
+        <Rect x="8" y="12" width="7" height="6" fill="#F0D9A0" />
+        <Rect x="17" y="12" width="7" height="6" fill="#F0D9A0" />
+        <Rect x="8" y="21" width="7" height="6" fill="#F0D9A0" />
+        <Rect x="17" y="21" width="7" height="6" fill="#F0D9A0" />
+        <Rect x="11" y="30" width="8" height="9" fill="#5C100E" />
+      </Svg>
+    </View>
   );
 }
 
@@ -2542,19 +2591,9 @@ const styles = StyleSheet.create({
     zIndex: 3,
     overflow: 'visible',
   },
-  houseMark: {
+  buildingMark: {
     position: 'absolute',
-    backgroundColor: '#1B7A3D',
-    borderRadius: 1,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#0E4A24',
-  },
-  hotelMark: {
-    position: 'absolute',
-    backgroundColor: '#B3261E',
-    borderRadius: 1,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#6E1612',
+    overflow: 'visible',
   },
   token: {
     position: 'absolute',

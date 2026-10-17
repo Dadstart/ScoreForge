@@ -476,9 +476,11 @@ export type BuildingMark = {
  * House/hotel markers sit in the color bar on the inward edge of a street tile.
  * Levels 1–4 place that many houses; level 5 places one hotel.
  */
-const BUILDING_MARK_PAD = 1;
-const BUILDING_GAP = 2;
-const MIN_HOUSE = 8;
+const BUILDING_MARK_PAD = 0;
+const BUILDING_GAP = 1;
+const MIN_HOUSE = 10;
+/** Drawn larger than the layout slot so the 2.5D pieces read clearly. */
+export const BUILDING_VISUAL_SCALE = 1.65;
 
 /** Along-edge size so four houses (with gaps) span the property width. */
 export function buildingHouseAlong(along: number): number {
@@ -489,7 +491,7 @@ export function buildingHouseAlong(along: number): number {
 /** Square side for a house/hotel — four-across width, capped to fit the color bar. */
 export function buildingMarkSize(along: number, inward: number): number {
   const bar = colorBarThickness(inward);
-  const depthLimit = Math.max(1, bar - BUILDING_MARK_PAD * 2);
+  const depthLimit = Math.max(1, bar - 2);
   return Math.min(buildingHouseAlong(along), depthLimit);
 }
 
@@ -497,7 +499,7 @@ export function buildingMarkSize(along: number, inward: number): number {
 export function buildingMarkBand(level = 1, along = 0, inward = 0): number {
   if (level <= 0) return 0;
   const size = along > 0 && inward > 0 ? buildingMarkSize(along, inward) : MIN_HOUSE;
-  return size + BUILDING_MARK_PAD * 2;
+  return size * BUILDING_VISUAL_SCALE + 2;
 }
 
 /**
