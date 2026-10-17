@@ -464,6 +464,73 @@ export function ownerMarkPlacement(row: number, col: number, width: number, heig
   return { x: -(size + gap), y: (height - size) / 2, size, rotate: '90deg', flipX: true };
 }
 
+export type BuildingMark = {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  kind: 'house' | 'hotel';
+};
+
+/**
+ * House/hotel markers sit in the color bar on the inward edge of a street tile.
+ * Levels 1–4 place that many houses; level 5 places one hotel.
+ */
+export function buildingMarkPlacement(
+  row: number,
+  col: number,
+  width: number,
+  height: number,
+  level: number,
+): BuildingMark[] {
+  const n = Math.max(0, Math.min(5, Math.trunc(level)));
+  if (n <= 0) return [];
+  const horizontal = row === 0 || row === 10;
+  const along = horizontal ? width : height;
+  const inward = horizontal ? height : width;
+  const bar = colorBarThickness(inward);
+  const pad = Math.max(1, Math.round(Math.min(along, bar) * 0.1));
+  const usable = Math.max(1, along - pad * 2);
+  const barInner = Math.max(1, bar - pad * 2);
+
+  const place = (alongOffset: number, depthOffset: number, markW: number, markH: number, kind: 'house' | 'hotel'): BuildingMark => {
+    if (row === 10) {
+      // Bottom row: color bar along the top edge.
+      return { x: alongOffset, y: depthOffset, w: markW, h: markH, kind };
+    }
+    if (row === 0) {
+      // Top row: color bar along the bottom edge.
+      return { x: alongOffset, y: height - bar + depthOffset, w: markW, h: markH, kind };
+    }
+    if (col === 0) {
+      // Left column: color bar along the right edge; along runs top → bottom.
+      return { x: width - bar + depthOffset, y: alongOffset, w: markH, h: markW, kind };
+    }
+    // Right column: color bar along the left edge.
+    return { x: depthOffset, y: alongOffset, w: markH, h: markW, kind };
+  };
+
+  if (n >= 5) {
+    const h = Math.min(barInner, Math.max(5, Math.round(barInner * 0.7)));
+    const w = Math.min(usable, Math.max(Math.round(h * 1.7), Math.round(usable * 0.5)));
+    return [place((along - w) / 2, pad + (barInner - h) / 2, w, h, 'hotel')];
+  }
+
+  const gap = n > 1 ? Math.max(1, Math.round(usable * 0.05)) : 0;
+  const houseAlong = Math.min(
+    Math.floor((usable - gap * (n - 1)) / n),
+    Math.max(4, Math.round(barInner * 0.9)),
+  );
+  const houseDepth = Math.min(barInner, Math.max(4, houseAlong));
+  const total = houseAlong * n + gap * (n - 1);
+  const start = (along - total) / 2;
+  const marks: BuildingMark[] = [];
+  for (let i = 0; i < n; i += 1) {
+    marks.push(place(start + i * (houseAlong + gap), pad + (barInner - houseDepth) / 2, houseAlong, houseDepth, 'house'));
+  }
+  return marks;
+}
+
 export function fractionToIndex(fraction: number): number {
   if (fraction <= TRACK_DEPTH) return 0;
   if (fraction >= 1 - TRACK_DEPTH) return 10;

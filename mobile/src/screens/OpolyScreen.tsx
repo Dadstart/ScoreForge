@@ -13,6 +13,8 @@ import { PropertyMentions, PropertyName } from '../components/PropertyMention';
 import { TokenPicker } from '../components/TokenPicker';
 import { GameHelp } from '../components/GameHelp';
 import { OptionsMenu } from '../components/OptionsMenu';
+import { OpolyDebugMenu } from '../components/OpolyDebugMenu';
+import { OpolyBuildSheet } from '../components/OpolyBuildSheet';
 import { HomeButton } from '../components/HomeButton';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Card, Field, Screen } from '../components/ui';
@@ -45,8 +47,10 @@ import { rollOpolyDice, type DiceRoll } from '../domain/opolyDice';
 import {
   applyTrade,
   bidAuction,
+  buildGroupHouses,
   buildHouse,
   buildingCost,
+  buildingStock,
   buyProperty,
   canBuild,
   canMortgage,
@@ -56,6 +60,9 @@ import {
   acceptCard,
   chooseIncomeTax,
   createOpolyPlay,
+  debugAssignGroup,
+  debugAssignProperty,
+  debugSetBuilding,
   declineProperty,
   declareBankruptcy,
   landedPropertyId,
@@ -186,6 +193,7 @@ export function OpolyScreen({ navigation, route }: Props) {
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
   const [confirmingRemoveId, setConfirmingRemoveId] = useState<string | null>(null);
   const [addingPlayer, setAddingPlayer] = useState(false);
+  const [buildPropertyId, setBuildPropertyId] = useState<string | null>(null);
   const [nameDraft, setNameDraft] = useState('');
   const [cashDraft, setCashDraft] = useState('');
   const [tokenDraft, setTokenDraft] = useState(INITIAL_TOKEN);
@@ -340,6 +348,25 @@ export function OpolyScreen({ navigation, route }: Props) {
       if (!saved) declaredWin.current = null;
     });
   }, [game, snapshot?.isComplete]);
+
+  const developTurnId = play?.turn ?? '';
+  const canDevelopBoard =
+    Boolean(play) &&
+    Boolean(snapshot) &&
+    !snapshot?.isComplete &&
+    play?.pending == null &&
+    (play?.doubles ?? 0) === 0;
+  const selectablePropertyIds = useMemo(() => {
+    if (!play || !canDevelopBoard || !developTurnId) return new Set<string>();
+    const ids = new Set<string>();
+    for (const entry of properties) {
+      if (entry.kind !== 'street') continue;
+      if (play.owned[entry.id] !== developTurnId) continue;
+      if (!ownsOpoly(play, developTurnId, entry.group)) continue;
+      ids.add(entry.id);
+    }
+    return ids;
+  }, [canDevelopBoard, play, developTurnId]);
 
   if (!game || !template || !snapshot || !play) {
     return (
@@ -637,6 +664,8 @@ export function OpolyScreen({ navigation, route }: Props) {
   const raisingFunds = canRaiseFunds(play);
   const canDevelop = canBank && !play.pending && play.doubles === 0;
   const canFund = canBank && (canDevelop || raisingFunds);
+  const stock = buildingStock(play);
+  const buildProperty = getProperty(buildPropertyId ?? '');
   const parsedAuctionBid = parsePositiveAmount(auctionBid);
   const taxWorth = play.pending?.kind === 'tax' ? netWorth(play, turnId, game.events) : 0;
   const tradePartner =
@@ -730,6 +759,70 @@ export function OpolyScreen({ navigation, route }: Props) {
           <View style={styles.headerTools}>
             <GameHelp templateId="monopoly" />
             <OptionsMenu />
+            {typeof __DEV__ !== 'undefined' && __DEV__ ? (
+              <OpolyDebugMenu
+                players={game.players}
+                events={game.events}
+                play={play}
+                disabled={!canBank}
+                onSetCash={async (playerId, nextCash) => {
+                  const current = cashOf(game.events, playerId);
+                  const delta = nextCash - current;
+                  await applyGame(
+                    (g) => {
+                      if (delta !== 0) {
+                        g.events.push(createScoreEvent(playerId, delta));
+                        if (g.monopoly) g.monopoly = undoForCash(g.monopoly, g.tokenSpaces ?? {}, 1);
+                      }
+                      return g;
+                    },
+                    { suppressWin: true },
+                  );
+                }}
+                onAssignProperty={async (propertyId, ownerId) => {
+                  const next = debugAssignProperty(play, propertyId, ownerId);
+                  if ('error' in next) {
+                    setError(next.error);
+                    return;
+                  }
+                  await applyGame(
+                    (g) => {
+                      g.monopoly = next;
+                      return g;
+                    },
+                    { suppressWin: true },
+                  );
+                }}
+                onAssignGroup={async (group, ownerId) => {
+                  const next = debugAssignGroup(play, group, ownerId);
+                  if ('error' in next) {
+                    setError(next.error);
+                    return;
+                  }
+                  await applyGame(
+                    (g) => {
+                      g.monopoly = next;
+                      return g;
+                    },
+                    { suppressWin: true },
+                  );
+                }}
+                onSetBuilding={async (propertyId, level) => {
+                  const next = debugSetBuilding(play, propertyId, level);
+                  if ('error' in next) {
+                    setError(next.error);
+                    return;
+                  }
+                  await applyGame(
+                    (g) => {
+                      g.monopoly = next;
+                      return g;
+                    },
+                    { suppressWin: true },
+                  );
+                }}
+              />
+            ) : null}
             <ShareCodePanel shareCode={game.shareCode} />
             <HomeButton onPress={() => navigation.navigate('Home')} />
           </View>
@@ -745,6 +838,7 @@ export function OpolyScreen({ navigation, route }: Props) {
           footer={tableActions}
           players={game.players}
           owned={play.owned}
+          houses={play.houses}
           tokenSpaces={shownSpaces}
           inJail={play.jail}
           tokenRoute={tokenRoute}
@@ -761,6 +855,11 @@ export function OpolyScreen({ navigation, route }: Props) {
           onDragging={() => {}}
           onZoomed={setBoardZoomed}
           focusSpace={shownSpaces[turnId] ?? 0}
+          selectablePropertyIds={selectablePropertyIds}
+          onSelectProperty={(id) => {
+            setError(null);
+            setBuildPropertyId(id);
+          }}
           roll={(
             <View style={[styles.rollRow, { pointerEvents: 'box-none' }]}>
               <Button
@@ -1239,6 +1338,9 @@ export function OpolyScreen({ navigation, route }: Props) {
         {ownedDeeds.length > 0 ? (
           <Card style={styles.panel}>
             <Text style={[typography.section, styles.centerText]}>Deeds</Text>
+            <Text style={styles.bannerNote}>
+              {`Houses left: ${stock.houses} · Hotels left: ${stock.hotels}`}
+            </Text>
             {ownedDeeds.map((entry) => {
               const ownerId = play.owned[entry.id];
               const owner = game.players.find((player) => player.id === ownerId);
@@ -1344,6 +1446,32 @@ export function OpolyScreen({ navigation, route }: Props) {
           const saved = await addPlayerToGame(game.shareCode, name, template.maxPlayers);
           setGame((current) => preferNewerGame(current, saved));
           setError(null);
+        }}
+      />
+      <OpolyBuildSheet
+        visible={buildProperty != null && canDevelop}
+        property={buildProperty ?? null}
+        play={play}
+        cash={turnCash}
+        disabled={!canDevelop}
+        onClose={() => setBuildPropertyId(null)}
+        onBuildOne={(id) => {
+          const result = buildHouse(play, game.tokenSpaces ?? {}, game.players, id, turnCash);
+          if ('error' in result) {
+            setError(result.error);
+            return;
+          }
+          setBuildPropertyId(null);
+          void commitPlay(result);
+        }}
+        onBuildGroup={(group) => {
+          const result = buildGroupHouses(play, game.tokenSpaces ?? {}, game.players, group, turnCash);
+          if ('error' in result) {
+            setError(result.error);
+            return;
+          }
+          setBuildPropertyId(null);
+          void commitPlay(result);
         }}
       />
 

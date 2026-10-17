@@ -22,6 +22,7 @@ import {
   layoutVisitingTokens,
   monopolyDieSize,
   ownerMarkPlacement,
+  buildingMarkPlacement,
   boardTurnForSpace,
   pointHeldOnTurn,
   nameFacing,
@@ -300,6 +301,54 @@ describe('ownerMarkPlacement', () => {
     for (const spot of [bottom, top, left, right]) {
       const along = spot.row === 0 || spot.row === 10 ? spot.width : spot.height;
       assert.ok(Math.abs(spot.size / along - 0.62) < 0.05);
+    }
+  });
+});
+
+describe('buildingMarkPlacement', () => {
+  const board = 720;
+
+  function marks(index: number, level: number) {
+    const { row, col } = spaceToCell(index);
+    const cell = cellBox(row, col);
+    const width = cell.w * board;
+    const height = cell.h * board;
+    return { row, col, width, height, marks: buildingMarkPlacement(row, col, width, height, level) };
+  }
+
+  function inBar(spot: ReturnType<typeof marks>, mark: { x: number; y: number; w: number; h: number }) {
+    const bar = colorBarThickness(spot.row === 0 || spot.row === 10 ? spot.height : spot.width);
+    if (spot.row === 10) {
+      assert.ok(mark.y >= 0 && mark.y + mark.h <= bar + 0.5);
+      assert.ok(mark.x >= 0 && mark.x + mark.w <= spot.width + 0.5);
+      return;
+    }
+    if (spot.row === 0) {
+      assert.ok(mark.y + mark.h <= spot.height + 0.5 && mark.y >= spot.height - bar - 0.5);
+      assert.ok(mark.x >= 0 && mark.x + mark.w <= spot.width + 0.5);
+      return;
+    }
+    if (spot.col === 0) {
+      assert.ok(mark.x + mark.w <= spot.width + 0.5 && mark.x >= spot.width - bar - 0.5);
+      assert.ok(mark.y >= 0 && mark.y + mark.h <= spot.height + 0.5);
+      return;
+    }
+    assert.ok(mark.x >= 0 && mark.x + mark.w <= bar + 0.5);
+    assert.ok(mark.y >= 0 && mark.y + mark.h <= spot.height + 0.5);
+  }
+
+  it('places houses and a hotel inside the color bar on every edge', () => {
+    for (const index of [1, 21, 11, 39]) {
+      const empty = marks(index, 0);
+      assert.equal(empty.marks.length, 0);
+      const houses = marks(index, 3);
+      assert.equal(houses.marks.length, 3);
+      assert.ok(houses.marks.every((mark) => mark.kind === 'house'));
+      for (const mark of houses.marks) inBar(houses, mark);
+      const hotel = marks(index, 5);
+      assert.equal(hotel.marks.length, 1);
+      assert.equal(hotel.marks[0]?.kind, 'hotel');
+      inBar(hotel, hotel.marks[0]!);
     }
   });
 });

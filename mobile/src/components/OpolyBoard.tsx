@@ -34,6 +34,7 @@ import {
   nearestBoardTurn,
   nearestTokenFacing,
   ownerMarkPlacement,
+  buildingMarkPlacement,
   spaceToCell,
   tokenFacingDegrees,
   followRoute,
@@ -66,6 +67,8 @@ type Props = {
   players: Player[];
   /** Property id to the player who owns it. */
   owned?: Record<string, string>;
+  /** Property id to building level (1–4 houses, 5 hotel). */
+  houses?: Record<string, number>;
   tokenSpaces?: Record<string, number>;
   /** Players currently in jail, keyed by player id. Just Visiting is everyone else on that square. */
   inJail?: Record<string, number>;
@@ -88,6 +91,10 @@ type Props = {
   footer?: ReactNode;
   /** Space to face when nothing is moving. The side this space is on becomes the near edge. */
   focusSpace?: number;
+  /** Called when a selectable property cell is tapped. */
+  onSelectProperty?: (propertyId: string) => void;
+  /** Property ids that accept taps (e.g. streets you can develop on your turn). */
+  selectablePropertyIds?: ReadonlySet<string>;
 };
 
 /** Table angle. The near edge, where the piece is walking, is the large one. */
@@ -823,6 +830,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
 function BoardCanvas({
   players,
   owned,
+  houses,
   tokenSpaces,
   inJail,
   tokenRoute = null,
@@ -832,6 +840,8 @@ function BoardCanvas({
   chanceCount = 16,
   chestCount = 16,
   moneyFlights = NO_FLIGHTS,
+  onSelectProperty,
+  selectablePropertyIds,
   style,
   diceRoll = null,
   pinDice = false,
@@ -983,23 +993,24 @@ function BoardCanvas({
           }
         }
         const amount = priceLine > 0 ? space.tax : undefined;
-        return (
-          <View
-            key={space.index}
-            accessibilityLabel={space.name}
-            style={[
-              styles.cell,
-              { backgroundColor: spaceTint(space.name, property?.kind) },
-              isCorner ? null : spacePadding(row, col, padLane, barColor ? bar : 0, inward, isRailroad ? 0 : railCaption, isRailroad ? 0 : trainInset),
-              quarter && compact ? { overflow: 'visible' as const } : null,
-              {
-                left: `${frame.x * 100}%`,
-                top: `${frame.y * 100}%`,
-                width: `${frame.w * 100}%`,
-                height: `${frame.h * 100}%`,
-              },
-            ]}
-          >
+        const propertyId = space.propertyId;
+        const selectable =
+          Boolean(propertyId && onSelectProperty && selectablePropertyIds?.has(propertyId));
+        const cellStyle: StyleProp<ViewStyle> = [
+          styles.cell,
+          { backgroundColor: spaceTint(space.name, property?.kind) },
+          isCorner ? null : spacePadding(row, col, padLane, barColor ? bar : 0, inward, isRailroad ? 0 : railCaption, isRailroad ? 0 : trainInset),
+          quarter && compact ? { overflow: 'visible' as const } : null,
+          selectable ? styles.selectableCell : null,
+          {
+            left: `${frame.x * 100}%`,
+            top: `${frame.y * 100}%`,
+            width: `${frame.w * 100}%`,
+            height: `${frame.h * 100}%`,
+          },
+        ];
+        const cellBody = (
+          <>
             {isCorner ? (
               <View style={[styles.cornerFill, { alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }]}>
                 <View
@@ -1199,6 +1210,21 @@ function BoardCanvas({
                 ) : null}
               </>
             )}
+          </>
+        );
+        return selectable && propertyId ? (
+          <Pressable
+            key={space.index}
+            accessibilityRole="button"
+            accessibilityLabel={`Develop ${space.name}`}
+            onPress={() => onSelectProperty?.(propertyId)}
+            style={cellStyle}
+          >
+            {cellBody}
+          </Pressable>
+        ) : (
+          <View key={space.index} accessibilityLabel={space.name} style={cellStyle}>
+            {cellBody}
           </View>
         );
       })}
@@ -1267,6 +1293,55 @@ function BoardCanvas({
                     {glyph}
                   </Text>
                 </View>
+              </View>
+            );
+          })
+        : null}
+      {size > 0
+        ? boardSpaces.map((space) => {
+            const propertyId = space.propertyId;
+            if (!propertyId) return null;
+            const property = getProperty(propertyId);
+            if (!property || property.kind !== 'street') return null;
+            const level = houses?.[propertyId] ?? 0;
+            if (level <= 0) return null;
+            const { row, col } = spaceToCell(space.index);
+            const frame = cellBox(row, col);
+            const cellW = frame.w * size;
+            const cellH = frame.h * size;
+            const marks = buildingMarkPlacement(row, col, cellW, cellH, level);
+            if (marks.length === 0) return null;
+            const label =
+              level >= 5 ? `Hotel on ${space.name}` : `${level} house${level === 1 ? '' : 's'} on ${space.name}`;
+            return (
+              <View
+                key={`build-${space.index}`}
+                accessibilityLabel={label}
+                style={[
+                  styles.buildingLayer,
+                  {
+                    left: frame.x * size,
+                    top: frame.y * size,
+                    width: cellW,
+                    height: cellH,
+                  },
+                  { pointerEvents: 'none' },
+                ]}
+              >
+                {marks.map((mark, index) => (
+                  <View
+                    key={`${mark.kind}-${index}`}
+                    style={[
+                      mark.kind === 'hotel' ? styles.hotelMark : styles.houseMark,
+                      {
+                        left: mark.x,
+                        top: mark.y,
+                        width: mark.w,
+                        height: mark.h,
+                      },
+                    ]}
+                  />
+                ))}
               </View>
             );
           })
@@ -2337,6 +2412,11 @@ const styles = StyleSheet.create({
     padding: 1,
     overflow: 'visible',
   },
+  selectableCell: {
+    borderColor: colors.accent,
+    borderWidth: 2,
+    zIndex: 2,
+  },
   nameBlock: {
     width: '100%',
     alignItems: 'center',
@@ -2441,6 +2521,25 @@ const styles = StyleSheet.create({
   },
   ownerEmoji: {
     textAlign: 'center',
+  },
+  buildingLayer: {
+    position: 'absolute',
+    zIndex: 3,
+    overflow: 'visible',
+  },
+  houseMark: {
+    position: 'absolute',
+    backgroundColor: '#1B7A3D',
+    borderRadius: 1,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#0E4A24',
+  },
+  hotelMark: {
+    position: 'absolute',
+    backgroundColor: '#B3261E',
+    borderRadius: 1,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#6E1612',
   },
   token: {
     position: 'absolute',
