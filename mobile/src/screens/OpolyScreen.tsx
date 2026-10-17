@@ -357,23 +357,19 @@ export function OpolyScreen({ navigation, route }: Props) {
   }, [game, snapshot?.isComplete]);
 
   const developTurnId = play?.turn ?? '';
-  const canDevelopBoard =
+  const canManageProperty =
     Boolean(play) &&
-    Boolean(snapshot) &&
     !snapshot?.isComplete &&
-    play?.pending == null &&
-    (play?.doubles ?? 0) === 0;
+    (play?.pending == null ? (play?.doubles ?? 0) === 0 : play.pending.kind === 'pay');
   const selectablePropertyIds = useMemo(() => {
-    if (!play || !canDevelopBoard || !developTurnId) return new Set<string>();
+    if (!play || !canManageProperty || !developTurnId) return new Set<string>();
     const ids = new Set<string>();
     for (const entry of properties) {
-      if (entry.kind !== 'street') continue;
       if (play.owned[entry.id] !== developTurnId) continue;
-      if (!ownsOpoly(play, developTurnId, entry.group)) continue;
       ids.add(entry.id);
     }
     return ids;
-  }, [canDevelopBoard, play, developTurnId]);
+  }, [canManageProperty, play, developTurnId]);
 
   if (!game || !template || !snapshot || !play) {
     return (
@@ -1536,19 +1532,23 @@ export function OpolyScreen({ navigation, route }: Props) {
         }}
       />
       <OpolyBuildSheet
-        visible={buildProperty != null && canDevelop}
+        visible={buildProperty != null && canFund && play.owned[buildProperty.id] === turnId}
         property={buildProperty ?? null}
         play={play}
         cash={turnCash}
-        disabled={!canDevelop}
-        onClose={() => setBuildPropertyId(null)}
+        canBuildNow={canDevelop}
+        error={error}
+        onClose={() => {
+          setBuildPropertyId(null);
+          setError(null);
+        }}
         onBuildOne={(id) => {
           const result = buildHouse(play, game.tokenSpaces ?? {}, game.players, id, turnCash);
           if ('error' in result) {
             setError(result.error);
             return;
           }
-          setBuildPropertyId(null);
+          setError(null);
           void commitPlay(result);
         }}
         onBuildGroup={(group) => {
@@ -1557,7 +1557,34 @@ export function OpolyScreen({ navigation, route }: Props) {
             setError(result.error);
             return;
           }
-          setBuildPropertyId(null);
+          setError(null);
+          void commitPlay(result);
+        }}
+        onSell={(id) => {
+          const result = sellBuilding(play, game.tokenSpaces ?? {}, game.players, id);
+          if ('error' in result) {
+            setError(result.error);
+            return;
+          }
+          setError(null);
+          void commitPlay(result);
+        }}
+        onMortgage={(id) => {
+          const result = mortgageProperty(play, game.tokenSpaces ?? {}, game.players, id);
+          if ('error' in result) {
+            setError(result.error);
+            return;
+          }
+          setError(null);
+          void commitPlay(result);
+        }}
+        onUnmortgage={(id) => {
+          const result = unmortgageProperty(play, game.tokenSpaces ?? {}, game.players, id, turnCash);
+          if ('error' in result) {
+            setError(result.error);
+            return;
+          }
+          setError(null);
           void commitPlay(result);
         }}
       />

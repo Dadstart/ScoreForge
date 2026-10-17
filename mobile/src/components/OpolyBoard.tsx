@@ -1268,7 +1268,7 @@ function BoardCanvas({
           <Pressable
             key={space.index}
             accessibilityRole="button"
-            accessibilityLabel={`Develop ${space.name}`}
+            accessibilityLabel={`Manage ${space.name}`}
             onPress={() => onSelectProperty?.(propertyId)}
             style={cellStyle}
           >
