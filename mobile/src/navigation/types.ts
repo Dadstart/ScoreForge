@@ -9,7 +9,7 @@ export type RootStackParamList = {
   Board: { gameId: string };
   Cribbage: { gameId: string };
   Opoly: { gameId: string };
-  Yahtzee: { gameId: string };
+  Yaht: { gameId: string };
   Sorry: { gameId: string };
   Backgammon: { gameId: string };
   Checkers: { gameId: string };
@@ -23,10 +23,10 @@ export type RootStackParamList = {
 
 export function gameScreenForTemplate(
   templateId: string,
-): 'Board' | 'Cribbage' | 'Opoly' | 'Yahtzee' | 'Sorry' | 'Backgammon' | 'Checkers' | 'ChineseCheckers' | 'Klondike' | 'Pyramid' | 'TriPeaks' | 'Spider' {
+): 'Board' | 'Cribbage' | 'Opoly' | 'Yaht' | 'Sorry' | 'Backgammon' | 'Checkers' | 'ChineseCheckers' | 'Klondike' | 'Pyramid' | 'TriPeaks' | 'Spider' {
   if (templateId === 'cribbage') return 'Cribbage';
   if (templateId === 'monopoly') return 'Opoly';
-  if (templateId === 'yahtzee') return 'Yahtzee';
+  if (templateId === 'yaht' || templateId === 'yahtzee') return 'Yaht';
   if (templateId === 'sorry') return 'Sorry';
   if (templateId === 'backgammon') return 'Backgammon';
   if (templateId === 'checkers') return 'Checkers';

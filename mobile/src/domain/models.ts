@@ -7,7 +7,7 @@ import type { SpiderState } from './spider';
 import type { TriPeaksState } from './tripeaks';
 import type { SorryState } from './sorry';
 import type { OpolyPlay } from './opolyPlay';
-import type { YahtzeeState } from './yahtzee';
+import type { YahtState } from './yaht';
 import { fillRandom, randomId } from './secureRandom';
 
 export type GameStatus = 'InProgress' | 'Completed';
@@ -27,7 +27,7 @@ export interface ScoreEvent {
   playerId: string;
   points: number;
   roundNumber?: number | null;
-  /** Yahtzee score-card box id. The latest event for a player and box is the score. */
+  /** Yaht score-card box id. The latest event for a player and box is the score. */
   box?: string | null;
   timestamp: string;
 }
@@ -63,8 +63,11 @@ export interface Game {
   spider?: SpiderState | null;
   /** TriPeaks layout, stock, and undo. */
   tripeaks?: TriPeaksState | null;
-  /** Yahtzee dice, holds, and whose turn it is. */
-  yahtzee?: YahtzeeState | null;
+  /**
+   * Yaht dice, holds, and whose turn it is. Saved as `yahtzee` on every game
+   * because deployed rules require that key.
+   */
+  yaht?: YahtState | null;
   /**
    * Opoly turn, ownership, deeds, and decks. Saved on every game because
    * deployed rules require the key.

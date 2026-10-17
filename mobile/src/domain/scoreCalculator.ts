@@ -8,7 +8,7 @@ import { clearedCount } from './pyramid';
 import { completedCount } from './spider';
 import { homeCount } from './sorry';
 import { cashFromDelta, soleSolventPlayer } from './opoly';
-import { grandTotal, isScorecardComplete } from './yahtzee';
+import { grandTotal, isScorecardComplete } from './yaht';
 
 export interface PlayerStanding {
   playerId: string;
@@ -92,7 +92,7 @@ function orderPlayers(
 }
 
 function pointsForPlayer(game: Game, playerId: string, template: GameTemplate): number {
-  if (template.id === 'yahtzee') return grandTotal(game.events, playerId);
+  if (template.id === 'yaht') return grandTotal(game.events, playerId);
   if (template.id === 'sorry' && game.sorry) return homeCount(game.sorry, playerId);
   if (template.id === 'backgammon' && game.backgammon) return borneOff(game.backgammon, playerId);
   if (template.id === 'checkers' && game.checkers) return capturedCount(game.checkers, playerId);
@@ -129,7 +129,7 @@ function opolySoleSurvivor(game: Game, totals: Map<string, number>): string | nu
 
 function detectCompletion(game: Game, template: GameTemplate, totals: Map<string, number>): boolean {
   if (opolySoleSurvivor(game, totals)) return true;
-  if (template.id === 'yahtzee') return isScorecardComplete(game);
+  if (template.id === 'yaht') return isScorecardComplete(game);
   if (template.id === 'backgammon') return Boolean(game.backgammon?.winnerSide);
   if (template.id === 'checkers') return Boolean(game.checkers?.winnerSide || game.checkers?.draw);
   if (template.id === 'chinese-checkers') return Boolean(game.chinese?.over);

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Button } from './ui';
-import type { Dice, Holds } from '../domain/yahtzee';
-import { diceTotal } from '../domain/yahtzee';
+import type { Dice, Holds } from '../domain/yaht';
+import { diceTotal } from '../domain/yaht';
 import { colors, radii, space, typography } from '../theme';
 
 const PIPS: Record<number, boolean[]> = {
@@ -46,7 +46,7 @@ function reducedMotion(): boolean {
   return nativeReduced;
 }
 
-export function YahtzeeDice({ dice, held, rollsLeft, offers = [], onRoll, onToggleHold, onScore }: Props) {
+export function YahtDice({ dice, held, rollsLeft, offers = [], onRoll, onToggleHold, onScore }: Props) {
   const faces = dice ?? [0, 0, 0, 0, 0];
   const canHold = dice != null && rollsLeft > 0;
   const rollLabel = dice == null ? 'Roll' : `Roll again · ${rollsLeft} left`;

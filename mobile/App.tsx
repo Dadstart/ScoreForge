@@ -9,7 +9,7 @@ import type { RootStackParamList } from './src/navigation/types';
 import { BoardScreen } from './src/screens/BoardScreen';
 import { CribbageScreen } from './src/screens/CribbageScreen';
 import { OpolyScreen } from './src/screens/OpolyScreen';
-import { YahtzeeScreen } from './src/screens/YahtzeeScreen';
+import { YahtScreen } from './src/screens/YahtScreen';
 import { SorryScreen } from './src/screens/SorryScreen';
 import { BackgammonScreen } from './src/screens/BackgammonScreen';
 import { CheckersScreen } from './src/screens/CheckersScreen';
@@ -117,9 +117,9 @@ export default function App() {
             options={{ title: 'Opoly', headerShown: false }}
           />
           <Stack.Screen
-            name="Yahtzee"
-            component={YahtzeeScreen}
-            options={{ title: 'Yahtzee', headerShown: false }}
+            name="Yaht"
+            component={YahtScreen}
+            options={{ title: 'Yaht', headerShown: false }}
           />
           <Stack.Screen
             name="Sorry"

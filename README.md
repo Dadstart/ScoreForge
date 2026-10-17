@@ -53,7 +53,7 @@ npm run deploy:rules
 | Golf | Add my score per hole | Lowest total after 9 or 18 holes |
 | Cribbage | Peg own track only | First to 121 (or 61) |
 | Opoly | Track own cash, optional board | Highest total |
-| Yahtzee | Fill any score-card column | Highest total |
+| Yaht | Fill any score-card column | Highest total |
 | Sorry | Shared board and card deck | First to get 4 pawns home |
 | Checkers | Shared board, Black moves first. Jumps required or optional | Capture every piece, or leave no move |
 | Chinese Checkers | Shared star. Two to six players, one or more colors, alone or in teams | Fill the opposite corner. Later places keep playing |

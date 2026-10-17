@@ -78,8 +78,8 @@ export const templates: GameTemplate[] = [
     maxPlayers: 8,
   },
   {
-    id: 'yahtzee',
-    name: 'Yahtzee',
+    id: 'yaht',
+    name: 'Yaht',
     description:
       'Roll five dice, keep any, and roll twice more. Score each box from the dice. Upper bonus at 63. Highest total wins.',
     scoringMode: 'Rounds',
@@ -171,5 +171,6 @@ export const templates: GameTemplate[] = [
 ];
 
 export function getTemplate(id: string): GameTemplate | undefined {
-  return templates.find((t) => t.id.toLowerCase() === id.toLowerCase());
+  const key = id.toLowerCase() === 'yahtzee' ? 'yaht' : id;
+  return templates.find((t) => t.id.toLowerCase() === key.toLowerCase());
 }
