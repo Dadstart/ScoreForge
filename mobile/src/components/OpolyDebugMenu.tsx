@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { OptionSelect } from './OptionSelect';
+import { PropertyMentions, PropertyName } from './PropertyMention';
 import { HeaderIconButton } from './HeaderIconButton';
 import { Button, Field } from './ui';
 import { formatMoney, playerLabel, properties, type BoardProperty } from '../domain/opoly';
@@ -83,7 +84,10 @@ export function OpolyDebugMenu({
   const ownerOptions = [{ id: BANK, label: 'The Bank' }, ...playerOptions];
   const propertyOptions = properties.map((property) => ({
     id: property.id,
-    label: `${property.name} · ${property.group} · ${ownerLabel(play, property, players)}`,
+    label: property.name,
+    swatch: property.swatch,
+    detail: `· ${property.group} · ${ownerLabel(play, property, players)}`,
+    group: property.group,
   }));
 
   const selectedPlayer = players.find((player) => player.id === playerId) ?? players[0];
@@ -267,9 +271,15 @@ export function OpolyDebugMenu({
 
               <Text style={styles.section}>Houses & hotels</Text>
               <Text style={styles.meta}>
-                {canBuildSelected
-                  ? `Current on ${selectedProperty?.name ?? 'deed'}: ${buildingLabel(buildingLevel)}`
-                  : 'Pick an owned street deed to buy or sell buildings.'}
+                {canBuildSelected && selectedProperty ? (
+                  <>
+                    {'Current on '}
+                    <PropertyName name={selectedProperty.name} swatch={selectedProperty.swatch} />
+                    {`: ${buildingLabel(buildingLevel)}`}
+                  </>
+                ) : (
+                  'Pick an owned street deed to buy or sell buildings.'
+                )}
               </Text>
               <OptionSelect
                 label="Level"
@@ -346,7 +356,7 @@ export function OpolyDebugMenu({
                 />
               </View>
 
-              {message ? <Text style={styles.message}>{message}</Text> : null}
+              {message ? <PropertyMentions text={message} style={styles.message} /> : null}
             </ScrollView>
             <Button label="Close" onPress={close} style={styles.close} />
           </View>

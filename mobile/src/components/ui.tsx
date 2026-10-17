@@ -201,6 +201,7 @@ export function Button({
   style,
   textColor,
   uppercase,
+  children,
 }: {
   label: string;
   onPress: () => void;
@@ -210,11 +211,14 @@ export function Button({
   style?: StyleProp<ViewStyle>;
   textColor?: string;
   uppercase?: boolean;
+  /** Replaces the label text when the button names something that needs its own styling. */
+  children?: ReactNode;
 }) {
   const isPrimary = variant === 'primary';
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={label}
       disabled={disabled || busy}
       onPress={onPress}
       style={({ pressed }) => [
@@ -230,6 +234,8 @@ export function Button({
     >
       {busy ? (
         <ActivityIndicator color={textColor ?? (isPrimary ? colors.accentText : colors.text)} />
+      ) : children ? (
+        <View style={styles.btnRow}>{children}</View>
       ) : (
         <Text
           style={[
@@ -377,6 +383,12 @@ const styles = StyleSheet.create({
     minHeight: 46,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  btnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
   },
   btnPrimary: {
     backgroundColor: colors.accent,

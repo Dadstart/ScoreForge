@@ -863,7 +863,7 @@ export function OpolyScreen({ navigation, route }: Props) {
           </View>
         </View>
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? <PropertyMentions text={error} style={styles.error} /> : null}
 
         <View style={styles.banner}>
           <PropertyMentions text={banner} style={styles.bannerText} />
@@ -1275,8 +1275,9 @@ export function OpolyScreen({ navigation, route }: Props) {
                   return (
                     <Button
                       key={entry.id}
-                      label={`${on ? '✓ ' : ''}${entry.name}`}
+                      label={on ? `Remove ${entry.name} from the trade` : `Offer ${entry.name}`}
                       disabled={!canBank}
+                      style={on ? styles.tradeOn : undefined}
                       onPress={() =>
                         setTradeGiveDeeds((current) =>
                           current.includes(entry.id)
@@ -1284,7 +1285,10 @@ export function OpolyScreen({ navigation, route }: Props) {
                             : [...current, entry.id],
                         )
                       }
-                    />
+                    >
+                      {on ? <Text style={styles.tradeCheck}>✓</Text> : null}
+                      <PropertyName name={entry.name} swatch={entry.swatch} />
+                    </Button>
                   );
                 })}
               {turnJail.chance > 0 ? (
@@ -1319,8 +1323,9 @@ export function OpolyScreen({ navigation, route }: Props) {
                   return (
                     <Button
                       key={entry.id}
-                      label={`${on ? '✓ ' : ''}${entry.name}`}
+                      label={on ? `Remove ${entry.name} from the trade` : `Take ${entry.name}`}
                       disabled={!canBank}
+                      style={on ? styles.tradeOn : undefined}
                       onPress={() =>
                         setTradeTakeDeeds((current) =>
                           current.includes(entry.id)
@@ -1328,7 +1333,10 @@ export function OpolyScreen({ navigation, route }: Props) {
                             : [...current, entry.id],
                         )
                       }
-                    />
+                    >
+                      {on ? <Text style={styles.tradeCheck}>✓</Text> : null}
+                      <PropertyName name={entry.name} swatch={entry.swatch} />
+                    </Button>
                   );
                 })}
               {partnerJail.chance > 0 ? (
@@ -1753,6 +1761,8 @@ const styles = StyleSheet.create({
   },
   bannerText: { ...typography.label, fontSize: 15, lineHeight: 24, textAlign: 'center', alignSelf: 'stretch' },
   row: { alignSelf: 'stretch', flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
+  tradeOn: { borderColor: colors.accent },
+  tradeCheck: { color: colors.accent, fontWeight: '800', fontSize: 16 },
   error: { color: colors.danger, textAlign: 'center', alignSelf: 'stretch' },
   wrap: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: 'center' },
   cashCard: {

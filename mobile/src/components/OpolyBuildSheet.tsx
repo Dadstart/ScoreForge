@@ -1,6 +1,6 @@
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Button } from './ui';
-import { PropertyName } from './PropertyMention';
+import { PropertyMentions, PropertyName } from './PropertyMention';
 import { formatMoney, type BoardProperty } from '../domain/opoly';
 import {
   buildingCost,
@@ -137,7 +137,7 @@ export function OpolyBuildSheet({
             />
           ) : null}
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+          {error ? <PropertyMentions text={error} style={styles.error} /> : null}
 
           <Button label="Close" onPress={onClose} style={styles.close} />
         </View>
