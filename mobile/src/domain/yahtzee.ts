@@ -454,7 +454,7 @@ function nextPlayerId(
 ): string | null {
   if (players.length === 0) return null;
   const start = players.findIndex((player) => player.id === currentId);
-  const firstStep = start < 0 ? 0 : 1;
+  const firstStep = start < 0 ? 0 : start + 1;
   for (let step = firstStep; step < firstStep + players.length; step++) {
     const player = players[step % players.length];
     if (hasOpenBox(events, player.id)) return player.id;

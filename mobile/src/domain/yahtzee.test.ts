@@ -62,6 +62,23 @@ describe('yahtzee dice', () => {
     assert.equal(scored.state.turn.rollsLeft, 3);
   });
 
+  it('passes from the second player to the third, then back to the first', () => {
+    const three = [
+      { id: 'ada', name: 'Ada' },
+      { id: 'bea', name: 'Bea' },
+      { id: 'cy', name: 'Cy' },
+    ];
+    const adaRoll = rollDice(createYahtzeeState(three), [1, 1, 1, 1, 2]);
+    const adaScore = adaRoll && scoreDice(adaRoll, [], three, 'aces');
+    assert.equal(adaScore && adaScore.state.turn.playerId, 'bea');
+    const beaRoll = adaScore && rollDice(adaScore.state, [2, 2, 2, 2, 3]);
+    const beaScore = adaScore && beaRoll && scoreDice(beaRoll, adaScore.events, three, 'twos');
+    assert.equal(beaScore && beaScore.state.turn.playerId, 'cy');
+    const cyRoll = beaScore && rollDice(beaScore.state, [3, 3, 3, 3, 4]);
+    const cyScore = beaScore && cyRoll && scoreDice(cyRoll, beaScore.events, three, 'threes');
+    assert.equal(cyScore && cyScore.state.turn.playerId, 'ada');
+  });
+
   it('scratches a box the dice do not fill', () => {
     const rolled = rollDice(createYahtzeeState(players), [1, 2, 3, 4, 6]);
     assert.ok(rolled);
