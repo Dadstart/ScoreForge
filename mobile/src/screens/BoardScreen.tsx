@@ -15,7 +15,7 @@ import { HomeButton } from '../components/HomeButton';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Field, Screen } from '../components/ui';
 import { findLocalPlayerId, nextRoundForPlayer } from '../domain/localPlayer';
-import { createScoreEvent, type Game } from '../domain/models';
+import { playModeOf,  createScoreEvent, type Game  } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
 import { useWinCelebration } from '../hooks/useWinCelebration';
@@ -196,7 +196,7 @@ export function BoardScreen({ navigation, route }: Props) {
               <Badge label={template.name} tone="accent" />
             </View>
             <GameHelp templateId={template.id} />
-            <ShareCodePanel shareCode={game.shareCode} />
+            <ShareCodePanel shareCode={game.shareCode} passAndPlay={playModeOf(game) === 'pass-and-play'} />
             <HomeButton onPress={() => navigation.navigate('Home')} />
           </View>
 

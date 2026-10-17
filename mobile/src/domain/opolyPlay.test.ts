@@ -4,14 +4,24 @@ import type { DiceRoll } from './opolyDice';
 import {
   applyTrade,
   bidAuction,
+  buildGroupHouses,
   buildHouse,
+  buildingStock,
   buyProperty,
   canBuild,
+  groupBuildTargets,
+  canSellBuilding,
   chooseIncomeTax,
   createOpolyPlay,
+  debugAssignGroup,
+  debugAssignProperty,
+  debugGiveJailCard,
+  debugReturnJailCard,
+  debugSetBuilding,
   declineProperty,
   declareBankruptcy,
   cashSplashes,
+  HOUSE_SUPPLY,
   moneyFromSquare,
   mortgageProperty,
   acceptCard,
@@ -22,6 +32,7 @@ import {
   payDue,
   rentDue,
   resolveRoll,
+  sellBuilding,
   skipBankruptTurn,
   turnPrompt,
   undoOpoly,
@@ -32,6 +43,7 @@ import {
 } from './opolyPlay';
 import { CHANCE_CARD_IDS, CHEST_CARD_IDS, cardCopy } from './opolyCards';
 import { backwardSpaces, forwardSpaces } from './opolyBoard';
+import { properties } from './opoly';
 import { createScoreEvent } from './models';
 
 const players: PlayPlayer[] = [
@@ -212,6 +224,131 @@ describe('monopoly play', () => {
     assert.ok((accepted.route?.spaces.length ?? 0) > 12);
   });
 
+  it('tracks bank stock, blocks a 33rd house, and frees houses when a hotel goes up', () => {
+    assert.deepEqual(buildingStock(table()), { houses: HOUSE_SUPPLY, hotels: 12 });
+
+    const brown = table({ owned: { mediterranean: 'ada', baltic: 'ada' }, houses: { mediterranean: 4, baltic: 4 } });
+    assert.equal(buildingStock(brown).houses, HOUSE_SUPPLY - 8);
+    assert.equal(canBuild(brown, 'mediterranean'), true);
+    const hotel = buildHouse(brown, { ada: 1 }, players, 'mediterranean', 1500);
+    assert.ok(!('error' in hotel));
+    if ('error' in hotel) return;
+    assert.equal(hotel.play.houses.mediterranean, 5);
+    assert.equal(buildingStock(hotel.play).houses, HOUSE_SUPPLY - 4);
+    assert.equal(buildingStock(hotel.play).hotels, 11);
+
+    const filled: Record<string, number> = {};
+    let remaining = HOUSE_SUPPLY;
+    for (const property of properties) {
+      if (property.kind !== 'street') continue;
+      if (property.id === 'mediterranean' || property.id === 'baltic') continue;
+      const take = Math.min(4, remaining);
+      if (take <= 0) break;
+      filled[property.id] = take;
+      remaining -= take;
+    }
+    const short = table({ owned: { mediterranean: 'ada', baltic: 'ada' }, houses: filled });
+    assert.equal(buildingStock(short).houses, 0);
+    assert.equal(canBuild(short, 'mediterranean'), false);
+    const blocked = buildHouse(short, { ada: 1 }, players, 'mediterranean', 1500);
+    assert.ok('error' in blocked);
+    if (!('error' in blocked)) return;
+    assert.match(blocked.error, /No houses left/);
+
+    const hotelHouses: Record<string, number> = { mediterranean: 5, baltic: 4 };
+    let houseLeft = HOUSE_SUPPLY - 4;
+    for (const property of properties) {
+      if (property.kind !== 'street' || property.group === 'Brown') continue;
+      const take = Math.min(4, houseLeft);
+      if (take <= 0) break;
+      hotelHouses[property.id] = take;
+      houseLeft -= take;
+    }
+    const stuck = table({ owned: { mediterranean: 'ada', baltic: 'ada' }, houses: hotelHouses });
+    assert.equal(buildingStock(stuck).houses, 0);
+    assert.equal(canSellBuilding(stuck, 'mediterranean'), false);
+    const refused = sellBuilding(stuck, { ada: 1 }, players, 'mediterranean');
+    assert.ok('error' in refused);
+    if (!('error' in refused)) return;
+    assert.match(refused.error, /Not enough houses/);
+  });
+
+  it('debug-assigns deeds and clears buildings on that color', () => {
+    const built = table({
+      owned: { mediterranean: 'ada', baltic: 'ada' },
+      houses: { mediterranean: 2, baltic: 1 },
+      mortgaged: ['reading'],
+    });
+    const granted = debugAssignGroup(built, 'Brown', 'bea');
+    assert.ok(!('error' in granted));
+    if ('error' in granted) return;
+    assert.equal(granted.owned.mediterranean, 'bea');
+    assert.equal(granted.owned.baltic, 'bea');
+    assert.equal(granted.houses.mediterranean, undefined);
+    assert.equal(granted.houses.baltic, undefined);
+
+    const railroad = debugAssignProperty(granted, 'reading', 'ada');
+    assert.ok(!('error' in railroad));
+    if ('error' in railroad) return;
+    assert.equal(railroad.owned.reading, 'ada');
+    assert.equal(railroad.mortgaged.includes('reading'), false);
+
+    const reclaimed = debugAssignProperty(railroad, 'mediterranean', null);
+    assert.ok(!('error' in reclaimed));
+    if ('error' in reclaimed) return;
+    assert.equal(reclaimed.owned.mediterranean, undefined);
+    assert.equal(reclaimed.owned.baltic, 'bea');
+
+    const withDeed = debugAssignProperty(table(), 'mediterranean', 'ada');
+    assert.ok(!('error' in withDeed));
+    if ('error' in withDeed) return;
+    const house = debugSetBuilding(withDeed, 'mediterranean', 3);
+    assert.ok(!('error' in house));
+    if ('error' in house) return;
+    assert.equal(house.houses.mediterranean, 3);
+    const hotel = debugSetBuilding(house, 'mediterranean', 5);
+    assert.ok(!('error' in hotel));
+    if ('error' in hotel) return;
+    assert.equal(hotel.houses.mediterranean, 5);
+    assert.equal(buildingStock(hotel).houses, HOUSE_SUPPLY);
+    const sold = debugSetBuilding(hotel, 'mediterranean', 4);
+    assert.ok(!('error' in sold));
+    if ('error' in sold) return;
+    assert.equal(sold.houses.mediterranean, 4);
+  });
+
+  it('builds one house or a whole color group while staying even', () => {
+    const owned = table({ owned: { mediterranean: 'ada', baltic: 'ada' } });
+    assert.deepEqual(
+      groupBuildTargets(owned, 'Brown').map((street) => street.id).sort(),
+      ['baltic', 'mediterranean'],
+    );
+    const group = buildGroupHouses(owned, { ada: 1 }, players, 'Brown', 1500);
+    assert.ok(!('error' in group));
+    if ('error' in group) return;
+    assert.equal(group.play.houses.mediterranean, 1);
+    assert.equal(group.play.houses.baltic, 1);
+    assert.equal(group.events.find((event) => event.playerId === 'ada')?.points, -100);
+
+    assert.equal(canBuild(group.play, 'mediterranean'), true);
+    const one = buildHouse(group.play, { ada: 1 }, players, 'mediterranean', 1400);
+    assert.ok(!('error' in one));
+    if ('error' in one) return;
+    assert.equal(one.play.houses.mediterranean, 2);
+    assert.equal(one.play.houses.baltic, 1);
+    assert.equal(canBuild(one.play, 'mediterranean'), false);
+    assert.equal(canBuild(one.play, 'baltic'), true);
+    assert.deepEqual(
+      groupBuildTargets(one.play, 'Brown').map((street) => street.id),
+      ['baltic'],
+    );
+    const catchUp = buildGroupHouses(one.play, { ada: 1 }, players, 'Brown', 1300);
+    assert.ok(!('error' in catchUp));
+    if ('error' in catchUp) return;
+    assert.equal(catchUp.play.houses.mediterranean, 2);
+    assert.equal(catchUp.play.houses.baltic, 2);
+  });
+
   it('builds evenly, then undoes the purchase and the move', () => {
     const owned = table({ owned: { mediterranean: 'ada', baltic: 'ada' } });
     assert.equal(canBuild(owned, 'mediterranean'), true);
@@ -368,8 +505,28 @@ describe('monopoly play', () => {
     assert.ok(!('error' in used));
     if ('error' in used) return;
     assert.equal(used.play.jail.ada, undefined);
-    assert.equal(used.play.chanceFree.ada, 0);
+    assert.equal(used.play.chanceFree.ada, undefined);
     assert.equal(used.play.chance.at(-1), 'jail-free');
+  });
+
+  it('mentions Get Out of Jail Free while jailed with a kept card', () => {
+    const marked = [{ id: 'ada', name: 'Ada', token: 'car' }];
+    const jailed = table({ turn: 'ada', jail: { ada: 0 }, chanceFree: { ada: 1 } });
+    assert.match(turnPrompt(jailed, marked), /Get Out of Jail Free/);
+  });
+
+  it('debug grants and returns Get Out of Jail Free cards', () => {
+    const play = table({ chance: ['go', 'jail-free'], chest: ['jail-free'] });
+    const given = debugGiveJailCard(play, 'ada', 'chance');
+    assert.ok(!('error' in given));
+    if ('error' in given) return;
+    assert.equal(given.chanceFree.ada, 1);
+    assert.equal(given.chance.includes('jail-free'), false);
+    const returned = debugReturnJailCard(given, 'ada', 'chance');
+    assert.ok(!('error' in returned));
+    if ('error' in returned) return;
+    assert.equal(returned.chanceFree.ada, undefined);
+    assert.equal(returned.chance.at(-1), 'jail-free');
   });
 
   it('puts the piece before the player name', () => {

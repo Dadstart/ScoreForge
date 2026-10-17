@@ -2,8 +2,8 @@ import { projectTiltedPoint } from './dieProjection';
 import { cellBox, nearestBoardTurn, spaceToCell, TRACK_DEPTH, type Point } from './opolyBoard';
 
 export const MIN_ZOOM = 0.5;
-/** Far enough in that a phone can show property names, without an unbounded pinch. */
-export const MAX_ZOOM = 3;
+/** Far enough in to inspect a deed up close, without an unbounded pinch. */
+export const MAX_ZOOM = 5;
 
 /** Corner cell at which the board draws property names. */
 const NAME_CELL = 96;
@@ -12,8 +12,10 @@ const NAME_BOARD = NAME_CELL / TRACK_DEPTH;
 const READABLE_EDGE = 72;
 const READABLE_BOARD = READABLE_EDGE / ((1 - 2 * TRACK_DEPTH) / 9);
 
-/** Page width, then two smaller boards. A phone adds a closer stop. */
+/** Page width, then two smaller boards. */
 const PAGE_STOPS = [0.5, 0.75, 1];
+/** Button zoom-in steps beyond page width (pinch still clamps at MAX_ZOOM). */
+const CLOSE_STOPS = [1.5, 2, 2.5, 3, 4, 5];
 const TRACK = TRACK_DEPTH;
 
 /**
@@ -51,8 +53,12 @@ export function readingZoom(viewport: number) {
 
 function zoomStops(viewport: number) {
   const reading = readingZoom(viewport);
-  if (reading <= 1) return PAGE_STOPS;
-  return [...PAGE_STOPS, reading];
+  const close = CLOSE_STOPS.filter(
+    (stop) => stop <= MAX_ZOOM && (reading <= 1 || Math.abs(stop - reading) >= 0.08),
+  );
+  const stops = [...PAGE_STOPS, ...close];
+  if (reading > 1) stops.push(reading);
+  return stops.sort((a, b) => a - b);
 }
 
 export function stepZoom(zoom: number, direction: -1 | 1, viewport = 0) {
@@ -83,7 +89,10 @@ type BoardWheel = {
   metaKey?: boolean;
 };
 
-/** Pan the board from the mouse wheel. Ctrl or Meta leaves the gesture for the browser. */
+/** Wheel travel, in pixels, that counts as one zoom notch. Smaller moves add up. */
+const WHEEL_ZOOM_NOTCH = 40;
+
+/** Pan the board from the mouse wheel. Ctrl zooms, and Meta stays with the browser. */
 export function panForWheel(pan: { x: number; y: number }, wheel: BoardWheel, zoom: number, viewport: number) {
   if (wheel.ctrlKey || wheel.metaKey) return null;
   if (wheel.deltaX === 0 && wheel.deltaY === 0) return null;
@@ -93,6 +102,53 @@ export function panForWheel(pan: { x: number; y: number }, wheel: BoardWheel, zo
     zoom,
     viewport,
   );
+}
+
+/**
+ * Zoom from ctrl+wheel. A mouse notch moves one stop. Smaller trackpad
+ * deltas add up to a stop. Wheel up zooms in. Null when this wheel should pan.
+ */
+export function zoomForWheel(
+  pan: { x: number; y: number },
+  wheel: BoardWheel,
+  zoom: number,
+  viewport: number,
+  pending = 0,
+): { zoom: number; pan: { x: number; y: number }; pending: number } | null {
+  if (!wheel.ctrlKey) return null;
+  const scale = wheel.deltaMode === 1 ? 40 : wheel.deltaMode === 2 ? viewport : 1;
+  const delta = wheel.deltaY * scale;
+  if (delta === 0) return { zoom, pan, pending };
+  let steps = 0;
+  let carry = pending;
+  if (Math.abs(delta) >= WHEEL_ZOOM_NOTCH) {
+    steps = delta > 0 ? -1 : 1;
+    carry = 0;
+  } else {
+    carry += delta;
+    while (carry >= WHEEL_ZOOM_NOTCH) {
+      steps -= 1;
+      carry -= WHEEL_ZOOM_NOTCH;
+    }
+    while (carry <= -WHEEL_ZOOM_NOTCH) {
+      steps += 1;
+      carry += WHEEL_ZOOM_NOTCH;
+    }
+  }
+  if (steps === 0) return { zoom, pan, pending: carry };
+  const direction: -1 | 1 = steps > 0 ? 1 : -1;
+  let nextZoom = zoom;
+  let nextPan = pan;
+  for (let i = 0; i < Math.abs(steps); i += 1) {
+    const stepped = stepZoom(nextZoom, direction, viewport);
+    if (stepped === nextZoom) {
+      carry = 0;
+      break;
+    }
+    nextPan = panForZoom(nextPan, nextZoom, stepped, viewport);
+    nextZoom = stepped;
+  }
+  return { zoom: nextZoom, pan: nextPan, pending: carry };
 }
 
 /**

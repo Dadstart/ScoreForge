@@ -12,9 +12,9 @@ import { setupDetail, setupSummary, type ChineseMode, type PlayerCount, type Set
 import type { DrawCount } from '../domain/klondike';
 import type { SuitCount } from '../domain/spider';
 import { nextOpolyToken, openingPlayer, playersFromOpolySeats } from '../domain/addPlayer';
-import { createPlayer, type Player } from '../domain/models';
+import { createPlayer, type PlayMode, type Player } from '../domain/models';
 import { playerToken } from '../domain/opoly';
-import { getTemplate, templates } from '../domain/templates';
+import { getTemplate, templates, type GameTemplate } from '../domain/templates';
 import { loadDisplayName, saveDisplayName } from '../storage/displayNameStore';
 import { createAndSaveGame } from '../storage/gameStore';
 import { colors, radii, space, typography } from '../theme';
@@ -23,6 +23,21 @@ import { gameScreenForTemplate, type RootStackParamList } from '../navigation/ty
 type Props = NativeStackScreenProps<RootStackParamList, 'Setup'>;
 
 type Seat = { id: string; name: string; token: string; emojiText: string };
+
+function asksPlayMode(template: GameTemplate): boolean {
+  return template.maxPlayers > 1;
+}
+
+function playersFromNameSeats(seats: Seat[]): { players: Player[] } | { error: string } {
+  if (seats.length < 1) return { error: 'Add at least one player.' };
+  const names = seats.map((seat) => seat.name.trim());
+  if (names.some((name) => !name)) return { error: 'Enter a name for each player.' };
+  const folded = names.map((name) => name.toLowerCase());
+  if (new Set(folded).size !== folded.length) return { error: 'Each player needs a different name.' };
+  return {
+    players: seats.map((seat, index) => ({ id: seat.id, name: names[index] })),
+  };
+}
 
 function newSeat(name: string, token: string): Seat {
   return { id: createPlayer(name).id, name, token, emojiText: '' };
@@ -42,6 +57,9 @@ export function SetupScreen({ navigation }: Props) {
   const template = useMemo(() => getTemplate(templateId)!, [templateId]);
   const [name, setName] = useState(templates[0].name);
   const [hostName, setHostName] = useState('Player 1');
+  const [playMode, setPlayMode] = useState<PlayMode | null>(
+    asksPlayMode(templates[0]) ? null : 'multi-device',
+  );
   const [seats, setSeats] = useState<Seat[]>(() => [newSeat('Player 1', 'car')]);
   const [targetScore, setTargetScore] = useState(String(templates[0].defaultTargetScore ?? ''));
   const [maxRounds, setMaxRounds] = useState(String(templates[0].defaultMaxRounds ?? '18'));
@@ -54,6 +72,9 @@ export function SetupScreen({ navigation }: Props) {
   const [tableGoals, setTableGoals] = useState<TwoSetGoals>('opponent');
   const [validation, setValidation] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const passAndPlay = playMode === 'pass-and-play';
+  const showSeats =
+    playMode === 'pass-and-play' || (playMode === 'multi-device' && template.id === 'monopoly');
 
   useEffect(() => {
     void loadDisplayName().then((saved) => {
@@ -85,9 +106,14 @@ export function SetupScreen({ navigation }: Props) {
     setTableMode('ffa');
     setTableSets(1);
     setTableGoals('opponent');
-    if (id === 'monopoly' && templateId !== 'monopoly') {
-      setSeats([newSeat(hostName.trim() || 'Player 1', 'car')]);
-    }
+    setPlayMode(asksPlayMode(t) ? null : 'multi-device');
+    setSeats([newSeat(hostName.trim() || 'Player 1', 'car')]);
+    setValidation(null);
+  };
+
+  const selectPlayMode = (mode: PlayMode) => {
+    setPlayMode(mode);
+    setSeats([newSeat(hostName.trim() || 'Player 1', 'car')]);
     setValidation(null);
   };
 
@@ -115,30 +141,49 @@ export function SetupScreen({ navigation }: Props) {
 
   const start = async () => {
     const host = hostName.trim();
-    if (template.id !== 'monopoly' && !host) {
-      setValidation('Enter your display name.');
+    const resolvedMode: PlayMode = asksPlayMode(template) ? playMode ?? 'multi-device' : 'multi-device';
+    if (asksPlayMode(template) && playMode == null) {
+      setValidation('Choose Pass ’n Play or separate devices.');
       return;
     }
 
-    const monopolyPlayers =
-      template.id === 'monopoly' ? playersFromOpolySeats(seats, template.maxPlayers) : null;
-    if (monopolyPlayers && 'error' in monopolyPlayers) {
-      setValidation(monopolyPlayers.error);
-      return;
+    let players: Player[];
+    if (template.id === 'monopoly') {
+      const seatsForGame =
+        resolvedMode === 'pass-and-play' ? seats : seats.slice(0, 1).map((seat) => ({
+          ...seat,
+          name: seat.name.trim() || host || 'Player 1',
+        }));
+      const monopolyPlayers = playersFromOpolySeats(seatsForGame, template.maxPlayers);
+      if ('error' in monopolyPlayers) {
+        setValidation(monopolyPlayers.error);
+        return;
+      }
+      players = monopolyPlayers.players;
+    } else if (resolvedMode === 'pass-and-play') {
+      const named = playersFromNameSeats(seats);
+      if ('error' in named) {
+        setValidation(named.error);
+        return;
+      }
+      players = named.players;
+    } else {
+      if (!host) {
+        setValidation('Enter your display name.');
+        return;
+      }
+      players = [openingPlayer(template.id, host)];
     }
 
     setBusy(true);
     setValidation(null);
     try {
-      const players: Player[] =
-        monopolyPlayers && 'players' in monopolyPlayers
-          ? monopolyPlayers.players
-          : [openingPlayer(template.id, host)];
       await saveDisplayName(players[0]?.name || host);
 
       const game = await createAndSaveGame({
         name: name.trim() || template.name,
         templateId: template.id,
+        playMode: resolvedMode,
         players,
         targetScore: showTarget && targetScore ? Number(targetScore) : null,
         maxRounds: showMaxRounds && maxRounds ? Number(maxRounds) : null,
@@ -181,6 +226,31 @@ export function SetupScreen({ navigation }: Props) {
           })}
         </View>
         <Text style={styles.hint}>{template.description}</Text>
+
+        {asksPlayMode(template) ? (
+          <>
+            <Text style={[typography.section, styles.section]}>How will you play?</Text>
+            <View style={styles.wrap}>
+              <Choice
+                label="Pass ’n Play"
+                selected={playMode === 'pass-and-play'}
+                onPress={() => selectPlayMode('pass-and-play')}
+              />
+              <Choice
+                label="Separate devices"
+                selected={playMode === 'multi-device'}
+                onPress={() => selectPlayMode('multi-device')}
+              />
+            </View>
+            <Text style={styles.hint}>
+              {playMode === 'pass-and-play'
+                ? 'Everyone takes turns on this device. Add all players before you start.'
+                : playMode === 'multi-device'
+                  ? 'Start here, then share the join code so friends open the game on their own phones.'
+                  : 'Pass ’n Play keeps everyone on one device. Separate devices uses the login / join code.'}
+            </Text>
+          </>
+        ) : null}
 
         <Text style={[typography.section, styles.section]}>Game name</Text>
         <Field value={name} onChangeText={setName} />
@@ -299,11 +369,21 @@ export function SetupScreen({ navigation }: Props) {
           </>
         ) : null}
 
-        {template.id === 'monopoly' ? (
+        {showSeats ? (
           <>
-            <Text style={[typography.section, styles.section]}>Players</Text>
-            <Text style={styles.hint}>Add everyone at the table and pick a piece for each person.</Text>
-            {seats.map((seat, index) => {
+            <Text style={[typography.section, styles.section]}>
+              {passAndPlay ? 'Players' : template.id === 'monopoly' ? 'Your piece' : 'Players'}
+            </Text>
+            <Text style={styles.hint}>
+              {passAndPlay
+                ? template.id === 'monopoly'
+                  ? 'Add everyone at the table and pick a piece for each person.'
+                  : 'Add everyone who will pass this device around.'
+                : template.id === 'monopoly'
+                  ? 'Pick your name and piece. Friends join with the share code.'
+                  : 'Add players on this device.'}
+            </Text>
+            {(passAndPlay ? seats : seats.slice(0, 1)).map((seat, index) => {
               const taken = seats
                 .filter((other) => other.id !== seat.id)
                 .map((other) => playerToken(other.emojiText.trim() || other.token)?.emoji)
@@ -322,7 +402,7 @@ export function SetupScreen({ navigation }: Props) {
                       maxLength={40}
                       style={styles.seatField}
                     />
-                    {seats.length > 1 ? (
+                    {passAndPlay && seats.length > 1 ? (
                       <Button
                         label="Remove"
                         variant="ghost"
@@ -330,21 +410,24 @@ export function SetupScreen({ navigation }: Props) {
                       />
                     ) : null}
                   </View>
-                  <TokenPicker
-                    value={seat.token}
-                    text={seat.emojiText}
-                    taken={taken}
-                    onChange={(token) => updateSeat(seat.id, { token })}
-                    onText={(emojiText) => updateSeat(seat.id, { emojiText })}
-                  />
+                  {template.id === 'monopoly' ? (
+                    <TokenPicker
+                      value={seat.token}
+                      text={seat.emojiText}
+                      taken={taken}
+                      onChange={(token) => updateSeat(seat.id, { token })}
+                      onText={(emojiText) => updateSeat(seat.id, { emojiText })}
+                    />
+                  ) : null}
                 </View>
               );
             })}
-            {seats.length < template.maxPlayers ? (
+            {passAndPlay && seats.length < template.maxPlayers ? (
               <Button label="Add player" variant="secondary" onPress={addSeat} style={styles.addPlayer} />
-            ) : (
+            ) : null}
+            {passAndPlay && seats.length >= template.maxPlayers ? (
               <Text style={styles.hint}>All {template.maxPlayers} seats are filled.</Text>
-            )}
+            ) : null}
           </>
         ) : (
           <>

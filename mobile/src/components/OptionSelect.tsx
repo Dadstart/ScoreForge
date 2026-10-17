@@ -7,6 +7,8 @@ export type SelectOption = {
   id: string;
   label: string;
   swatch?: string;
+  /** Plain text after a colored property name. */
+  detail?: string;
   group?: string;
   fill?: string;
   ink?: string;
@@ -37,7 +39,7 @@ export function OptionSelect({ label, value, options, onChange, disabled, center
       >
         <View style={[styles.valueSlot, centered && styles.valueSlotCentered]}>
           {selected?.swatch ? (
-            <PropertyName name={selected.label} swatch={selected.swatch} />
+            <NamedOption option={selected} centered={centered} />
           ) : (
             <Text style={[styles.value, centered && styles.valueCentered]} numberOfLines={1}>
               {selected?.label ?? 'Choose'}
@@ -75,7 +77,7 @@ export function OptionSelect({ label, value, options, onChange, disabled, center
                       ]}
                     >
                       {option.swatch ? (
-                        <PropertyName name={option.label} swatch={option.swatch} />
+                        <NamedOption option={option} active={active} />
                       ) : (
                         <Text
                           style={[
@@ -95,6 +97,27 @@ export function OptionSelect({ label, value, options, onChange, disabled, center
           </View>
         </View>
       </Modal>
+    </View>
+  );
+}
+
+function NamedOption({
+  option,
+  active = false,
+  centered = false,
+}: {
+  option: SelectOption;
+  active?: boolean;
+  centered?: boolean;
+}) {
+  return (
+    <View style={[styles.named, centered && styles.namedCentered]}>
+      <PropertyName name={option.label} swatch={option.swatch ?? colors.surface} />
+      {option.detail ? (
+        <Text style={[styles.optionLabel, active && styles.optionLabelActive]} numberOfLines={1}>
+          {option.detail}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -168,4 +191,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   optionLabelActive: { color: colors.accent, fontWeight: '700' },
+  named: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
+  namedCentered: { justifyContent: 'center' },
 });

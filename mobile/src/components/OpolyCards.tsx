@@ -4,6 +4,7 @@ import Svg, { Path, Rect } from 'react-native-svg';
 import { cardCopy, type CardDeck } from '../domain/opolyCards';
 import { TRACK_DEPTH, cardReadScale, deckPileLayout, drawnCardFrame } from '../domain/opolyBoard';
 import { fonts } from '../theme';
+import { PropertyMentions } from './PropertyMention';
 import { diceMotionMs } from './OpolyDice';
 
 /** How long the token waits on the card square before following the instruction. */
@@ -327,7 +328,10 @@ function CardFront({
       <View style={[styles.band, { backgroundColor: deck === 'chance' ? '#e06a1f' : '#1d4f92' }]}>
         <Text style={[styles.bandText, { fontSize: Math.max(12, Math.round(height * 0.058)) }]}>{name.toUpperCase()}</Text>
       </View>
-      <Text style={[styles.frontText, { fontSize: body, lineHeight: Math.round(body * 1.28) }]}>{text}</Text>
+      <PropertyMentions
+        text={text}
+        style={[styles.frontText, { fontSize: body, lineHeight: Math.round(body * 1.28) }]}
+      />
       {onAccept ? (
         <Pressable
           accessibilityRole="button"

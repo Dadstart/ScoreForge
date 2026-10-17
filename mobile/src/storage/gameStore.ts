@@ -44,6 +44,7 @@ type StoredGame = {
   shareCode?: string;
   name?: string;
   templateId?: string;
+  playMode?: Game['playMode'];
   players?: Player[];
   events?: ScoreEvent[];
   status?: Game['status'];
@@ -109,6 +110,7 @@ function toStored(game: Game): Record<string, unknown> {
     shareCode: game.shareCode,
     name: game.name,
     templateId: game.templateId,
+    playMode: game.playMode === 'pass-and-play' ? 'pass-and-play' : 'multi-device',
     players: game.players.map(cleanPlayer),
     events: game.events.map(cleanEvent),
     status: game.status,
@@ -137,6 +139,7 @@ function fromStored(shareCode: string, data: StoredGame, events: ScoreEvent[]): 
     shareCode,
     name: typeof data.name === 'string' && data.name.trim() ? data.name : 'Game',
     templateId: typeof data.templateId === 'string' ? data.templateId : 'free-play',
+    playMode: data.playMode === 'pass-and-play' ? 'pass-and-play' : 'multi-device',
     players: Array.isArray(data.players) ? data.players : [],
     events: [...events].sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.id.localeCompare(b.id)),
     status: data.status === 'Completed' ? 'Completed' : 'InProgress',
@@ -312,6 +315,7 @@ export async function createAndSaveGame(partial: {
   name: string;
   templateId: string;
   players: Game['players'];
+  playMode?: Game['playMode'];
   targetScore?: number | null;
   maxRounds?: number | null;
   requireJumps?: boolean;
@@ -329,6 +333,7 @@ export async function createAndSaveGame(partial: {
       shareCode,
       name: partial.name,
       templateId: partial.templateId,
+      playMode: partial.playMode === 'pass-and-play' ? 'pass-and-play' : 'multi-device',
       players: partial.players,
       events: [],
       status: 'InProgress',

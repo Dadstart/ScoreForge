@@ -9,7 +9,7 @@ import { HomeButton } from '../components/HomeButton';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { TriPeaksBoard } from '../components/TriPeaksBoard';
 import { Button, Screen } from '../components/ui';
-import type { Game } from '../domain/models';
+import { playModeOf, type  Game  } from '../domain/models';
 import {
   cardAt,
   clearedCount,
@@ -213,7 +213,7 @@ export function TriPeaksScreen({ navigation, route }: Props) {
             <Text style={typography.title}>{game.name}</Text>
           </View>
           <GameHelp templateId="tripeaks" />
-          <ShareCodePanel shareCode={game.shareCode} />
+          <ShareCodePanel shareCode={game.shareCode} passAndPlay={playModeOf(game) === 'pass-and-play'} />
           <HomeButton onPress={() => navigation.navigate('Home')} />
         </View>
 

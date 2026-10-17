@@ -13,7 +13,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import Svg, { Circle, Path, Polygon, Rect } from 'react-native-svg';
 import type { Player } from '../domain/models';
 import { boardCamera, projectTiltedPoint } from '../domain/dieProjection';
 import {
@@ -34,6 +34,9 @@ import {
   nearestBoardTurn,
   nearestTokenFacing,
   ownerMarkPlacement,
+  buildingMarkPlacement,
+  buildingMarkBand,
+  BUILDING_VISUAL_SCALE,
   spaceToCell,
   tokenFacingDegrees,
   followRoute,
@@ -45,7 +48,7 @@ import {
 } from '../domain/opolyBoard';
 import { contrastInk, getProperty, playerLabel, playerToken } from '../domain/opoly';
 import { facingPropertyLabel, fitBoardLabel, fitSize } from '../domain/opolyLabel';
-import { cameraAlong, centeredZoomShift, clampPan, clampZoom, frameToken, panForZoom, stepZoom, twistStep } from '../domain/opolyZoom';
+import { cameraAlong, centeredZoomShift, clampPan, clampZoom, frameToken, panForWheel, panForZoom, stepZoom, twistStep, zoomForWheel } from '../domain/opolyZoom';
 import { diceMotionMs, diceUseFlatCamera, FlatDice, OpolyDice } from './OpolyDice';
 import { CARD_REVEAL_MS, OpolyCardTable } from './OpolyCards';
 import { MoneyBills, type MoneyFlight } from './MoneyBills';
@@ -66,6 +69,8 @@ type Props = {
   players: Player[];
   /** Property id to the player who owns it. */
   owned?: Record<string, string>;
+  /** Property id to building level (1–4 houses, 5 hotel). */
+  houses?: Record<string, number>;
   tokenSpaces?: Record<string, number>;
   /** Players currently in jail, keyed by player id. Just Visiting is everyone else on that square. */
   inJail?: Record<string, number>;
@@ -88,6 +93,10 @@ type Props = {
   footer?: ReactNode;
   /** Space to face when nothing is moving. The side this space is on becomes the near edge. */
   focusSpace?: number;
+  /** Called when a selectable property cell is tapped. */
+  onSelectProperty?: (propertyId: string) => void;
+  /** Property ids that accept taps (e.g. streets you can develop on your turn). */
+  selectablePropertyIds?: ReadonlySet<string>;
 };
 
 /** Table angle. The near edge, where the piece is walking, is the large one. */
@@ -416,11 +425,43 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
       if (zoomRef.current <= 1 || !touch || event.touches.length !== 1) return;
       if (touch.clientX <= 28 && event.cancelable) event.preventDefault();
     };
+    let commit: ReturnType<typeof setTimeout> | undefined;
+    let zoomCarry = 0;
+    const onWheel = (event: WheelEvent) => {
+      if (event.ctrlKey) {
+        event.preventDefault();
+        const zoomed = zoomForWheel(panRef.current, event, zoomRef.current, viewportRefSize.current, zoomCarry);
+        if (!zoomed) return;
+        zoomCarry = zoomed.pending;
+        if (zoomed.zoom === zoomRef.current && zoomed.pan.x === panRef.current.x && zoomed.pan.y === panRef.current.y) return;
+        stopCamera();
+        zoomRef.current = zoomed.zoom;
+        gestureScale.setValue(1);
+        writePan(zoomed.pan);
+        setPan(zoomed.pan);
+        setZoom(zoomed.zoom);
+        return;
+      }
+      if (zoomRef.current <= 1 || event.metaKey) return;
+      if (event.deltaX === 0 && event.deltaY === 0) return;
+      event.preventDefault();
+      stopCamera();
+      const next = panForWheel(panRef.current, event, zoomRef.current, viewportRefSize.current);
+      if (!next || (next.x === panRef.current.x && next.y === panRef.current.y)) return;
+      writePan(next);
+      if (commit) clearTimeout(commit);
+      commit = setTimeout(() => {
+        setPan({ x: panRef.current.x, y: panRef.current.y });
+      }, 80);
+    };
     node.addEventListener('touchmove', blockMove, { passive: false });
     node.addEventListener('touchstart', blockEdge, { passive: false });
+    node.addEventListener('wheel', onWheel, { passive: false });
     return () => {
+      if (commit) clearTimeout(commit);
       node.removeEventListener('touchmove', blockMove);
       node.removeEventListener('touchstart', blockEdge);
+      node.removeEventListener('wheel', onWheel);
     };
   }, []);
 
@@ -813,8 +854,12 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
       </Animated.View>
       <Text style={styles.phoneHint}>
         {zoom > 1
-          ? 'Drag the board to look around. Pinch to zoom, or twist with two fingers to turn it.'
-          : 'Twist with two fingers to turn the board.'}
+          ? Platform.OS === 'web'
+            ? 'Drag or roll the mouse wheel to look around. Ctrl+wheel zooms.'
+            : 'Drag the board to look around. Pinch to zoom, or twist with two fingers to turn it.'
+          : Platform.OS === 'web'
+            ? 'Ctrl+wheel zooms. Twist with two fingers to turn the board.'
+            : 'Twist with two fingers to turn the board.'}
       </Text>
     </View>
   );
@@ -823,6 +868,7 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
 function BoardCanvas({
   players,
   owned,
+  houses,
   tokenSpaces,
   inJail,
   tokenRoute = null,
@@ -832,6 +878,8 @@ function BoardCanvas({
   chanceCount = 16,
   chestCount = 16,
   moneyFlights = NO_FLIGHTS,
+  onSelectProperty,
+  selectablePropertyIds,
   style,
   diceRoll = null,
   pinDice = false,
@@ -969,8 +1017,13 @@ function BoardCanvas({
             ? fitBoardLabel(nameText, !detail && space.tax ? nameText : space.short, bounds, label)
             : null;
         const shownName = isRailroad ? fullName.replace('🚂', '').trim() : fullName;
-        const barNameSize = letterBand
-          ? Math.max(8, Math.min(letterBand - 4, fitSize(shownName, Math.max(8, along - 4), Math.max(8, letterBand - 4))))
+        const propertyId = space.propertyId;
+        const buildLevel =
+          property?.kind === 'street' && propertyId ? (houses?.[propertyId] ?? 0) : 0;
+        const buildBand = buildingMarkBand(buildLevel, along, inward);
+        const nameBand = letterBand > 0 ? Math.max(6, letterBand - buildBand) : 0;
+        const barNameSize = nameBand
+          ? Math.max(6, Math.min(nameBand - 2, fitSize(shownName, Math.max(8, along - 4), Math.max(6, nameBand - 2))))
           : 0;
         let trainH = 0;
         let trainW = 0;
@@ -983,23 +1036,23 @@ function BoardCanvas({
           }
         }
         const amount = priceLine > 0 ? space.tax : undefined;
-        return (
-          <View
-            key={space.index}
-            accessibilityLabel={space.name}
-            style={[
-              styles.cell,
-              { backgroundColor: spaceTint(space.name, property?.kind) },
-              isCorner ? null : spacePadding(row, col, padLane, barColor ? bar : 0, inward, isRailroad ? 0 : railCaption, isRailroad ? 0 : trainInset),
-              quarter && compact ? { overflow: 'visible' as const } : null,
-              {
-                left: `${frame.x * 100}%`,
-                top: `${frame.y * 100}%`,
-                width: `${frame.w * 100}%`,
-                height: `${frame.h * 100}%`,
-              },
-            ]}
-          >
+        const selectable =
+          Boolean(propertyId && onSelectProperty && selectablePropertyIds?.has(propertyId));
+        const cellStyle: StyleProp<ViewStyle> = [
+          styles.cell,
+          { backgroundColor: spaceTint(space.name, property?.kind) },
+          isCorner ? null : spacePadding(row, col, padLane, barColor ? bar : 0, inward, isRailroad ? 0 : railCaption, isRailroad ? 0 : trainInset),
+          quarter && compact ? { overflow: 'visible' as const } : null,
+          selectable ? styles.selectableCell : null,
+          {
+            left: `${frame.x * 100}%`,
+            top: `${frame.y * 100}%`,
+            width: `${frame.w * 100}%`,
+            height: `${frame.h * 100}%`,
+          },
+        ];
+        const cellBody = (
+          <>
             {isCorner ? (
               <View style={[styles.cornerFill, { alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }]}>
                 <View
@@ -1056,23 +1109,33 @@ function BoardCanvas({
                           width: '100%',
                           height: letterBand,
                           alignItems: 'center',
-                          justifyContent: 'center',
+                          justifyContent: 'flex-start',
                         }}
                       >
-                        <Text
+                        {buildBand > 0 ? <View style={{ width: '100%', height: buildBand }} /> : null}
+                        <View
                           style={{
-                            color: contrastInk(barColor),
-                            fontFamily: fonts.body,
-                            fontWeight: '800',
-                            fontSize: barNameSize,
-                            lineHeight: barNameSize,
-                            width: along - 2,
-                            textAlign: 'center',
+                            width: '100%',
+                            height: nameBand,
+                            alignItems: 'center',
+                            justifyContent: 'center',
                           }}
-                          numberOfLines={1}
                         >
-                          {shownName}
-                        </Text>
+                          <Text
+                            style={{
+                              color: contrastInk(barColor),
+                              fontFamily: fonts.body,
+                              fontWeight: '800',
+                              fontSize: barNameSize,
+                              lineHeight: barNameSize,
+                              width: along - 2,
+                              textAlign: 'center',
+                            }}
+                            numberOfLines={1}
+                          >
+                            {shownName}
+                          </Text>
+                        </View>
                       </View>
                       {isRailroad && trainW > 0 ? (
                         <View style={{ width: trainW, height: trainH, transform: [{ scaleX: -1 }] }}>
@@ -1199,6 +1262,21 @@ function BoardCanvas({
                 ) : null}
               </>
             )}
+          </>
+        );
+        return selectable && propertyId ? (
+          <Pressable
+            key={space.index}
+            accessibilityRole="button"
+            accessibilityLabel={`Manage ${space.name}`}
+            onPress={() => onSelectProperty?.(propertyId)}
+            style={cellStyle}
+          >
+            {cellBody}
+          </Pressable>
+        ) : (
+          <View key={space.index} accessibilityLabel={space.name} style={cellStyle}>
+            {cellBody}
           </View>
         );
       })}
@@ -1267,6 +1345,65 @@ function BoardCanvas({
                     {glyph}
                   </Text>
                 </View>
+              </View>
+            );
+          })
+        : null}
+      {size > 0
+        ? boardSpaces.map((space) => {
+            const propertyId = space.propertyId;
+            if (!propertyId) return null;
+            const property = getProperty(propertyId);
+            if (!property || property.kind !== 'street') return null;
+            const level = houses?.[propertyId] ?? 0;
+            if (level <= 0) return null;
+            const { row, col } = spaceToCell(space.index);
+            const frame = cellBox(row, col);
+            const cellW = frame.w * size;
+            const cellH = frame.h * size;
+            const marks = buildingMarkPlacement(row, col, cellW, cellH, level);
+            if (marks.length === 0) return null;
+            const label =
+              level >= 5 ? `Hotel on ${space.name}` : `${level} house${level === 1 ? '' : 's'} on ${space.name}`;
+            return (
+              <View
+                key={`build-${space.index}`}
+                accessibilityLabel={label}
+                style={[
+                  styles.buildingLayer,
+                  {
+                    left: frame.x * size,
+                    top: frame.y * size,
+                    width: cellW,
+                    height: cellH,
+                  },
+                  { pointerEvents: 'none' },
+                ]}
+              >
+                {marks.map((mark, index) => {
+                  const draw = mark.w * BUILDING_VISUAL_SCALE;
+                  const inset = (draw - mark.w) / 2;
+                  return (
+                    <View
+                      key={`${mark.kind}-${index}`}
+                      style={[
+                        styles.buildingMark,
+                        {
+                          left: mark.x - inset,
+                          top: mark.y - inset,
+                          width: draw,
+                          height: draw,
+                        },
+                      ]}
+                    >
+                      {mark.kind === 'hotel' ? (
+                        <HotelSvg size={draw} facing={nameFacing(row, col)} />
+                      ) : (
+                        <HouseSvg size={draw} facing={nameFacing(row, col)} />
+                      )}
+                    </View>
+                  );
+                })}
               </View>
             );
           })
@@ -1793,6 +1930,44 @@ function TrainSvg({ width, height }: { width: number; height: number }) {
       <Rect x="7" y="12" width="8" height="6" rx="1" fill="#b9d7ea" />
       <Circle cx="50" cy="22" r="1.4" fill="#f2d36b" />
     </Svg>
+  );
+}
+
+/** Monopoly-style green house: peaked roof, front, and right face. */
+function HouseSvg({ size, facing }: { size: number; facing: ReturnType<typeof nameFacing> }) {
+  return (
+    <View style={{ width: size, height: size, transform: [{ rotate: facing }] }}>
+      <Svg width={size} height={size} viewBox="0 0 40 40">
+        <Polygon points="6,38 30,38 38,32 14,32" fill="rgba(8,20,12,0.28)" />
+        <Polygon points="28,16 38,10 38,32 28,38" fill="#0F5A2C" />
+        <Polygon points="4,16 28,16 28,38 4,38" fill="#1F9A45" />
+        <Polygon points="28,16 38,10 24,1 18,6" fill="#0A3D1E" />
+        <Polygon points="2,16 18,6 28,16" fill="#2FBF5A" />
+        <Polygon points="18,6 24,1 28,16" fill="#178A3C" />
+        <Rect x="12" y="24" width="8" height="14" fill="#0A3D1E" />
+        <Rect x="22" y="22" width="7" height="7" fill="#C8E8D4" />
+      </Svg>
+    </View>
+  );
+}
+
+/** Monopoly-style red hotel: taller block with roof slab and windows. */
+function HotelSvg({ size, facing }: { size: number; facing: ReturnType<typeof nameFacing> }) {
+  return (
+    <View style={{ width: size, height: size, transform: [{ rotate: facing }] }}>
+      <Svg width={size} height={size} viewBox="0 0 40 40">
+        <Polygon points="6,39 29,39 38,33 15,33" fill="rgba(20,6,6,0.3)" />
+        <Polygon points="26,8 38,2 38,33 26,39" fill="#7A1612" />
+        <Polygon points="4,8 26,8 26,39 4,39" fill="#D03228" />
+        <Polygon points="2,8 26,8 38,2 14,2" fill="#9A1E18" />
+        <Polygon points="14,2 38,2 36,0 12,0" fill="#B8261E" />
+        <Rect x="8" y="12" width="7" height="6" fill="#F0D9A0" />
+        <Rect x="17" y="12" width="7" height="6" fill="#F0D9A0" />
+        <Rect x="8" y="21" width="7" height="6" fill="#F0D9A0" />
+        <Rect x="17" y="21" width="7" height="6" fill="#F0D9A0" />
+        <Rect x="11" y="30" width="8" height="9" fill="#5C100E" />
+      </Svg>
+    </View>
   );
 }
 
@@ -2337,6 +2512,11 @@ const styles = StyleSheet.create({
     padding: 1,
     overflow: 'visible',
   },
+  selectableCell: {
+    borderColor: colors.accent,
+    borderWidth: 2,
+    zIndex: 2,
+  },
   nameBlock: {
     width: '100%',
     alignItems: 'center',
@@ -2441,6 +2621,15 @@ const styles = StyleSheet.create({
   },
   ownerEmoji: {
     textAlign: 'center',
+  },
+  buildingLayer: {
+    position: 'absolute',
+    zIndex: 3,
+    overflow: 'visible',
+  },
+  buildingMark: {
+    position: 'absolute',
+    overflow: 'visible',
   },
   token: {
     position: 'absolute',

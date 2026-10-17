@@ -18,7 +18,7 @@ import { ShareCodePanel } from '../components/ShareCodePanel';
 import { SorryBoard } from '../components/SorryBoard';
 import { Badge, Button, Screen } from '../components/ui';
 import { findLocalPlayerId } from '../domain/localPlayer';
-import type { Game } from '../domain/models';
+import { playModeOf, type  Game  } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import {
   PAWNS_PER_PLAYER,
@@ -329,7 +329,7 @@ export function SorryScreen({ navigation, route }: Props) {
             <Badge label="Sorry" tone="accent" />
           </View>
           <GameHelp templateId="sorry" />
-          <ShareCodePanel shareCode={game.shareCode} />
+          <ShareCodePanel shareCode={game.shareCode} passAndPlay={playModeOf(game) === 'pass-and-play'} />
           <HomeButton onPress={() => navigation.navigate('Home')} />
         </View>
 

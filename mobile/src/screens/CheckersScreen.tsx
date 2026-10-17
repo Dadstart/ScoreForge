@@ -25,7 +25,7 @@ import {
   type CheckersState,
 } from '../domain/checkers';
 import { findLocalPlayerId } from '../domain/localPlayer';
-import type { Game } from '../domain/models';
+import { playModeOf, type  Game  } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
 import { usePlaySpark } from '../hooks/usePlaySpark';
@@ -290,7 +290,7 @@ export function CheckersScreen({ navigation, route }: Props) {
             <Badge label="Checkers" tone="accent" />
           </View>
           <GameHelp templateId="checkers" />
-          <ShareCodePanel shareCode={game.shareCode} />
+          <ShareCodePanel shareCode={game.shareCode} passAndPlay={playModeOf(game) === 'pass-and-play'} />
           <HomeButton onPress={() => navigation.navigate('Home')} />
         </View>
 

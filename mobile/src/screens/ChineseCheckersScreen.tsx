@@ -36,7 +36,7 @@ import {
   type ChineseState,
 } from '../domain/chineseCheckers';
 import { findLocalPlayerId } from '../domain/localPlayer';
-import type { Game } from '../domain/models';
+import { playModeOf, type  Game  } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
 import { usePlaySpark } from '../hooks/usePlaySpark';
@@ -330,7 +330,7 @@ export function ChineseCheckersScreen({ navigation, route }: Props) {
             <Badge label="Chinese Checkers" tone="accent" />
           </View>
           <GameHelp templateId="chinese-checkers" />
-          <ShareCodePanel shareCode={game.shareCode} />
+          <ShareCodePanel shareCode={game.shareCode} passAndPlay={playModeOf(game) === 'pass-and-play'} />
           <HomeButton onPress={() => navigation.navigate('Home')} />
         </View>
 

@@ -102,6 +102,10 @@ export type PlayOutcome = {
   drawn?: DrawnCard[];
 };
 
+/** Classic U.S. edition bank supply. */
+export const HOUSE_SUPPLY = 32;
+export const HOTEL_SUPPLY = 12;
+
 const HOUSE_COST: Record<string, number> = {
   Brown: 50,
   'Light blue': 50,
@@ -159,6 +163,22 @@ export function ownsOpoly(play: OpolyPlay, playerId: string, group: string): boo
   );
 }
 
+/** Houses and hotels still available in the bank (derived from placed buildings). */
+export function buildingStock(play: OpolyPlay): { houses: number; hotels: number } {
+  let houses = 0;
+  let hotels = 0;
+  for (const property of properties) {
+    if (property.kind !== 'street') continue;
+    const level = levelOf(play, property.id);
+    if (level >= 5) hotels += 1;
+    else houses += level;
+  }
+  return {
+    houses: Math.max(0, HOUSE_SUPPLY - houses),
+    hotels: Math.max(0, HOTEL_SUPPLY - hotels),
+  };
+}
+
 export function canBuild(play: OpolyPlay, propertyId: string): boolean {
   const property = getProperty(propertyId);
   if (!property || property.kind !== 'street') return false;
@@ -167,7 +187,11 @@ export function canBuild(play: OpolyPlay, propertyId: string): boolean {
   const level = levelOf(play, propertyId);
   if (level >= 5) return false;
   const lowest = Math.min(...streetsIn(property.group).map((street) => levelOf(play, street.id)));
-  return level === lowest;
+  if (level !== lowest) return false;
+  const stock = buildingStock(play);
+  // Level 4 → hotel returns 4 houses to the bank and takes 1 hotel.
+  if (level >= 4) return stock.hotels >= 1;
+  return stock.houses >= 1;
 }
 
 export function canSellBuilding(play: OpolyPlay, propertyId: string): boolean {
@@ -176,7 +200,10 @@ export function canSellBuilding(play: OpolyPlay, propertyId: string): boolean {
   const level = levelOf(play, propertyId);
   if (level <= 0) return false;
   const highest = Math.max(...streetsIn(property.group).map((street) => levelOf(play, street.id)));
-  return level === highest;
+  if (level !== highest) return false;
+  // Hotel → 4 houses needs 4 houses available from the bank.
+  if (level >= 5) return buildingStock(play).houses >= 4;
+  return true;
 }
 
 export function canMortgage(play: OpolyPlay, propertyId: string): boolean {
@@ -1415,22 +1442,32 @@ export function payToLeaveJail(play: OpolyPlay, tokens: Record<string, number>, 
   };
 }
 
+export function jailCardsHeld(play: OpolyPlay, playerId: string) {
+  const chance = countOf(play.chanceFree, playerId);
+  const chest = countOf(play.chestFree, playerId);
+  return { chance, chest, total: chance + chest };
+}
+
+function setHeldCount(map: Record<string, number>, playerId: string, count: number) {
+  if (count <= 0) delete map[playerId];
+  else map[playerId] = count;
+}
+
 export function useJailCard(play: OpolyPlay, tokens: Record<string, number>, players: PlayPlayer[]): PlayOutcome | { error: string } {
   if (play.jail[play.turn] == null) return { error: 'That player is not in jail.' };
-  const chance = countOf(play.chanceFree, play.turn);
-  const chest = countOf(play.chestFree, play.turn);
-  if (chance + chest <= 0) return { error: 'No Get Out of Jail Free card.' };
+  const held = jailCardsHeld(play, play.turn);
+  if (held.total <= 0) return { error: 'No Get Out of Jail Free card.' };
   const jail = { ...play.jail };
   delete jail[play.turn];
   const chanceFree = { ...play.chanceFree };
   const chestFree = { ...play.chestFree };
   const chanceDeck = [...play.chance];
   const chestDeck = [...play.chest];
-  if (chance > 0) {
-    chanceFree[play.turn] = chance - 1;
+  if (held.chance > 0) {
+    setHeldCount(chanceFree, play.turn, held.chance - 1);
     chanceDeck.push('jail-free');
   } else {
-    chestFree[play.turn] = chest - 1;
+    setHeldCount(chestFree, play.turn, held.chest - 1);
     chestDeck.push('jail-free');
   }
   const next: OpolyPlay = { ...play, jail, chanceFree, chestFree, chance: chanceDeck, chest: chestDeck, doubles: 0 };
@@ -1448,14 +1485,29 @@ function ownedPlay(play: OpolyPlay, propertyId: string, playerId: string): Board
   return property;
 }
 
+/** Streets in a color group that can take the next house/hotel under even-build rules. */
+export function groupBuildTargets(play: OpolyPlay, group: string): BoardProperty[] {
+  return streetsIn(group).filter((street) => canBuild(play, street.id));
+}
+
+export function groupBuildCost(play: OpolyPlay, group: string): number {
+  const targets = groupBuildTargets(play, group);
+  if (targets.length === 0) return 0;
+  return targets.length * houseCost(targets[0]);
+}
+
 export function buildHouse(play: OpolyPlay, tokens: Record<string, number>, players: PlayPlayer[], propertyId: string, cash: number): PlayOutcome | { error: string } {
   if (play.pending || play.doubles > 0) return { error: 'Finish the move before building.' };
-  if (!canBuild(play, propertyId)) return { error: 'Build evenly on a complete color group.' };
   const property = ownedPlay(play, propertyId, play.turn);
   if (!property) return { error: 'You do not own that property.' };
+  const level = levelOf(play, propertyId);
+  const stock = buildingStock(play);
+  if (level < 4 && stock.houses < 1) return { error: 'No houses left in the bank.' };
+  if (level >= 4 && stock.hotels < 1) return { error: 'No hotels left in the bank.' };
+  if (!canBuild(play, propertyId)) return { error: 'Build evenly on a complete color group.' };
   const cost = houseCost(property);
   if (cash < cost) return { error: `A house costs ${formatMoney(cost)}.` };
-  const nextLevel = levelOf(play, propertyId) + 1;
+  const nextLevel = level + 1;
   const houses = { ...play.houses, [propertyId]: nextLevel };
   const events = transferEvents(play.turn, BANK_PARTY_ID, cost);
   const built = nextLevel === 5 ? 'a hotel' : 'a house';
@@ -1467,14 +1519,62 @@ export function buildHouse(play: OpolyPlay, tokens: Record<string, number>, play
   };
 }
 
+/**
+ * Build one house/hotel on every street in the group that is currently eligible
+ * (lowest level first), keeping development even.
+ */
+export function buildGroupHouses(
+  play: OpolyPlay,
+  tokens: Record<string, number>,
+  players: PlayPlayer[],
+  group: string,
+  cash: number,
+): PlayOutcome | { error: string } {
+  if (play.pending || play.doubles > 0) return { error: 'Finish the move before building.' };
+  const targets = groupBuildTargets(play, group);
+  if (targets.length === 0) return { error: 'Build evenly on a complete color group.' };
+  if (targets.some((street) => play.owned[street.id] !== play.turn)) {
+    return { error: 'You do not own that color group.' };
+  }
+  let housesNeeded = 0;
+  let hotelsNeeded = 0;
+  for (const street of targets) {
+    if (levelOf(play, street.id) >= 4) hotelsNeeded += 1;
+    else housesNeeded += 1;
+  }
+  const stock = buildingStock(play);
+  if (housesNeeded > stock.houses) return { error: 'No houses left in the bank.' };
+  if (hotelsNeeded > stock.hotels) return { error: 'No hotels left in the bank.' };
+  const costEach = houseCost(targets[0]);
+  const total = costEach * targets.length;
+  if (cash < total) return { error: `That costs ${formatMoney(total)}.` };
+  const houses = { ...play.houses };
+  for (const street of targets) {
+    houses[street.id] = levelOf(play, street.id) + 1;
+  }
+  const events = transferEvents(play.turn, BANK_PARTY_ID, total);
+  const unit = hotelsNeeded > 0 ? 'hotel' : 'house';
+  const plural = targets.length === 1 ? unit : `${unit}s`;
+  return {
+    play: { ...play, houses, undo: packUndo(play, tokens, events.length) },
+    tokens,
+    events: stamped(events),
+    note: `${playerName(players, play.turn)} builds ${targets.length} ${plural} on ${group}.`,
+  };
+}
+
 export function sellBuilding(play: OpolyPlay, tokens: Record<string, number>, players: PlayPlayer[], propertyId: string): PlayOutcome | { error: string } {
   if (play.pending && play.pending.kind !== 'pay') return { error: 'Finish the current decision first.' };
-  if (!canSellBuilding(play, propertyId)) return { error: 'Sell houses evenly, hotels first.' };
   const property = ownedPlay(play, propertyId, play.turn);
   if (!property) return { error: 'You do not own that property.' };
+  const level = levelOf(play, propertyId);
+  if (level >= 5 && buildingStock(play).houses < 4) {
+    return { error: 'Not enough houses in the bank to break down a hotel.' };
+  }
+  if (!canSellBuilding(play, propertyId)) return { error: 'Sell houses evenly, hotels first.' };
   const refund = Math.floor(houseCost(property) / 2);
   const houses = { ...play.houses };
-  const nextLevel = levelOf(play, propertyId) - 1;
+  const nextLevel = level - 1;
   if (nextLevel <= 0) delete houses[propertyId];
   else houses[propertyId] = nextLevel;
   const events = transferEvents(BANK_PARTY_ID, play.turn, refund);
@@ -1735,6 +1835,124 @@ export function undoForCash(play: OpolyPlay, tokens: Record<string, number>, eve
   return { ...play, undo: packUndo(play, tokens, eventCount) };
 }
 
+function clearBuildingsOnColor(houses: Record<string, number>, property: BoardProperty) {
+  if (property.kind === 'street') {
+    for (const street of streetsIn(property.group)) delete houses[street.id];
+  } else {
+    delete houses[property.id];
+  }
+}
+
+/**
+ * Debug / manual testing: grant a deed to a player, or pass null to return it to the bank.
+ * Clears buildings on that color set and unmortgages the deed.
+ */
+export function debugAssignProperty(
+  play: OpolyPlay,
+  propertyId: string,
+  ownerId: string | null,
+): OpolyPlay | { error: string } {
+  const property = getProperty(propertyId);
+  if (!property) return { error: 'Unknown property.' };
+  if (ownerId != null && play.owned[propertyId] === ownerId && !play.mortgaged.includes(propertyId)) {
+    return play;
+  }
+  const owned = { ...play.owned };
+  const houses = { ...play.houses };
+  clearBuildingsOnColor(houses, property);
+  let mortgaged = play.mortgaged.filter((id) => id !== propertyId);
+  if (ownerId == null) delete owned[propertyId];
+  else owned[propertyId] = ownerId;
+  // Reclaiming a street may leave orphaned buildings if we only cleared one color — already handled.
+  return { ...play, owned, houses, mortgaged, undo: null };
+}
+
+/** Debug / manual testing: grant every deed in a color/rail/utility group, or reclaim them. */
+export function debugAssignGroup(
+  play: OpolyPlay,
+  group: string,
+  ownerId: string | null,
+): OpolyPlay | { error: string } {
+  const members = properties.filter((property) => property.group === group);
+  if (members.length === 0) return { error: 'Unknown property group.' };
+  let next: OpolyPlay = play;
+  for (const property of members) {
+    const assigned = debugAssignProperty(next, property.id, ownerId);
+    if ('error' in assigned) return assigned;
+    next = assigned;
+  }
+  return next;
+}
+
+/** Debug / manual testing: pull a Get Out of Jail Free card from its deck into a player's hand. */
+export function debugGiveJailCard(
+  play: OpolyPlay,
+  playerId: string,
+  deck: 'chance' | 'chest',
+): OpolyPlay | { error: string } {
+  const pile = [...(deck === 'chance' ? play.chance : play.chest)];
+  const free = { ...(deck === 'chance' ? play.chanceFree : play.chestFree) };
+  const at = pile.indexOf('jail-free');
+  if (at < 0) {
+    if (countOf(free, playerId) > 0) return play;
+    return { error: 'That Get Out of Jail Free card is already held.' };
+  }
+  pile.splice(at, 1);
+  setHeldCount(free, playerId, countOf(free, playerId) + 1);
+  return deck === 'chance'
+    ? { ...play, chance: pile, chanceFree: free, undo: null }
+    : { ...play, chest: pile, chestFree: free, undo: null };
+}
+
+/** Debug / manual testing: return a held Get Out of Jail Free card to the bottom of its deck. */
+export function debugReturnJailCard(
+  play: OpolyPlay,
+  playerId: string,
+  deck: 'chance' | 'chest',
+): OpolyPlay | { error: string } {
+  const free = { ...(deck === 'chance' ? play.chanceFree : play.chestFree) };
+  const held = countOf(free, playerId);
+  if (held <= 0) return { error: 'That player does not hold that card.' };
+  setHeldCount(free, playerId, held - 1);
+  const pile = [...(deck === 'chance' ? play.chance : play.chest), 'jail-free'];
+  return deck === 'chance'
+    ? { ...play, chance: pile, chanceFree: free, undo: null }
+    : { ...play, chest: pile, chestFree: free, undo: null };
+}
+
+/**
+ * Debug / manual testing: set houses (1–4) or a hotel (5) on an owned street.
+ * Skips even-build and cash, but still respects bank supply.
+ */
+export function debugSetBuilding(
+  play: OpolyPlay,
+  propertyId: string,
+  level: number,
+): OpolyPlay | { error: string } {
+  const property = getProperty(propertyId);
+  if (!property || property.kind !== 'street') return { error: 'Only streets can have houses or hotels.' };
+  if (!play.owned[propertyId]) return { error: 'Assign the deed before building.' };
+  if (play.mortgaged.includes(propertyId)) return { error: 'Unmortgage before building.' };
+  const nextLevel = Math.max(0, Math.min(5, Math.trunc(level)));
+  const current = levelOf(play, propertyId);
+  if (current === nextLevel) return play;
+
+  const currentHouses = current >= 5 ? 0 : current;
+  const currentHotels = current >= 5 ? 1 : 0;
+  const nextHouses = nextLevel >= 5 ? 0 : nextLevel;
+  const nextHotels = nextLevel >= 5 ? 1 : 0;
+  const stock = buildingStock(play);
+  const houseNeed = nextHouses - currentHouses;
+  const hotelNeed = nextHotels - currentHotels;
+  if (houseNeed > stock.houses) return { error: 'No houses left in the bank.' };
+  if (hotelNeed > stock.hotels) return { error: 'No hotels left in the bank.' };
+
+  const houses = { ...play.houses };
+  if (nextLevel <= 0) delete houses[propertyId];
+  else houses[propertyId] = nextLevel;
+  return { ...play, houses, undo: null };
+}
+
 export function withoutOpolyPlayer(
   play: OpolyPlay,
   playerId: string,
@@ -1850,7 +2068,11 @@ export function turnPrompt(play: OpolyPlay, players: PlayPlayer[], events: Score
   if (play.jail[play.turn] != null) {
     const spent = play.jail[play.turn] ?? 0;
     const left = 3 - spent;
-    return `${name} is in jail. ${left === 1 ? 'One roll left, then pay $50.' : `${left} rolls to throw doubles.`}`;
+    const rolls =
+      left === 1 ? 'One roll left, then pay $50.' : `${left} rolls to throw doubles.`;
+    const card =
+      jailCardsHeld(play, play.turn).total > 0 ? ' Or use Get Out of Jail Free.' : '';
+    return `${name} is in jail. ${rolls}${card}`;
   }
   if (play.doubles > 0) return `${name} rolled doubles. Roll again.`;
   return `${name}'s turn. Roll the dice.`;

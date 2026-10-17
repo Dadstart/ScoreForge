@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { boardTurnForSpace } from './opolyBoard';
-import { centeredZoomShift, frameToken, panForWheel, panForZoom, pieceScreen, readingZoom, spaceScreen, stepZoom, twistStep } from './opolyZoom';
+import { centeredZoomShift, frameToken, panForWheel, panForZoom, pieceScreen, readingZoom, spaceScreen, stepZoom, twistStep, zoomForWheel } from './opolyZoom';
 
 const viewport = 100;
 const track = 10 / 11;
@@ -78,13 +78,47 @@ describe('monopoly zoom', () => {
     assert.equal(panForWheel(start, { deltaX: 0, deltaY: 0, deltaMode: 0 }, 2, viewport), null);
   });
 
-  it('starts at page width and zooms out twice', () => {
-    assert.equal(stepZoom(1, 1), 1);
+  it('zooms one stop per ctrl-wheel notch and banks smaller deltas', () => {
+    const start = { x: 0, y: 0 };
+    const zoomIn = zoomForWheel(start, { deltaX: 0, deltaY: -100, deltaMode: 0, ctrlKey: true }, 1, viewport);
+    assert.ok(zoomIn);
+    assert.equal(zoomIn.zoom, 1.5);
+    assert.equal(zoomIn.pending, 0);
+    assert.deepEqual(zoomIn.pan, panForZoom(start, 1, 1.5, viewport));
+
+    const zoomOut = zoomForWheel(start, { deltaX: 0, deltaY: 100, deltaMode: 0, ctrlKey: true }, 1, viewport);
+    assert.equal(zoomOut?.zoom, 0.75);
+    assert.equal(zoomForWheel(start, { deltaX: 0, deltaY: -1, deltaMode: 1, ctrlKey: true }, 1, viewport)?.zoom, 1.5);
+    assert.equal(zoomForWheel(start, { deltaX: 0, deltaY: -100, deltaMode: 0 }, 1, viewport), null);
+    assert.equal(zoomForWheel(start, { deltaX: 0, deltaY: -100, deltaMode: 0, ctrlKey: true }, 5, viewport)?.zoom, 5);
+
+    let pending = 0;
+    let zoom = 1;
+    let pan = start;
+    for (const deltaY of [-20, -20]) {
+      const next = zoomForWheel(pan, { deltaX: 0, deltaY, deltaMode: 0, ctrlKey: true }, zoom, viewport, pending);
+      assert.ok(next);
+      pending = next.pending;
+      zoom = next.zoom;
+      pan = next.pan;
+    }
+    assert.equal(zoom, 1.5);
+    assert.equal(pending, 0);
+  });
+
+  it('starts at page width, zooms out twice, and zooms in through close stops', () => {
     assert.equal(stepZoom(1, -1), 0.75);
     assert.equal(stepZoom(0.75, -1), 0.5);
     assert.equal(stepZoom(0.5, -1), 0.5);
     assert.equal(stepZoom(0.5, 1), 0.75);
     assert.equal(stepZoom(0.75, 1), 1);
+    assert.equal(stepZoom(1, 1), 1.5);
+    assert.equal(stepZoom(1.5, 1), 2);
+    assert.equal(stepZoom(2, 1), 2.5);
+    assert.equal(stepZoom(2.5, 1), 3);
+    assert.equal(stepZoom(3, 1), 4);
+    assert.equal(stepZoom(4, 1), 5);
+    assert.equal(stepZoom(5, 1), 5);
   });
 
   it('opens a phone-width board close enough to read property names', () => {
@@ -96,9 +130,11 @@ describe('monopoly zoom', () => {
     const side = (board * (1 - 2 * 0.16)) / 9;
     assert.ok(corner >= 96);
     assert.ok(side >= 70);
-    assert.equal(stepZoom(1, 1, phone), zoom);
-    assert.equal(stepZoom(zoom, -1, phone), 1);
-    assert.equal(stepZoom(zoom, 1, phone), zoom);
+    assert.equal(stepZoom(1, 1, phone), 1.5);
+    assert.equal(stepZoom(2, 1, phone), zoom);
+    assert.equal(stepZoom(zoom, -1, phone), 2);
+    assert.equal(stepZoom(zoom, 1, phone), 3);
+    assert.equal(stepZoom(5, 1, phone), 5);
     assert.equal(readingZoom(1100), 1);
   });
 });

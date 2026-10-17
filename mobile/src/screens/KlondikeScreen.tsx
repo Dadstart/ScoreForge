@@ -26,7 +26,7 @@ import {
   type KlondikeState,
   type Source,
 } from '../domain/klondike';
-import type { Game } from '../domain/models';
+import { playModeOf, type  Game  } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
 import { usePlaySpark } from '../hooks/usePlaySpark';
@@ -258,7 +258,7 @@ export function KlondikeScreen({ navigation, route }: Props) {
             <Badge label={`Draw ${klondike.drawCount}`} tone="accent" />
           </View>
           <GameHelp templateId="klondike" />
-          <ShareCodePanel shareCode={game.shareCode} />
+          <ShareCodePanel shareCode={game.shareCode} passAndPlay={playModeOf(game) === 'pass-and-play'} />
           <HomeButton onPress={() => navigation.navigate('Home')} />
         </View>
 

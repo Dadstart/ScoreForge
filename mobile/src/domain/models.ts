@@ -12,6 +12,9 @@ import { fillRandom, randomId } from './secureRandom';
 
 export type GameStatus = 'InProgress' | 'Completed';
 
+/** How players share the table: one device, or each on their own with a join code. */
+export type PlayMode = 'pass-and-play' | 'multi-device';
+
 export interface Player {
   id: string;
   name: string;
@@ -35,6 +38,8 @@ export interface Game {
   shareCode: string;
   name: string;
   templateId: string;
+  /** Absent on older saves — treat as multi-device. */
+  playMode?: PlayMode;
   players: Player[];
   events: ScoreEvent[];
   status: GameStatus;
@@ -99,6 +104,7 @@ export function createGame(partial: {
   name: string;
   templateId: string;
   players: Player[];
+  playMode?: PlayMode;
   targetScore?: number | null;
   maxRounds?: number | null;
 }): Game {
@@ -109,6 +115,7 @@ export function createGame(partial: {
     shareCode,
     name: partial.name,
     templateId: partial.templateId,
+    playMode: partial.playMode ?? 'multi-device',
     players: partial.players,
     events: [],
     status: 'InProgress',
@@ -118,6 +125,10 @@ export function createGame(partial: {
     createdAt: now,
     updatedAt: now,
   };
+}
+
+export function playModeOf(game: Pick<Game, 'playMode'> | null | undefined): PlayMode {
+  return game?.playMode === 'pass-and-play' ? 'pass-and-play' : 'multi-device';
 }
 
 /** Unambiguous alphabet (no 0/O, 1/I/L) for easy verbal sharing. */
