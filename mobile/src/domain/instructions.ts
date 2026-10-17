@@ -63,14 +63,14 @@ const INSTRUCTIONS: Record<string, GameInstructions> = {
       'The last player with cash wins. Marking the game complete crowns the richest player.',
     ],
   },
-  yahtzee: {
-    title: 'Yahtzee',
+  yaht: {
+    title: 'Yaht',
     lines: [
       'Roll five dice. Tap a die to keep it, then roll again. You get three rolls.',
       'Score the roll in an open box. The gold chips show what this roll is worth.',
       'A zero asks you to confirm before it scratches the box.',
       'The upper section pays a 35 bonus once those boxes total 63 or more.',
-      'Five of a kind scores 50 in Yahtzee. Each later one adds 100, and must fill the matching upper box while that box is open.',
+      'Five of a kind scores 50 in Yaht. Each later one adds 100, and must fill the matching upper box while that box is open.',
       'If that upper box is already filled, score any open lower box for its full points. If the lower section is full, scratch an open upper box for zero.',
       'Highest total wins.',
     ],
@@ -162,5 +162,6 @@ const INSTRUCTIONS: Record<string, GameInstructions> = {
 };
 
 export function gameInstructions(templateId: string): GameInstructions | undefined {
-  return INSTRUCTIONS[templateId.toLowerCase()];
+  const key = templateId.toLowerCase() === 'yahtzee' ? 'yaht' : templateId.toLowerCase();
+  return INSTRUCTIONS[key];
 }

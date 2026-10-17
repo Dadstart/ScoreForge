@@ -8,8 +8,8 @@ import { PlaySpark } from '../components/PlaySpark';
 import { GameHelp } from '../components/GameHelp';
 import { HomeButton } from '../components/HomeButton';
 import { ShareCodePanel } from '../components/ShareCodePanel';
-import { YahtzeeDice } from '../components/YahtzeeDice';
-import { YahtzeeScoreboard } from '../components/YahtzeeScoreboard';
+import { YahtDice } from '../components/YahtDice';
+import { YahtScoreboard } from '../components/YahtScoreboard';
 import { Badge, Button, Screen } from '../components/ui';
 import { findLocalPlayerId } from '../domain/localPlayer';
 import { playModeOf, type  Game, ScoreEvent  } from '../domain/models';
@@ -18,22 +18,22 @@ import { getTemplate } from '../domain/templates';
 import {
   boxById,
   buildPlayerCard,
-  createYahtzeeState,
-  ensureYahtzeeState,
+  createYahtState,
+  ensureYahtState,
   isScorecardComplete,
   rollDice,
   scoreDice,
   scoreForBox,
   scorePreview,
   toggleHold,
-  undoYahtzee,
+  undoYaht,
   UPPER_BONUS,
   UPPER_BONUS_AT,
-  YAHTZEE_BONUS_BOX,
-  YAHTZEE_BOXES,
-  yahtzeeBonusCount,
-  type YahtzeeBox,
-} from '../domain/yahtzee';
+  YAHT_BOXES,
+  isYahtBonusBox,
+  yahtBonusCount,
+  type YahtBox,
+} from '../domain/yaht';
 import { playDiceRoll, prepareDiceRoll } from '../audio/diceRollSound';
 import { usePlaySpark, type SparkTone } from '../hooks/usePlaySpark';
 import { useWinCelebration } from '../hooks/useWinCelebration';
@@ -42,9 +42,9 @@ import { loadDisplayName } from '../storage/displayNameStore';
 import { addPlayerToGame, preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
 import { colors, radii, space, typography } from '../theme';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Yahtzee'>;
+type Props = NativeStackScreenProps<RootStackParamList, 'Yaht'>;
 
-export function YahtzeeScreen({ navigation, route }: Props) {
+export function YahtScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { gameId } = route.params;
   const [game, setGame] = useState<Game | null>(null);
@@ -99,17 +99,17 @@ export function YahtzeeScreen({ navigation, route }: Props) {
     const priorIds = new Set(prior.map((event) => event.id));
     const scored = [...game.events]
       .reverse()
-      .find((event) => !priorIds.has(event.id) && event.box && event.box !== YAHTZEE_BONUS_BOX);
+      .find((event) => !priorIds.has(event.id) && event.box && !isYahtBonusBox(event.box));
     if (!scored?.box) return;
     const box = boxById(scored.box);
     if (!box) return;
-    const cheer = yahtzeeCheer(box, scored.points, prior, game.events, scored.playerId);
+    const cheer = yahtCheer(box, scored.points, prior, game.events, scored.playerId);
     if (cheer) spark(cheer.label, cheer.tone);
   }, [game, spark]);
 
   useEffect(() => {
     if (!game) return;
-    const next = ensureYahtzeeState(game);
+    const next = ensureYahtState(game);
     if (next === game) return;
     void saveGame(next)
       .then((saved) => setGame((current) => preferNewerGame(current, saved)))
@@ -185,7 +185,7 @@ export function YahtzeeScreen({ navigation, route }: Props) {
   }
 
   const locked = snapshot.isComplete;
-  const board = ensureYahtzeeState(game).yahtzee ?? null;
+  const board = ensureYahtState(game).yaht ?? null;
   const turnName = game.players.find((player) => player.id === board?.turn.playerId)?.name ?? 'Player';
   const preview = board?.turn.dice ? scorePreview(board.turn.dice, game.events, board.turn.playerId) : null;
   const banner = locked
@@ -197,11 +197,11 @@ export function YahtzeeScreen({ navigation, route }: Props) {
   const scoreBox = (boxId: string) => {
     setScratch(null);
     void applyGame((current) => {
-      const base = ensureYahtzeeState(current);
-      if (!base.yahtzee) return current;
-      const scored = scoreDice(base.yahtzee, base.events, base.players, boxId);
+      const base = ensureYahtState(current);
+      if (!base.yaht) return current;
+      const scored = scoreDice(base.yaht, base.events, base.players, boxId);
       if (!scored) return current;
-      return { ...base, yahtzee: scored.state, events: scored.events };
+      return { ...base, yaht: scored.state, events: scored.events };
     });
   };
 
@@ -219,9 +219,9 @@ export function YahtzeeScreen({ navigation, route }: Props) {
         <View style={styles.header}>
           <View style={{ flex: 1, gap: 4 }}>
             <Text style={typography.title}>{game.name}</Text>
-            <Badge label="Yahtzee" tone="accent" />
+            <Badge label="Yaht" tone="accent" />
           </View>
-          <GameHelp templateId="yahtzee" />
+          <GameHelp templateId="yaht" />
           <ShareCodePanel shareCode={game.shareCode} passAndPlay={playModeOf(game) === 'pass-and-play'} />
           <HomeButton onPress={() => navigation.navigate('Home')} />
         </View>
@@ -231,7 +231,7 @@ export function YahtzeeScreen({ navigation, route }: Props) {
         </View>
 
         {!locked && board ? (
-          <YahtzeeDice
+          <YahtDice
             dice={board.turn.dice}
             held={board.turn.held}
             rollsLeft={board.turn.rollsLeft}
@@ -241,19 +241,19 @@ export function YahtzeeScreen({ navigation, route }: Props) {
               if (board.turn.rollsLeft <= 0) return;
               playDiceRoll();
               void applyGame((current) => {
-                const base = ensureYahtzeeState(current);
-                if (!base.yahtzee) return current;
-                const rolled = rollDice(base.yahtzee);
-                return rolled ? { ...base, yahtzee: rolled } : current;
+                const base = ensureYahtState(current);
+                if (!base.yaht) return current;
+                const rolled = rollDice(base.yaht);
+                return rolled ? { ...base, yaht: rolled } : current;
               });
             }}
             onToggleHold={(index) => {
               if (!toggleHold(board, index)) return;
               void applyGame((current) => {
-                const base = ensureYahtzeeState(current);
-                if (!base.yahtzee) return current;
-                const held = toggleHold(base.yahtzee, index);
-                return held ? { ...base, yahtzee: held } : current;
+                const base = ensureYahtState(current);
+                if (!base.yaht) return current;
+                const held = toggleHold(base.yaht, index);
+                return held ? { ...base, yaht: held } : current;
               });
             }}
           />
@@ -265,15 +265,15 @@ export function YahtzeeScreen({ navigation, route }: Props) {
             onPress={() => {
               void applyGame(
                 (current) => {
-                  if (!current.yahtzee) return current;
-                  const undone = undoYahtzee(current.yahtzee, current.events);
+                  if (!current.yaht) return current;
+                  const undone = undoYaht(current.yaht, current.events);
                   if (!undone) return current;
-                  return { ...current, yahtzee: undone.state, events: undone.events };
+                  return { ...current, yaht: undone.state, events: undone.events };
                 },
                 { suppressWin: true },
               );
             }}
-            disabled={!game.events.some((event) => event.box && event.box !== YAHTZEE_BONUS_BOX)}
+            disabled={!game.events.some((event) => event.box && !isYahtBonusBox(event.box))}
           />
           <Button
             label="Reset card"
@@ -282,7 +282,7 @@ export function YahtzeeScreen({ navigation, route }: Props) {
                 (current) => ({
                   ...current,
                   events: [],
-                  yahtzee: createYahtzeeState(current.players),
+                  yaht: createYahtState(current.players),
                   status: 'InProgress',
                 }),
                 { suppressWin: true },
@@ -302,7 +302,7 @@ export function YahtzeeScreen({ navigation, route }: Props) {
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <YahtzeeScoreboard
+        <YahtScoreboard
           players={cards}
           locked={locked}
           activePlayerId={locked ? null : board?.turn.playerId}
@@ -321,7 +321,7 @@ export function YahtzeeScreen({ navigation, route }: Props) {
         <Text style={styles.note}>
           Roll up to three times. Tap a die to keep it. Gold numbers are what this roll scores. Tap one to
           take it. A zero scratches that box. Upper bonus is {UPPER_BONUS} at {UPPER_BONUS_AT}. After a 50
-          in Yahtzee, each extra Yahtzee adds 100. Highest total wins.
+          in Yaht, each extra Yaht adds 100. Highest total wins.
         </Text>
       </View>
 
@@ -350,7 +350,7 @@ export function YahtzeeScreen({ navigation, route }: Props) {
       {showCelebration ? (
         <FireworksOverlay
           winnerName={snapshot.winnerName}
-          subtitle="Yahtzee"
+          subtitle="Yaht"
           onDismiss={dismissCelebration}
         />
       ) : null}
@@ -372,7 +372,7 @@ export function YahtzeeScreen({ navigation, route }: Props) {
 
 function rollOffers(preview: Record<string, number | null> | null): { id: string; label: string; points: number }[] {
   if (!preview) return [];
-  return YAHTZEE_BOXES.flatMap((box) => {
+  return YAHT_BOXES.flatMap((box) => {
     const points = preview[box.id];
     return points != null && points > 0 ? [{ id: box.id, label: box.label, points }] : [];
   }).sort((left, right) => right.points - left.points || left.label.localeCompare(right.label));
@@ -382,8 +382,8 @@ function turnBanner(name: string, dice: readonly number[] | null, rollsLeft: num
   if (!dice) return `${name}, roll the dice.`;
   if (isFive(dice)) {
     return rollsLeft > 0
-      ? `${name} rolled a Yahtzee. Score it, or roll again.`
-      : `${name} rolled a Yahtzee. Score it.`;
+      ? `${name} rolled a Yaht. Score it, or roll again.`
+      : `${name} rolled a Yaht. Score it.`;
   }
   if (rollsLeft > 0) {
     const left = rollsLeft === 1 ? '1 roll left' : `${rollsLeft} rolls left`;
@@ -396,15 +396,15 @@ function isFive(dice: readonly number[]): boolean {
   return dice.length === 5 && dice.every((face) => face === dice[0]);
 }
 
-function yahtzeeCheer(
-  box: YahtzeeBox,
+function yahtCheer(
+  box: YahtBox,
   points: number,
   before: ScoreEvent[],
   after: ScoreEvent[],
   playerId: string,
 ): { label: string; tone: SparkTone } | null {
-  if (box.id === 'yahtzee' && points === 50) return { label: 'Yahtzee!', tone: 'gold' };
-  if (yahtzeeBonusCount(after, playerId) > yahtzeeBonusCount(before, playerId)) {
+  if (box.id === 'yaht' && points === 50) return { label: 'Yaht!', tone: 'gold' };
+  if (yahtBonusCount(after, playerId) > yahtBonusCount(before, playerId)) {
     return { label: '+100', tone: 'gold' };
   }
   const upperBefore = upperSum(before, playerId);
@@ -419,7 +419,7 @@ function yahtzeeCheer(
 }
 
 function upperSum(events: ScoreEvent[], playerId: string): number {
-  return YAHTZEE_BOXES.filter((box) => box.section === 'upper').reduce(
+  return YAHT_BOXES.filter((box) => box.section === 'upper').reduce(
     (sum, box) => sum + (scoreForBox(events, playerId, box.id) ?? 0),
     0,
   );

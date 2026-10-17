@@ -3,22 +3,22 @@ import { createScoreEvent, type Game, type Player, type ScoreEvent } from './mod
 
 export const UPPER_BONUS_AT = 63;
 export const UPPER_BONUS = 35;
-export const YAHTZEE_BONUS_POINTS = 100;
-export const YAHTZEE_BONUS_BOX = 'yahtzeeBonus';
+export const YAHT_BONUS_POINTS = 100;
+export const YAHT_BONUS_BOX = 'yahtBonus';
 
-export type YahtzeeBoxKind = 'face' | 'fixed' | 'sum';
+export type YahtBoxKind = 'face' | 'fixed' | 'sum';
 
-export type YahtzeeBox = {
+export type YahtBox = {
   id: string;
   section: 'upper' | 'lower';
   label: string;
   hint: string;
-  kind: YahtzeeBoxKind;
+  kind: YahtBoxKind;
   face?: number;
   fixed?: number;
 };
 
-export const YAHTZEE_BOXES: YahtzeeBox[] = [
+export const YAHT_BOXES: YahtBox[] = [
   { id: 'aces', section: 'upper', label: 'Aces', hint: 'Sum of 1s', kind: 'face', face: 1 },
   { id: 'twos', section: 'upper', label: 'Twos', hint: 'Sum of 2s', kind: 'face', face: 2 },
   { id: 'threes', section: 'upper', label: 'Threes', hint: 'Sum of 3s', kind: 'face', face: 3 },
@@ -30,16 +30,32 @@ export const YAHTZEE_BOXES: YahtzeeBox[] = [
   { id: 'fullHouse', section: 'lower', label: 'Full House', hint: '25 points', kind: 'fixed', fixed: 25 },
   { id: 'smallStraight', section: 'lower', label: 'Sm. Straight', hint: '30 points', kind: 'fixed', fixed: 30 },
   { id: 'largeStraight', section: 'lower', label: 'Lg. Straight', hint: '40 points', kind: 'fixed', fixed: 40 },
-  { id: 'yahtzee', section: 'lower', label: 'Yahtzee', hint: '50 points', kind: 'fixed', fixed: 50 },
+  { id: 'yaht', section: 'lower', label: 'Yaht', hint: '50 points', kind: 'fixed', fixed: 50 },
   { id: 'chance', section: 'lower', label: 'Chance', hint: 'Total of all dice', kind: 'sum' },
 ];
 
-export function boxById(id: string): YahtzeeBox | undefined {
-  return YAHTZEE_BOXES.find((box) => box.id === id);
+/** Saved games used these box ids before the rename. */
+function canonicalYahtBox(box: string): string {
+  if (box === 'yahtzee') return 'yaht';
+  if (box === 'yahtzeeBonus') return YAHT_BONUS_BOX;
+  return box;
+}
+
+function matchesBox(eventBox: string | null | undefined, boxId: string): boolean {
+  return eventBox != null && canonicalYahtBox(eventBox) === canonicalYahtBox(boxId);
+}
+
+export function isYahtBonusBox(box: string | null | undefined): boolean {
+  return matchesBox(box, YAHT_BONUS_BOX);
+}
+
+export function boxById(id: string): YahtBox | undefined {
+  const canonical = canonicalYahtBox(id);
+  return YAHT_BOXES.find((box) => box.id === canonical);
 }
 
 /** Chip values offered when filling a box. Sum boxes also accept any integer 0–30. */
-export function chipScores(box: YahtzeeBox): number[] {
+export function chipScores(box: YahtBox): number[] {
   if (box.kind === 'face' && box.face) {
     const scores: number[] = [];
     for (let count = 0; count <= 5; count++) scores.push(count * box.face);
@@ -49,7 +65,7 @@ export function chipScores(box: YahtzeeBox): number[] {
   return [0, 5, 10, 15, 20, 25, 30];
 }
 
-export function scoreError(box: YahtzeeBox, points: number): string | null {
+export function scoreError(box: YahtBox, points: number): string | null {
   if (!Number.isInteger(points)) return 'Enter a whole number.';
   if (box.kind === 'face' && box.face) {
     const max = box.face * 5;
@@ -72,7 +88,7 @@ export function scoreError(box: YahtzeeBox, points: number): string | null {
 export function scoreForBox(events: readonly ScoreEvent[], playerId: string, boxId: string): number | null {
   let score: number | null = null;
   for (const event of events) {
-    if (event.playerId === playerId && event.box === boxId) score = event.points;
+    if (event.playerId === playerId && matchesBox(event.box, boxId)) score = event.points;
   }
   return score;
 }
@@ -80,26 +96,26 @@ export function scoreForBox(events: readonly ScoreEvent[], playerId: string, box
 function latestBoxEvent(events: readonly ScoreEvent[], playerId: string, boxId: string): ScoreEvent | null {
   let found: ScoreEvent | null = null;
   for (const event of events) {
-    if (event.playerId === playerId && event.box === boxId) found = event;
+    if (event.playerId === playerId && matchesBox(event.box, boxId)) found = event;
   }
   return found;
 }
 
 /**
- * Extra Yahtzees after the 50-point box. A five-of-a-kind shows up as a full upper
+ * Extra Yahts after the 50-point box. A five-of-a-kind shows up as a full upper
  * box, or as 5 or 30 in 3 of a Kind, 4 of a Kind, or Chance. Each one is 100 points.
- * Only boxes scored after the Yahtzee box count, so an earlier five-of-a-kind does not.
+ * Only boxes scored after the Yaht box count, so an earlier five-of-a-kind does not.
  */
-export function yahtzeeBonusCount(events: readonly ScoreEvent[], playerId: string): number {
-  const yahtzee = latestBoxEvent(events, playerId, 'yahtzee');
-  if (!yahtzee || yahtzee.points !== 50) return 0;
-  const explicit = events.filter((event) => event.playerId === playerId && event.box === YAHTZEE_BONUS_BOX).length;
+export function yahtBonusCount(events: readonly ScoreEvent[], playerId: string): number {
+  const yaht = latestBoxEvent(events, playerId, 'yaht');
+  if (!yaht || yaht.points !== 50) return 0;
+  const explicit = events.filter((event) => event.playerId === playerId && matchesBox(event.box, YAHT_BONUS_BOX)).length;
   if (explicit > 0) return explicit;
   let extras = 0;
-  for (const box of YAHTZEE_BOXES) {
-    if (box.id === 'yahtzee') continue;
+  for (const box of YAHT_BOXES) {
+    if (box.id === 'yaht') continue;
     const scoring = latestBoxEvent(events, playerId, box.id);
-    if (!scoring || scoring.timestamp <= yahtzee.timestamp) continue;
+    if (!scoring || scoring.timestamp <= yaht.timestamp) continue;
     const score = scoring.points;
     if (box.kind === 'face' && box.face != null && score === box.face * 5) extras += 1;
     else if (
@@ -113,7 +129,7 @@ export function yahtzeeBonusCount(events: readonly ScoreEvent[], playerId: strin
 }
 
 function sumSection(events: readonly ScoreEvent[], playerId: string, section: 'upper' | 'lower'): number {
-  return YAHTZEE_BOXES.filter((box) => box.section === section).reduce(
+  return YAHT_BOXES.filter((box) => box.section === section).reduce(
     (sum, box) => sum + (scoreForBox(events, playerId, box.id) ?? 0),
     0,
   );
@@ -123,13 +139,13 @@ export function grandTotal(events: readonly ScoreEvent[], playerId: string): num
   const upper = sumSection(events, playerId, 'upper');
   const lower = sumSection(events, playerId, 'lower');
   const upperBonus = upper >= UPPER_BONUS_AT ? UPPER_BONUS : 0;
-  return upper + upperBonus + lower + yahtzeeBonusCount(events, playerId) * YAHTZEE_BONUS_POINTS;
+  return upper + upperBonus + lower + yahtBonusCount(events, playerId) * YAHT_BONUS_POINTS;
 }
 
 export function isScorecardComplete(game: Game): boolean {
   if (game.players.length === 0) return false;
   return game.players.every((player) =>
-    YAHTZEE_BOXES.every((box) => scoreForBox(game.events, player.id, box.id) !== null),
+    YAHT_BOXES.every((box) => scoreForBox(game.events, player.id, box.id) !== null),
   );
 }
 
@@ -155,14 +171,14 @@ export function buildPlayerCard(
   flags: { isYou: boolean; isWinner: boolean; isLeader: boolean },
 ): PlayerCard {
   const boxes: Record<string, number | null> = {};
-  for (const box of YAHTZEE_BOXES) {
+  for (const box of YAHT_BOXES) {
     boxes[box.id] = scoreForBox(events, player.id, box.id);
   }
   const upper = sumSection(events, player.id, 'upper');
   const lower = sumSection(events, player.id, 'lower');
   const upperBonus = upper >= UPPER_BONUS_AT ? UPPER_BONUS : 0;
-  const bonusCount = yahtzeeBonusCount(events, player.id);
-  const bonusPoints = bonusCount * YAHTZEE_BONUS_POINTS;
+  const bonusCount = yahtBonusCount(events, player.id);
+  const bonusPoints = bonusCount * YAHT_BONUS_POINTS;
   return {
     playerId: player.id,
     name: player.name,
@@ -189,17 +205,17 @@ export function withBoxScore(
 }
 
 export function withoutBox(events: ScoreEvent[], playerId: string, boxId: string): ScoreEvent[] {
-  const cleared = events.filter((event) => !(event.playerId === playerId && event.box === boxId));
-  if (boxId !== 'yahtzee') return cleared;
+  const cleared = events.filter((event) => !(event.playerId === playerId && matchesBox(event.box, boxId)));
+  if (canonicalYahtBox(boxId) !== 'yaht') return cleared;
   return cleared.filter(
-    (event) => !(event.playerId === playerId && event.box === YAHTZEE_BONUS_BOX),
+    (event) => !(event.playerId === playerId && matchesBox(event.box, YAHT_BONUS_BOX)),
   );
 }
 
 /** Drop the latest score on the card, whichever column it belongs to. */
 export function withoutLastCardEntry(events: readonly ScoreEvent[]): ScoreEvent[] {
   for (let i = events.length - 1; i >= 0; i--) {
-    if (events[i].box && events[i].box !== YAHTZEE_BONUS_BOX) {
+    if (events[i].box && !matchesBox(events[i].box, YAHT_BONUS_BOX)) {
       return events.filter((_, index) => index !== i);
     }
   }
@@ -223,7 +239,7 @@ export type DieFace = 1 | 2 | 3 | 4 | 5 | 6;
 export type Dice = [DieFace, DieFace, DieFace, DieFace, DieFace];
 export type Holds = [boolean, boolean, boolean, boolean, boolean];
 
-export type YahtzeeTurn = {
+export type YahtTurn = {
   playerId: string;
   /** Null until the first roll of the turn. */
   dice: Dice | null;
@@ -232,23 +248,23 @@ export type YahtzeeTurn = {
   rollsLeft: number;
 };
 
-export type YahtzeeUndo = {
-  turn: YahtzeeTurn;
+export type YahtUndo = {
+  turn: YahtTurn;
   playerId: string;
   boxId: string;
-  /** True when this score also wrote a +100 Yahtzee bonus. */
+  /** True when this score also wrote a +100 Yaht bonus. */
   bonus: boolean;
 };
 
-export type YahtzeeState = {
-  turn: YahtzeeTurn;
-  undo: YahtzeeUndo[];
+export type YahtState = {
+  turn: YahtTurn;
+  undo: YahtUndo[];
 };
 
-export function createYahtzeeState(
+export function createYahtState(
   players: readonly { id: string }[],
   events: readonly ScoreEvent[] = [],
-): YahtzeeState {
+): YahtState {
   return { turn: turnFor(players, events, ''), undo: [] };
 }
 
@@ -257,7 +273,7 @@ export function diceTotal(dice: readonly number[]): number {
 }
 
 /** Roll every die that is not held. `faces` supplies those dice, in order, for tests. */
-export function rollDice(state: YahtzeeState, faces?: readonly number[]): YahtzeeState | null {
+export function rollDice(state: YahtState, faces?: readonly number[]): YahtState | null {
   if (state.turn.rollsLeft <= 0) return null;
   const needed = state.turn.dice ? state.turn.held.filter((keep) => !keep).length : DICE_COUNT;
   if (faces && (faces.length !== needed || faces.some((face) => !isFace(face)))) return null;
@@ -285,7 +301,7 @@ export function rollDice(state: YahtzeeState, faces?: readonly number[]): Yahtze
 }
 
 /** Keep a die for the next roll. Holds lock once no rolls remain. */
-export function toggleHold(state: YahtzeeState, index: number): YahtzeeState | null {
+export function toggleHold(state: YahtState, index: number): YahtState | null {
   if (!state.turn.dice || state.turn.rollsLeft <= 0) return null;
   if (!Number.isInteger(index) || index < 0 || index >= DICE_COUNT) return null;
   const held = [...state.turn.held] as Holds;
@@ -295,9 +311,9 @@ export function toggleHold(state: YahtzeeState, index: number): YahtzeeState | n
 
 /**
  * Points each open box would score for these dice.
- * Null means the box cannot be chosen. A Yahtzee rolled after the Yahtzee box is
+ * Null means the box cannot be chosen. A Yaht rolled after the Yaht box is
  * filled must go in the matching upper box, or in any lower box once that upper
- * box is filled. A second Yahtzee scores +100 only when the Yahtzee box is 50.
+ * box is filled. A second Yaht scores +100 only when the Yaht box is 50.
  */
 export function scorePreview(
   dice: readonly number[],
@@ -305,25 +321,25 @@ export function scorePreview(
   playerId: string,
 ): Record<string, number | null> {
   const scores: Record<string, number | null> = {};
-  for (const box of YAHTZEE_BOXES) scores[box.id] = boxScore(box, dice, events, playerId);
+  for (const box of YAHT_BOXES) scores[box.id] = boxScore(box, dice, events, playerId);
   return scores;
 }
 
 export function scoreDice(
-  state: YahtzeeState,
+  state: YahtState,
   events: readonly ScoreEvent[],
   players: readonly { id: string }[],
   boxId: string,
-): { state: YahtzeeState; events: ScoreEvent[] } | null {
+): { state: YahtState; events: ScoreEvent[] } | null {
   const dice = state.turn.dice;
   const box = boxById(boxId);
   if (!dice || !box) return null;
   const playerId = state.turn.playerId;
   const points = boxScore(box, dice, events, playerId);
   if (points == null) return null;
-  const bonus = isFiveOfAKind(dice) && scoreForBox(events, playerId, 'yahtzee') === 50;
+  const bonus = isFiveOfAKind(dice) && scoreForBox(events, playerId, 'yaht') === 50;
   const nextEvents = [...events];
-  if (bonus) nextEvents.push(createScoreEvent(playerId, YAHTZEE_BONUS_POINTS, null, YAHTZEE_BONUS_BOX));
+  if (bonus) nextEvents.push(createScoreEvent(playerId, YAHT_BONUS_POINTS, null, YAHT_BONUS_BOX));
   nextEvents.push(createScoreEvent(playerId, points, null, boxId));
   const undo = [
     ...state.undo,
@@ -334,10 +350,10 @@ export function scoreDice(
   return { state: { turn, undo }, events: nextEvents };
 }
 
-export function undoYahtzee(
-  state: YahtzeeState,
+export function undoYaht(
+  state: YahtState,
   events: readonly ScoreEvent[],
-): { state: YahtzeeState; events: ScoreEvent[] } | null {
+): { state: YahtState; events: ScoreEvent[] } | null {
   const last = state.undo[state.undo.length - 1];
   if (!last) {
     const nextEvents = withoutLastCardEntry(events);
@@ -345,22 +361,22 @@ export function undoYahtzee(
     return { state, events: nextEvents };
   }
   let nextEvents = withoutLatest(events, last.playerId, last.boxId);
-  if (last.bonus) nextEvents = withoutLatest(nextEvents, last.playerId, YAHTZEE_BONUS_BOX);
+  if (last.bonus) nextEvents = withoutLatest(nextEvents, last.playerId, YAHT_BONUS_BOX);
   return { state: { turn: cloneTurn(last.turn), undo: state.undo.slice(0, -1) }, events: nextEvents };
 }
 
-export function ensureYahtzeeState(game: Game): Game {
-  if (game.templateId !== 'yahtzee') return game;
-  const parsed = parseYahtzeeState(game.yahtzee, game.players, game.events);
-  if (game.yahtzee && sameState(game.yahtzee, parsed)) return game;
-  return { ...game, yahtzee: parsed };
+export function ensureYahtState(game: Game): Game {
+  if (game.templateId !== 'yaht' && game.templateId !== 'yahtzee') return game;
+  const parsed = parseYahtState(game.yaht, game.players, game.events);
+  if (game.yaht && sameState(game.yaht, parsed)) return game;
+  return { ...game, yaht: parsed };
 }
 
-function parseYahtzeeState(
-  raw: YahtzeeState | null | undefined,
+function parseYahtState(
+  raw: YahtState | null | undefined,
   players: readonly { id: string }[],
   events: readonly ScoreEvent[],
-): YahtzeeState {
+): YahtState {
   const turn = parseTurn(raw?.turn);
   const undo = Array.isArray(raw?.undo) ? raw.undo.flatMap((entry) => {
     const parsed = parseUndo(entry);
@@ -384,7 +400,7 @@ function parseYahtzeeState(
   return { turn: turnFor(players, events, turn?.playerId ?? ''), undo: undo.slice(-UNDO_LIMIT) };
 }
 
-function parseTurn(raw: YahtzeeTurn | null | undefined): YahtzeeTurn | null {
+function parseTurn(raw: YahtTurn | null | undefined): YahtTurn | null {
   if (!raw || typeof raw.playerId !== 'string' || raw.playerId.length === 0) return null;
   if (!Number.isInteger(raw.rollsLeft) || raw.rollsLeft < 0 || raw.rollsLeft > ROLLS_PER_TURN) return null;
   if (raw.dice == null) {
@@ -403,15 +419,15 @@ function parseTurn(raw: YahtzeeTurn | null | undefined): YahtzeeTurn | null {
   };
 }
 
-function parseUndo(raw: YahtzeeUndo | null | undefined): YahtzeeUndo | null {
+function parseUndo(raw: YahtUndo | null | undefined): YahtUndo | null {
   const turn = parseTurn(raw?.turn);
   if (!turn || !raw || typeof raw.playerId !== 'string' || typeof raw.boxId !== 'string' || typeof raw.bonus !== 'boolean') {
     return null;
   }
-  return { turn, playerId: raw.playerId, boxId: raw.boxId, bonus: raw.bonus };
+  return { turn, playerId: raw.playerId, boxId: canonicalYahtBox(raw.boxId), bonus: raw.bonus };
 }
 
-function sameState(left: YahtzeeState, right: YahtzeeState): boolean {
+function sameState(left: YahtState, right: YahtState): boolean {
   return (
     sameTurn(left.turn, right.turn) &&
     left.undo.length === right.undo.length &&
@@ -419,13 +435,13 @@ function sameState(left: YahtzeeState, right: YahtzeeState): boolean {
   );
 }
 
-function sameTurn(left: YahtzeeTurn, right: YahtzeeTurn): boolean {
+function sameTurn(left: YahtTurn, right: YahtTurn): boolean {
   if (left.playerId !== right.playerId || left.rollsLeft !== right.rollsLeft) return false;
   if (left.dice == null || right.dice == null) return left.dice == null && right.dice == null;
   return left.dice.every((face, index) => face === right.dice?.[index] && left.held[index] === right.held[index]);
 }
 
-function sameUndo(left: YahtzeeUndo, right: YahtzeeUndo | undefined): boolean {
+function sameUndo(left: YahtUndo, right: YahtUndo | undefined): boolean {
   return (
     right != null &&
     left.playerId === right.playerId &&
@@ -439,11 +455,11 @@ function turnFor(
   players: readonly { id: string }[],
   events: readonly ScoreEvent[],
   currentId: string,
-): YahtzeeTurn {
+): YahtTurn {
   return freshTurn(nextPlayerId(players, events, currentId) ?? players[0]?.id ?? currentId);
 }
 
-function freshTurn(playerId: string): YahtzeeTurn {
+function freshTurn(playerId: string): YahtTurn {
   return { playerId, dice: null, held: emptyHolds(), rollsLeft: ROLLS_PER_TURN };
 }
 
@@ -463,22 +479,22 @@ function nextPlayerId(
 }
 
 function hasOpenBox(events: readonly ScoreEvent[], playerId: string): boolean {
-  return YAHTZEE_BOXES.some((box) => scoreForBox(events, playerId, box.id) == null);
+  return YAHT_BOXES.some((box) => scoreForBox(events, playerId, box.id) == null);
 }
 
 function boxScore(
-  box: YahtzeeBox,
+  box: YahtBox,
   dice: readonly number[],
   events: readonly ScoreEvent[],
   playerId: string,
 ): number | null {
   if (!isDice(dice) || scoreForBox(events, playerId, box.id) != null) return null;
-  if (!isFiveOfAKind(dice) || scoreForBox(events, playerId, 'yahtzee') == null) return naturalScore(box, dice);
+  if (!isFiveOfAKind(dice) || scoreForBox(events, playerId, 'yaht') == null) return naturalScore(box, dice);
   const face = dice[0];
-  const upper = YAHTZEE_BOXES.find((candidate) => candidate.face === face);
+  const upper = YAHT_BOXES.find((candidate) => candidate.face === face);
   const upperOpen = upper != null && scoreForBox(events, playerId, upper.id) == null;
   if (upperOpen) return box.id === upper.id ? face * DICE_COUNT : null;
-  const lowerOpen = YAHTZEE_BOXES.some(
+  const lowerOpen = YAHT_BOXES.some(
     (candidate) => candidate.section === 'lower' && scoreForBox(events, playerId, candidate.id) == null,
   );
   if (lowerOpen) {
@@ -491,7 +507,7 @@ function boxScore(
   return box.section === 'upper' ? 0 : null;
 }
 
-function naturalScore(box: YahtzeeBox, dice: readonly number[]): number {
+function naturalScore(box: YahtBox, dice: readonly number[]): number {
   const counts = faceCounts(dice);
   if (box.kind === 'face' && box.face) return (counts[box.face] ?? 0) * box.face;
   if (box.id === 'threeKind') return ofAKind(counts, 3) ? diceTotal(dice) : 0;
@@ -499,7 +515,7 @@ function naturalScore(box: YahtzeeBox, dice: readonly number[]): number {
   if (box.id === 'fullHouse') return isFullHouse(counts) ? 25 : 0;
   if (box.id === 'smallStraight') return straightRun(counts) >= 4 ? 30 : 0;
   if (box.id === 'largeStraight') return straightRun(counts) >= 5 ? 40 : 0;
-  if (box.id === 'yahtzee') return isFiveOfAKind(dice) ? 50 : 0;
+  if (box.id === 'yaht') return isFiveOfAKind(dice) ? 50 : 0;
   return diceTotal(dice);
 }
 
@@ -555,7 +571,7 @@ function emptyHolds(): Holds {
   return [false, false, false, false, false];
 }
 
-function cloneTurn(turn: YahtzeeTurn): YahtzeeTurn {
+function cloneTurn(turn: YahtTurn): YahtTurn {
   return {
     playerId: turn.playerId,
     dice: turn.dice ? ([...turn.dice] as Dice) : null,
@@ -566,7 +582,7 @@ function cloneTurn(turn: YahtzeeTurn): YahtzeeTurn {
 
 function withoutLatest(events: readonly ScoreEvent[], playerId: string, boxId: string): ScoreEvent[] {
   for (let index = events.length - 1; index >= 0; index--) {
-    if (events[index].playerId === playerId && events[index].box === boxId) {
+    if (events[index].playerId === playerId && matchesBox(events[index].box, boxId)) {
       return events.filter((_, eventIndex) => eventIndex !== index);
     }
   }

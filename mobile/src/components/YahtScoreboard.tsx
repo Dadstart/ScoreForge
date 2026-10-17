@@ -6,10 +6,10 @@ import {
   scoreError,
   UPPER_BONUS,
   UPPER_BONUS_AT,
-  YAHTZEE_BOXES,
+  YAHT_BOXES,
   type PlayerCard,
-  type YahtzeeBox,
-} from '../domain/yahtzee';
+  type YahtBox,
+} from '../domain/yaht';
 import { colors, fonts, radii, typography } from '../theme';
 
 const LABEL_W = 132;
@@ -29,26 +29,26 @@ const GRAND = '#241c14';
 
 const PIPS = ['#d4a84b', '#2f8f62', '#c4524a', '#3d7eb8', '#8d6bb8', '#c4843a'];
 
-type TotalId = 'upper' | 'bonus' | 'upperTotal' | 'lower' | 'yahtzeeBonus' | 'grand';
+type TotalId = 'upper' | 'bonus' | 'upperTotal' | 'lower' | 'yahtBonus' | 'grand';
 
 type ScoreRow =
   | { kind: 'section'; title: string; tone: 'upper' | 'lower' }
-  | { kind: 'box'; box: YahtzeeBox }
+  | { kind: 'box'; box: YahtBox }
   | { kind: 'total'; id: TotalId; label: string; hint?: string };
 
 const ROWS: ScoreRow[] = [
   { kind: 'section', title: 'Upper section', tone: 'upper' },
-  ...YAHTZEE_BOXES.filter((box) => box.section === 'upper').map(
+  ...YAHT_BOXES.filter((box) => box.section === 'upper').map(
     (box) => ({ kind: 'box', box }) as const,
   ),
   { kind: 'total', id: 'upper', label: 'Upper score' },
   { kind: 'total', id: 'bonus', label: 'Bonus', hint: `at ${UPPER_BONUS_AT}` },
   { kind: 'total', id: 'upperTotal', label: 'Upper total' },
   { kind: 'section', title: 'Lower section', tone: 'lower' },
-  ...YAHTZEE_BOXES.filter((box) => box.section === 'lower').map(
+  ...YAHT_BOXES.filter((box) => box.section === 'lower').map(
     (box) => ({ kind: 'box', box }) as const,
   ),
-  { kind: 'total', id: 'yahtzeeBonus', label: 'Yahtzee bonus', hint: 'each extra' },
+  { kind: 'total', id: 'yahtBonus', label: 'Yaht bonus', hint: 'each extra' },
   { kind: 'total', id: 'lower', label: 'Lower total' },
   { kind: 'total', id: 'grand', label: 'Grand total' },
 ];
@@ -75,7 +75,7 @@ type Props = {
   onPressBox: (playerId: string, boxId: string) => void;
 };
 
-export function YahtzeeScoreboard({ players, locked, activePlayerId, suggestions, onPressBox }: Props) {
+export function YahtScoreboard({ players, locked, activePlayerId, suggestions, onPressBox }: Props) {
   const colWidth = players.length <= 1 ? 156 : players.length === 2 ? 124 : 96;
 
   return (
@@ -239,7 +239,7 @@ function cellText(player: PlayerCard, row: ScoreRow): string {
       return player.upperBonus ? String(UPPER_BONUS) : '—';
     case 'upperTotal':
       return String(player.upperTotal);
-    case 'yahtzeeBonus':
+    case 'yahtBonus':
       return player.bonusPoints ? String(player.bonusPoints) : '—';
     case 'lower':
       return String(player.lower);
@@ -363,7 +363,7 @@ function rowKey(row: ScoreRow): string {
   return row.id;
 }
 
-export function YahtzeeScoreModal({
+export function YahtScoreModal({
   visible,
   box,
   playerName,
@@ -373,7 +373,7 @@ export function YahtzeeScoreModal({
   onClear,
 }: {
   visible: boolean;
-  box: YahtzeeBox | null;
+  box: YahtBox | null;
   playerName?: string | null;
   current: number | null;
   onClose: () => void;

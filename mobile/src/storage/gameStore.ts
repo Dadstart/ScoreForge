@@ -21,7 +21,7 @@ import { createPyramidState, packPyramid, unpackPyramid } from '../domain/pyrami
 import { createSpiderState, packSpider, unpackSpider, type SuitCount } from '../domain/spider';
 import { createTriPeaksState, packTriPeaks, unpackTriPeaks } from '../domain/tripeaks';
 import { createOpolyPlay, unpackOpoly } from '../domain/opolyPlay';
-import { createYahtzeeState } from '../domain/yahtzee';
+import { createYahtState } from '../domain/yaht';
 import {
   isShareCode,
   normalizeShareCode,
@@ -59,7 +59,7 @@ type StoredGame = {
   pyramid?: unknown;
   spider?: unknown;
   tripeaks?: unknown;
-  yahtzee?: Game['yahtzee'];
+  yahtzee?: Game['yaht'];
   monopoly?: unknown;
   revision?: number;
   createdAt?: string;
@@ -125,7 +125,7 @@ function toStored(game: Game): Record<string, unknown> {
     pyramid: game.pyramid ? packPyramid(game.pyramid) : null,
     spider: game.spider ? packSpider(game.spider) : null,
     tripeaks: game.tripeaks ? packTriPeaks(game.tripeaks) : null,
-    yahtzee: game.yahtzee ?? null,
+    yahtzee: game.yaht ?? null,
     monopoly: game.monopoly ?? null,
     revision: game.revision,
     createdAt: game.createdAt,
@@ -154,7 +154,7 @@ function fromStored(shareCode: string, data: StoredGame, events: ScoreEvent[]): 
     pyramid: unpackPyramid(data.pyramid),
     spider: unpackSpider(data.spider),
     tripeaks: unpackTriPeaks(data.tripeaks),
-    yahtzee: data.yahtzee ?? null,
+    yaht: data.yahtzee ?? null,
     monopoly: unpackOpoly(data.monopoly, Array.isArray(data.players) ? data.players.map((player) => player.id) : []),
     revision: revisionOf(data),
     createdAt: typeof data.createdAt === 'string' ? data.createdAt : new Date().toISOString(),
@@ -364,8 +364,8 @@ export async function createAndSaveGame(partial: {
     if (partial.templateId === 'tripeaks') {
       game.tripeaks = createTriPeaksState();
     }
-    if (partial.templateId === 'yahtzee') {
-      game.yahtzee = createYahtzeeState(partial.players);
+    if (partial.templateId === 'yaht' || partial.templateId === 'yahtzee') {
+      game.yaht = createYahtState(partial.players);
     }
     if (partial.templateId === 'monopoly') {
       game.monopoly = createOpolyPlay(partial.players.map((player) => player.id));

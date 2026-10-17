@@ -101,6 +101,7 @@ service cloud.firestore {
         'golf',
         'cribbage',
         'monopoly',
+        'yaht',
         'yahtzee',
         'sorry',
         'backgammon',

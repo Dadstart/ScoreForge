@@ -4,7 +4,7 @@ import { generateShareCode, isShareCode, type Game, type Player, type ScoreEvent
 import { nextSavedRevision, StaleGameError } from './revisions';
 import { calculate } from './scoreCalculator';
 import { getTemplate } from './templates';
-import { yahtzeeBonusCount } from './yahtzee';
+import { yahtBonusCount } from './yaht';
 
 function player(id: string, name: string): Player {
   return { id, name };
@@ -174,20 +174,20 @@ describe('calculate', () => {
   });
 });
 
-describe('yahtzee bonuses', () => {
-  it('does not count a five-of-a-kind scored before the Yahtzee box', () => {
+describe('yaht bonuses', () => {
+  it('does not count a five-of-a-kind scored before the Yaht box', () => {
     const events = [
       event({ id: '1', playerId: 'a', points: 5, box: 'aces', timestamp: '2026-01-01T00:00:01.000Z' }),
-      event({ id: '2', playerId: 'a', points: 50, box: 'yahtzee', timestamp: '2026-01-01T00:00:02.000Z' }),
+      event({ id: '2', playerId: 'a', points: 50, box: 'yaht', timestamp: '2026-01-01T00:00:02.000Z' }),
     ];
-    assert.equal(yahtzeeBonusCount(events, 'a'), 0);
+    assert.equal(yahtBonusCount(events, 'a'), 0);
   });
 
-  it('counts a five-of-a-kind scored after the Yahtzee box', () => {
+  it('counts a five-of-a-kind scored after the Yaht box', () => {
     const events = [
-      event({ id: '1', playerId: 'a', points: 50, box: 'yahtzee', timestamp: '2026-01-01T00:00:01.000Z' }),
+      event({ id: '1', playerId: 'a', points: 50, box: 'yaht', timestamp: '2026-01-01T00:00:01.000Z' }),
       event({ id: '2', playerId: 'a', points: 30, box: 'chance', timestamp: '2026-01-01T00:00:02.000Z' }),
     ];
-    assert.equal(yahtzeeBonusCount(events, 'a'), 1);
+    assert.equal(yahtBonusCount(events, 'a'), 1);
   });
 });
