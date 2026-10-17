@@ -1033,6 +1033,7 @@ export function OpolyScreen({ navigation, route }: Props) {
             const piece = playerToken(player?.token);
             const paying = standing.playerId === resolvedPayer;
             const holdings = properties.filter((entry) => play.owned[entry.id] === standing.playerId);
+            const worth = netWorth(play, standing.playerId, game.events);
             const freeCards = jailCardsHeld(play, standing.playerId);
             const openProperty = (id: string) => {
               setError(null);
@@ -1125,12 +1126,15 @@ export function OpolyScreen({ navigation, route }: Props) {
                     style={[styles.editField, styles.editCash]}
                   />
                 ) : (
-                  <CashAmount
-                    label={formatMoney(cash)}
-                    broke={broke}
-                    pulse={editing ? null : cashPulses.find((pulse) => pulse.playerId === standing.playerId)}
-                    style={styles.cash}
-                  />
+                  <View style={styles.cashBlock}>
+                    <CashAmount
+                      label={formatMoney(cash)}
+                      broke={broke}
+                      pulse={cashPulses.find((pulse) => pulse.playerId === standing.playerId)}
+                      style={styles.cash}
+                    />
+                    <Text style={styles.netWorth}>{`Net worth ${formatMoney(worth)}`}</Text>
+                  </View>
                 )}
               </>
             );
@@ -1825,6 +1829,18 @@ const styles = StyleSheet.create({
   cash: {
     ...typography.score,
     fontSize: 28,
+  },
+  cashBlock: {
+    alignItems: 'center',
+    gap: 0,
+  },
+  netWorth: {
+    fontFamily: typography.body.fontFamily,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '400',
+    color: colors.muted,
+    textAlign: 'center',
   },
   holdings: {
     alignSelf: 'stretch',
