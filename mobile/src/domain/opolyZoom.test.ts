@@ -78,13 +78,19 @@ describe('monopoly zoom', () => {
     assert.equal(panForWheel(start, { deltaX: 0, deltaY: 0, deltaMode: 0 }, 2, viewport), null);
   });
 
-  it('starts at page width and zooms out twice', () => {
-    assert.equal(stepZoom(1, 1), 1);
+  it('starts at page width, zooms out twice, and zooms in through close stops', () => {
     assert.equal(stepZoom(1, -1), 0.75);
     assert.equal(stepZoom(0.75, -1), 0.5);
     assert.equal(stepZoom(0.5, -1), 0.5);
     assert.equal(stepZoom(0.5, 1), 0.75);
     assert.equal(stepZoom(0.75, 1), 1);
+    assert.equal(stepZoom(1, 1), 1.5);
+    assert.equal(stepZoom(1.5, 1), 2);
+    assert.equal(stepZoom(2, 1), 2.5);
+    assert.equal(stepZoom(2.5, 1), 3);
+    assert.equal(stepZoom(3, 1), 4);
+    assert.equal(stepZoom(4, 1), 5);
+    assert.equal(stepZoom(5, 1), 5);
   });
 
   it('opens a phone-width board close enough to read property names', () => {
@@ -96,9 +102,11 @@ describe('monopoly zoom', () => {
     const side = (board * (1 - 2 * 0.16)) / 9;
     assert.ok(corner >= 96);
     assert.ok(side >= 70);
-    assert.equal(stepZoom(1, 1, phone), zoom);
-    assert.equal(stepZoom(zoom, -1, phone), 1);
-    assert.equal(stepZoom(zoom, 1, phone), zoom);
+    assert.equal(stepZoom(1, 1, phone), 1.5);
+    assert.equal(stepZoom(2, 1, phone), zoom);
+    assert.equal(stepZoom(zoom, -1, phone), 2);
+    assert.equal(stepZoom(zoom, 1, phone), 3);
+    assert.equal(stepZoom(5, 1, phone), 5);
     assert.equal(readingZoom(1100), 1);
   });
 });

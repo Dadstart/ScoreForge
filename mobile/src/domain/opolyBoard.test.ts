@@ -23,8 +23,8 @@ import {
   monopolyDieSize,
   ownerMarkPlacement,
   buildingMarkPlacement,
-  BUILDING_HOUSE_SIZE,
-  BUILDING_HOTEL_ALONG,
+  buildingHouseAlong,
+  buildingMarkSize,
   buildingMarkBand,
   boardTurnForSpace,
   pointHeldOnTurn,
@@ -341,7 +341,9 @@ describe('buildingMarkPlacement', () => {
   }
 
   function nearTop(spot: ReturnType<typeof marks>, mark: { x: number; y: number; w: number; h: number }) {
-    const band = buildingMarkBand(1);
+    const along = spot.row === 0 || spot.row === 10 ? spot.width : spot.height;
+    const inward = spot.row === 0 || spot.row === 10 ? spot.height : spot.width;
+    const band = buildingMarkBand(1, along, inward);
     if (spot.row === 10) {
       assert.ok(mark.y + mark.h <= band + 0.5);
       return;
@@ -357,35 +359,55 @@ describe('buildingMarkPlacement', () => {
     assert.ok(mark.x + mark.w <= band + 0.5);
   }
 
-  it('places houses and a hotel inside the color bar on every edge', () => {
+  function alongSpan(spot: ReturnType<typeof marks>, mark: { x: number; y: number; w: number; h: number }) {
+    if (spot.row === 0 || spot.row === 10) return { start: mark.x, size: mark.w, span: spot.width };
+    return { start: mark.y, size: mark.h, span: spot.height };
+  }
+
+  it('places square houses and a hotel inside the color bar on every edge', () => {
     for (const index of [1, 21, 11, 39]) {
       const empty = marks(index, 0);
       assert.equal(empty.marks.length, 0);
       const houses = marks(index, 3);
       assert.equal(houses.marks.length, 3);
       assert.ok(houses.marks.every((mark) => mark.kind === 'house'));
+      const along = houses.row === 0 || houses.row === 10 ? houses.width : houses.height;
+      const inward = houses.row === 0 || houses.row === 10 ? houses.height : houses.width;
+      const expected = buildingMarkSize(along, inward);
       for (const mark of houses.marks) {
         inBar(houses, mark);
         nearTop(houses, mark);
-        assert.equal(Math.min(mark.w, mark.h), BUILDING_HOUSE_SIZE);
+        assert.equal(mark.w, expected);
+        assert.equal(mark.h, expected);
       }
       const hotel = marks(index, 5);
       assert.equal(hotel.marks.length, 1);
       assert.equal(hotel.marks[0]?.kind, 'hotel');
       inBar(hotel, hotel.marks[0]!);
       nearTop(hotel, hotel.marks[0]!);
-      assert.equal(Math.min(hotel.marks[0]!.w, hotel.marks[0]!.h), BUILDING_HOUSE_SIZE);
-      assert.equal(Math.max(hotel.marks[0]!.w, hotel.marks[0]!.h), BUILDING_HOTEL_ALONG);
+      assert.equal(hotel.marks[0]!.w, expected);
+      assert.equal(hotel.marks[0]!.h, expected);
     }
   });
 
-  it('keeps the same small house size on large and small cells', () => {
-    const big = buildingMarkPlacement(10, 5, 120, 80, 2);
-    const small = buildingMarkPlacement(10, 5, 40, 28, 2);
-    assert.equal(big[0]?.w, BUILDING_HOUSE_SIZE);
-    assert.equal(big[0]?.h, BUILDING_HOUSE_SIZE);
-    assert.equal(small[0]?.w, BUILDING_HOUSE_SIZE);
-    assert.equal(small[0]?.h, BUILDING_HOUSE_SIZE);
+  it('sizes four houses to span the full property width', () => {
+    const spot = marks(1, 4);
+    assert.equal(spot.marks.length, 4);
+    const first = alongSpan(spot, spot.marks[0]!);
+    const last = alongSpan(spot, spot.marks[3]!);
+    assert.ok(first.start <= 1.5);
+    assert.ok(last.start + last.size >= first.span - 1.5);
+    const size = buildingMarkSize(spot.width, spot.height);
+    assert.ok(spot.marks.every((mark) => mark.w === size && mark.h === size));
+  });
+
+  it('keeps the same square size for fewer than four houses', () => {
+    const four = buildingMarkPlacement(10, 5, 120, 80, 4);
+    const two = buildingMarkPlacement(10, 5, 120, 80, 2);
+    assert.equal(four[0]?.w, two[0]?.w);
+    assert.equal(four[0]?.h, two[0]?.h);
+    assert.equal(four[0]?.w, four[0]?.h);
+    assert.equal(four[0]?.w, buildingMarkSize(120, 80));
   });
 });
 

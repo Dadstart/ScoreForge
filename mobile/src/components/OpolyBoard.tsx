@@ -983,7 +983,7 @@ function BoardCanvas({
         const propertyId = space.propertyId;
         const buildLevel =
           property?.kind === 'street' && propertyId ? (houses?.[propertyId] ?? 0) : 0;
-        const buildBand = buildingMarkBand(buildLevel);
+        const buildBand = buildingMarkBand(buildLevel, along, inward);
         const nameBand = letterBand > 0 ? Math.max(6, letterBand - buildBand) : 0;
         const barNameSize = nameBand
           ? Math.max(6, Math.min(nameBand - 2, fitSize(shownName, Math.max(8, along - 4), Math.max(6, nameBand - 2))))

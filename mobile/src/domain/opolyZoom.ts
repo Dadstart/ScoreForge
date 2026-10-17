@@ -2,8 +2,8 @@ import { projectTiltedPoint } from './dieProjection';
 import { cellBox, nearestBoardTurn, spaceToCell, TRACK_DEPTH, type Point } from './opolyBoard';
 
 export const MIN_ZOOM = 0.5;
-/** Far enough in that a phone can show property names, without an unbounded pinch. */
-export const MAX_ZOOM = 3;
+/** Far enough in to inspect a deed up close, without an unbounded pinch. */
+export const MAX_ZOOM = 5;
 
 /** Corner cell at which the board draws property names. */
 const NAME_CELL = 96;
@@ -12,8 +12,10 @@ const NAME_BOARD = NAME_CELL / TRACK_DEPTH;
 const READABLE_EDGE = 72;
 const READABLE_BOARD = READABLE_EDGE / ((1 - 2 * TRACK_DEPTH) / 9);
 
-/** Page width, then two smaller boards. A phone adds a closer stop. */
+/** Page width, then two smaller boards. */
 const PAGE_STOPS = [0.5, 0.75, 1];
+/** Button zoom-in steps beyond page width (pinch still clamps at MAX_ZOOM). */
+const CLOSE_STOPS = [1.5, 2, 2.5, 3, 4, 5];
 const TRACK = TRACK_DEPTH;
 
 /**
@@ -51,8 +53,12 @@ export function readingZoom(viewport: number) {
 
 function zoomStops(viewport: number) {
   const reading = readingZoom(viewport);
-  if (reading <= 1) return PAGE_STOPS;
-  return [...PAGE_STOPS, reading];
+  const close = CLOSE_STOPS.filter(
+    (stop) => stop <= MAX_ZOOM && (reading <= 1 || Math.abs(stop - reading) >= 0.08),
+  );
+  const stops = [...PAGE_STOPS, ...close];
+  if (reading > 1) stops.push(reading);
+  return stops.sort((a, b) => a - b);
 }
 
 export function stepZoom(zoom: number, direction: -1 | 1, viewport = 0) {
