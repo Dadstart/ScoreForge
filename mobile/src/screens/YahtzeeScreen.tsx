@@ -34,6 +34,7 @@ import {
   yahtzeeBonusCount,
   type YahtzeeBox,
 } from '../domain/yahtzee';
+import { playDiceRoll, prepareDiceRoll } from '../audio/diceRollSound';
 import { usePlaySpark, type SparkTone } from '../hooks/usePlaySpark';
 import { useWinCelebration } from '../hooks/useWinCelebration';
 import type { RootStackParamList } from '../navigation/types';
@@ -63,6 +64,10 @@ export function YahtzeeScreen({ navigation, route }: Props) {
 
   useEffect(() => {
     void loadDisplayName().then(setDisplayName);
+  }, []);
+
+  useEffect(() => {
+    prepareDiceRoll();
   }, []);
 
   useEffect(() => {
@@ -234,6 +239,7 @@ export function YahtzeeScreen({ navigation, route }: Props) {
             onScore={scoreBox}
             onRoll={() => {
               if (board.turn.rollsLeft <= 0) return;
+              playDiceRoll();
               void applyGame((current) => {
                 const base = ensureYahtzeeState(current);
                 if (!base.yahtzee) return current;
