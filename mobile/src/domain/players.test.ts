@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { openingPlayer, withAddedPlayer, withoutPlayer } from './addPlayer';
-import { findLocalPlayerId, nextRoundForPlayer } from './localPlayer';
+import { deviceMayAct, findLocalPlayerId, nextRoundForPlayer } from './localPlayer';
 import { createGame, createPlayer, createScoreEvent, normalizeShareCode } from './models';
 import { gameScreenForTemplate } from '../navigation/types';
 import { preferNewerGame } from './revisions';
@@ -67,6 +67,16 @@ describe('players', () => {
     const played = { ...game, events: [createScoreEvent(ada.id, 4, 2)] };
     assert.equal(nextRoundForPlayer(played, ada.id), 3);
     assert.equal(nextRoundForPlayer(played, 'missing'), 1);
+  });
+});
+
+describe('separate devices', () => {
+  it('lets only the seated player take the turn', () => {
+    const game = fresh('monopoly');
+    assert.equal(deviceMayAct(game, 'ada', 'ada'), true);
+    assert.equal(deviceMayAct(game, 'bea', 'ada'), false);
+    assert.equal(deviceMayAct(game, null, 'ada'), false);
+    assert.equal(deviceMayAct({ ...game, playMode: 'pass-and-play' }, 'bea', 'ada'), true);
   });
 });
 
