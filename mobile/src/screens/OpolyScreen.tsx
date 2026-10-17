@@ -1034,6 +1034,62 @@ export function OpolyScreen({ navigation, route }: Props) {
             const paying = standing.playerId === resolvedPayer;
             const holdings = properties.filter((entry) => play.owned[entry.id] === standing.playerId);
             const freeCards = jailCardsHeld(play, standing.playerId);
+            const openProperty = (id: string) => {
+              setError(null);
+              setBuildPropertyId(id);
+            };
+            const holdingsList = (
+              <View
+                style={styles.holdings}
+                accessibilityLabel={
+                  holdings.length === 0
+                    ? `${standing.playerName} owns no properties`
+                    : `${standing.playerName} owns ${holdings.map((entry) => entry.name).join(', ')}`
+                }
+              >
+                {holdings.length === 0 ? (
+                  <Text style={styles.holdingEmpty}>No properties</Text>
+                ) : (
+                  holdings.map((entry) => {
+                    const level = play.houses[entry.id] ?? 0;
+                    const mortgaged = play.mortgaged.includes(entry.id);
+                    const detail = mortgaged
+                      ? 'Mortgaged'
+                      : entry.kind !== 'street'
+                        ? null
+                        : level >= 5
+                          ? 'Hotel'
+                          : level > 0
+                            ? `${level} house${level === 1 ? '' : 's'}`
+                            : null;
+                    const name = (
+                      <>
+                        <PropertyName name={entry.name} swatch={entry.swatch} />
+                        {detail ? <Text style={styles.holdingDetail}>{` · ${detail}`}</Text> : null}
+                      </>
+                    );
+                    if (!selectablePropertyIds.has(entry.id)) {
+                      return (
+                        <Text key={entry.id} style={styles.holdingName}>
+                          {name}
+                        </Text>
+                      );
+                    }
+                    return (
+                      <Pressable
+                        key={entry.id}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Manage ${entry.name}`}
+                        onPress={() => openProperty(entry.id)}
+                        style={({ pressed }) => [styles.holdingButton, pressed && styles.holdingPressed]}
+                      >
+                        <Text style={styles.holdingName}>{name}</Text>
+                      </Pressable>
+                    );
+                  })
+                )}
+              </View>
+            );
             const cardFace = (
               <>
                 {editing ? (
@@ -1076,38 +1132,10 @@ export function OpolyScreen({ navigation, route }: Props) {
                     style={styles.cash}
                   />
                 )}
-                <View
-                  style={styles.holdings}
-                  accessibilityLabel={
-                    holdings.length === 0
-                      ? `${standing.playerName} owns no properties`
-                      : `${standing.playerName} owns ${holdings.map((entry) => entry.name).join(', ')}`
-                  }
-                >
-                  {holdings.length === 0 ? (
-                    <Text style={styles.holdingEmpty}>No properties</Text>
-                  ) : (
-                    holdings.map((entry) => {
-                      const level = play.houses[entry.id] ?? 0;
-                      const mortgaged = play.mortgaged.includes(entry.id);
-                      const detail = mortgaged
-                        ? 'Mortgaged'
-                        : entry.kind !== 'street'
-                          ? null
-                          : level >= 5
-                            ? 'Hotel'
-                            : level > 0
-                              ? `${level} house${level === 1 ? '' : 's'}`
-                              : null;
-                      return (
-                        <Text key={entry.id} style={styles.holdingName}>
-                          <PropertyName name={entry.name} swatch={entry.swatch} />
-                          {detail ? <Text style={styles.holdingDetail}>{` · ${detail}`}</Text> : null}
-                        </Text>
-                      );
-                    })
-                  )}
-                </View>
+              </>
+            );
+            const cardDetails = (
+              <>
                 {standing.playerId === turnId && !complete && (!broke || play.pending != null) ? (
                   <Badge label="Turn" tone="accent" style={styles.tileBadge} />
                 ) : null}
@@ -1210,6 +1238,8 @@ export function OpolyScreen({ navigation, route }: Props) {
                 ) : (
                   <View style={styles.cashCardBody}>{cardFace}</View>
                 )}
+                {holdingsList}
+                {cardDetails}
               </View>
             );
           })}
@@ -1806,6 +1836,8 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     textAlign: 'left',
   },
+  holdingButton: { alignSelf: 'stretch' },
+  holdingPressed: { opacity: 0.7 },
   holdingDetail: {
     color: colors.textDim,
     fontWeight: '600',
