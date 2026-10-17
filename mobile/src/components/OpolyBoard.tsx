@@ -48,7 +48,7 @@ import {
 } from '../domain/opolyBoard';
 import { contrastInk, getProperty, playerLabel, playerToken } from '../domain/opoly';
 import { facingPropertyLabel, fitBoardLabel, fitSize } from '../domain/opolyLabel';
-import { cameraAlong, centeredZoomShift, clampPan, clampZoom, frameToken, panForWheel, panForZoom, stepZoom, twistStep } from '../domain/opolyZoom';
+import { cameraAlong, centeredZoomShift, clampPan, clampZoom, frameToken, panForWheel, panForZoom, stepZoom, twistStep, zoomForWheel } from '../domain/opolyZoom';
 import { diceMotionMs, diceUseFlatCamera, FlatDice, OpolyDice } from './OpolyDice';
 import { CARD_REVEAL_MS, OpolyCardTable } from './OpolyCards';
 import { MoneyBills, type MoneyFlight } from './MoneyBills';
@@ -426,8 +426,23 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
       if (touch.clientX <= 28 && event.cancelable) event.preventDefault();
     };
     let commit: ReturnType<typeof setTimeout> | undefined;
+    let zoomCarry = 0;
     const onWheel = (event: WheelEvent) => {
-      if (zoomRef.current <= 1 || event.ctrlKey || event.metaKey) return;
+      if (event.ctrlKey) {
+        event.preventDefault();
+        const zoomed = zoomForWheel(panRef.current, event, zoomRef.current, viewportRefSize.current, zoomCarry);
+        if (!zoomed) return;
+        zoomCarry = zoomed.pending;
+        if (zoomed.zoom === zoomRef.current && zoomed.pan.x === panRef.current.x && zoomed.pan.y === panRef.current.y) return;
+        stopCamera();
+        zoomRef.current = zoomed.zoom;
+        gestureScale.setValue(1);
+        writePan(zoomed.pan);
+        setPan(zoomed.pan);
+        setZoom(zoomed.zoom);
+        return;
+      }
+      if (zoomRef.current <= 1 || event.metaKey) return;
       if (event.deltaX === 0 && event.deltaY === 0) return;
       event.preventDefault();
       stopCamera();
@@ -840,9 +855,11 @@ function PhoneBoard({ onDragging, onZoomed, diceRoll, roll, focusSpace = 0, toke
       <Text style={styles.phoneHint}>
         {zoom > 1
           ? Platform.OS === 'web'
-            ? 'Drag or roll the mouse wheel to look around. Pinch to zoom, or twist with two fingers to turn it.'
+            ? 'Drag or roll the mouse wheel to look around. Ctrl+wheel zooms.'
             : 'Drag the board to look around. Pinch to zoom, or twist with two fingers to turn it.'
-          : 'Twist with two fingers to turn the board.'}
+          : Platform.OS === 'web'
+            ? 'Ctrl+wheel zooms. Twist with two fingers to turn the board.'
+            : 'Twist with two fingers to turn the board.'}
       </Text>
     </View>
   );

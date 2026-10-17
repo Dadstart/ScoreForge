@@ -89,7 +89,10 @@ type BoardWheel = {
   metaKey?: boolean;
 };
 
-/** Pan the board from the mouse wheel. Ctrl or Meta leaves the gesture for the browser. */
+/** Wheel travel, in pixels, that counts as one zoom notch. Smaller moves add up. */
+const WHEEL_ZOOM_NOTCH = 40;
+
+/** Pan the board from the mouse wheel. Ctrl zooms, and Meta stays with the browser. */
 export function panForWheel(pan: { x: number; y: number }, wheel: BoardWheel, zoom: number, viewport: number) {
   if (wheel.ctrlKey || wheel.metaKey) return null;
   if (wheel.deltaX === 0 && wheel.deltaY === 0) return null;
@@ -99,6 +102,53 @@ export function panForWheel(pan: { x: number; y: number }, wheel: BoardWheel, zo
     zoom,
     viewport,
   );
+}
+
+/**
+ * Zoom from ctrl+wheel. A mouse notch moves one stop. Smaller trackpad
+ * deltas add up to a stop. Wheel up zooms in. Null when this wheel should pan.
+ */
+export function zoomForWheel(
+  pan: { x: number; y: number },
+  wheel: BoardWheel,
+  zoom: number,
+  viewport: number,
+  pending = 0,
+): { zoom: number; pan: { x: number; y: number }; pending: number } | null {
+  if (!wheel.ctrlKey) return null;
+  const scale = wheel.deltaMode === 1 ? 40 : wheel.deltaMode === 2 ? viewport : 1;
+  const delta = wheel.deltaY * scale;
+  if (delta === 0) return { zoom, pan, pending };
+  let steps = 0;
+  let carry = pending;
+  if (Math.abs(delta) >= WHEEL_ZOOM_NOTCH) {
+    steps = delta > 0 ? -1 : 1;
+    carry = 0;
+  } else {
+    carry += delta;
+    while (carry >= WHEEL_ZOOM_NOTCH) {
+      steps -= 1;
+      carry -= WHEEL_ZOOM_NOTCH;
+    }
+    while (carry <= -WHEEL_ZOOM_NOTCH) {
+      steps += 1;
+      carry += WHEEL_ZOOM_NOTCH;
+    }
+  }
+  if (steps === 0) return { zoom, pan, pending: carry };
+  const direction: -1 | 1 = steps > 0 ? 1 : -1;
+  let nextZoom = zoom;
+  let nextPan = pan;
+  for (let i = 0; i < Math.abs(steps); i += 1) {
+    const stepped = stepZoom(nextZoom, direction, viewport);
+    if (stepped === nextZoom) {
+      carry = 0;
+      break;
+    }
+    nextPan = panForZoom(nextPan, nextZoom, stepped, viewport);
+    nextZoom = stepped;
+  }
+  return { zoom: nextZoom, pan: nextPan, pending: carry };
 }
 
 /**
