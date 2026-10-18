@@ -15,6 +15,7 @@ import { BackgammonScreen } from './src/screens/BackgammonScreen';
 import { CheckersScreen } from './src/screens/CheckersScreen';
 import { ChineseCheckersScreen } from './src/screens/ChineseCheckersScreen';
 import { KlondikeScreen } from './src/screens/KlondikeScreen';
+import { FreecellScreen } from './src/screens/FreecellScreen';
 import { PyramidScreen } from './src/screens/PyramidScreen';
 import { TriPeaksScreen } from './src/screens/TriPeaksScreen';
 import { SpiderScreen } from './src/screens/SpiderScreen';
@@ -145,6 +146,11 @@ export default function App() {
             name="Klondike"
             component={KlondikeScreen}
             options={{ title: 'Klondike', headerShown: false }}
+          />
+          <Stack.Screen
+            name="Freecell"
+            component={FreecellScreen}
+            options={{ title: 'FreeCell', headerShown: false }}
           />
           <Stack.Screen
             name="Pyramid"

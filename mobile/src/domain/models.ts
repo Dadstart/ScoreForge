@@ -1,6 +1,7 @@
 import type { BackgammonState } from './backgammon';
 import type { CheckersState } from './checkers';
 import type { ChineseState } from './chineseCheckers';
+import type { FreecellState } from './freecell';
 import type { KlondikeState } from './klondike';
 import type { PyramidState } from './pyramid';
 import type { SpiderState } from './spider';
@@ -57,6 +58,8 @@ export interface Game {
   chinese?: ChineseState | null;
   /** Klondike layout, stock, and undo. */
   klondike?: KlondikeState | null;
+  /** FreeCell cells, cascades, and foundations. */
+  freecell?: FreecellState | null;
   /** Pyramid layout, stock, and undo. */
   pyramid?: PyramidState | null;
   /** Spider layout, stock, and undo. */

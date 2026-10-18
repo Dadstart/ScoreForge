@@ -129,6 +129,16 @@ export const templates: GameTemplate[] = [
     maxPlayers: 1,
   },
   {
+    id: 'freecell',
+    name: 'FreeCell',
+    description:
+      'All cards are dealt face up. Build each suit from ace to king. Park a card in a free cell, and move a run when there is room.',
+    scoringMode: 'Instant',
+    winCondition: 'HighestTotal',
+    minPlayers: 1,
+    maxPlayers: 1,
+  },
+  {
     id: 'pyramid',
     name: 'Pyramid',
     description:
