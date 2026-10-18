@@ -26,8 +26,11 @@
     "uuid": "^14.0.2"
   },
   "devDependencies": {
+    "@types/node": "^26.6.5",
     "@types/react": "~19.2.2",
     "@types/uuid": "^10.0.0",
+    "eslint": "^9.39.5",
+    "eslint-config-expo": "^58.0.4",
     "tsx": "^4.23.15",
     "typescript": "~6.0.3"
   },
@@ -36,7 +39,8 @@
     "android": "expo start --android --port 5555",
     "ios": "expo start --ios --port 5555",
     "web": "expo start --web --port 5555",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.tests.json",
+    "lint": "expo lint",
     "test": "tsx --test src/**/*.test.ts",
     "export:web": "expo export --platform web",
     "build:ios": "npx eas-cli build --platform ios --profile preview",

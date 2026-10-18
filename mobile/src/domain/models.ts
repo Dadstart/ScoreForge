@@ -22,6 +22,8 @@ export interface Player {
   name: string;
   /** Opoly piece id, or a custom emoji. Absent means the initial circle. */
   token?: string | null;
+  /** Anonymous Firebase uid of the device that sits here. Absent on older saves and on pass-and-play seats. */
+  uid?: string | null;
 }
 
 export interface ScoreEvent {

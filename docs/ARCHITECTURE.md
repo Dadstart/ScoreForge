@@ -17,8 +17,8 @@ mobile/
 │   ├── storage/               # Firestore game store + known codes + displayName
 │   ├── linking/               # share URL create/parse for QR + deep links
 │   ├── navigation/            # types + React Navigation linking config
-│   ├── screens/               # Home, Setup, Join, Board, Cribbage, Opoly, Yaht, Sorry, Checkers, Reversi, Chinese Checkers, Klondike, FreeCell, Settings
-│   └── components/            # CribbageBoard, OpolyBoard, YahtScoreboard, SorryBoard, CheckersBoard, ReversiBoard, ChineseCheckersBoard, FireworksOverlay, ShareCodePanel
+│   ├── screens/               # Home, Setup, Join, Board, Cribbage, Opoly, Yaht, Sorry, Backgammon, Checkers, Reversi, Chinese Checkers, Klondike, FreeCell, Pyramid, TriPeaks, Spider
+│   └── components/            # CribbageBoard, OpolyBoard, YahtScoreboard, SorryBoard, BackgammonBoard, CheckersBoard, ReversiBoard, ChineseCheckersBoard, solitaire boards, FireworksOverlay, ShareCodePanel
 ```
 
 ### Startup / navigation
@@ -35,12 +35,15 @@ React Navigation native stack with `expo-linking` prefixes (`scoreforge://` and 
 | **Opoly** | Live subscribe; own cash, optional board |
 | **Yaht** | Live subscribe; score any column |
 | **Sorry** | Live subscribe; shared board, deck, and turn |
+| **Backgammon** | Live subscribe; shared board, dice, and cube |
 | **Checkers** | Live subscribe; shared board and turn |
 | **Reversi** | Live subscribe; shared board and turn |
 | **Chinese Checkers** | Live subscribe; shared star, seats, and turn |
 | **Klondike** | Live subscribe; solitaire layout, stock, and undo |
 | **FreeCell** | Live subscribe; free cells, cascades, and foundations |
-| **Settings** | Notes / future theme |
+| **Pyramid** | Live subscribe; pyramid layout, stock, and undo |
+| **TriPeaks** | Live subscribe; three peaks, stock, and undo |
+| **Spider** | Live subscribe; ten columns, stock, and undo |
 
 Deep link: `join?code=XXXXXX`. QR encodes `Linking.createURL('join', { queryParams: { code } })`.
 
@@ -54,29 +57,30 @@ sequenceDiagram
   Host->>FS: create games/SHARECODE
   Host-->>Guest: Code or QR
   Guest->>FS: get games/SHARECODE add player
-  Host->>FS: append events/eventId
+  Host->>FS: save games/SHARECODE revision+1
   FS-->>Guest: onSnapshot
-  Guest->>FS: append events/eventId
+  Guest->>FS: save games/SHARECODE revision+1
   FS-->>Host: onSnapshot
 ```
 
 | Path | Contents |
 | --- | --- |
-| `games/{shareCode}` | Metadata: name, templateId, players, status, targets, timestamps |
-| `games/{shareCode}/events/{eventId}` | Append-only score events |
+| `games/{shareCode}` | The whole game: players, score events, board state, revision |
+| `games/{shareCode}/events/{eventId}` | Legacy copies only. Readable until events move onto the parent, then denied |
 | AsyncStorage `scoreforge.knownShareCodes` | Codes this device created or joined |
 | AsyncStorage `scoreforge.displayName` | Local player name for own-score UI |
 
 - Document id **is** the share code (easy join via `get`).
 - **List** queries on `games` are denied in rules (cannot enumerate all games).
-- Auth: silent **anonymous** Firebase Auth (enable in console).
-- Board/Cribbage use `subscribeGame` for realtime updates.
+- Auth: silent **anonymous** Firebase Auth (enable in console). A separate-devices seat stores that uid. Pass-and-play seats do not.
+- Each save replaces the game document and must advance `revision` by 1.
+- Board fields are optional in the rules, so an older client can still save after a new game is added. The current client writes every board key.
 
 ### Domain
 
-Event-sourced `Game` + append-only `ScoreEvent`s, template catalog, pure `calculate()`.
+`Game` holds players, score events, and the active board. The template catalog and `calculate()` are pure.
 
-Own-score only: UI matches `displayName` to a player; only that player's scores can be changed/undone.
+Own-score pads match this device to a player by uid, or by display name when the seat has no uid. Only that player's scores can be changed. Separate-devices board games use the same seat check for the turn. Pass-and-play does not.
 
 All templates start with `minPlayers: 1`; others join via code.
 
@@ -90,11 +94,15 @@ All templates start with `minPlayers: 1`; others join via code.
 | Opoly | Instant cash | Highest |
 | Yaht | Score-card boxes | Highest |
 | Sorry | Board pawns home | First to 4 |
+| Backgammon | Shared board | Bear off all 15 checkers |
 | Checkers | Shared board | Capture all pieces, or leave no move |
 | Reversi | Shared board | Higher disc count. An equal count is a draw |
 | Chinese Checkers | Shared star | Fill the opposite corner; later places play on |
 | Klondike | Solitaire layout | All 52 cards on the foundations |
 | FreeCell | Free cells and cascades | All 52 cards on the foundations |
+| Pyramid | Solitaire layout | Clear the pyramid |
+| TriPeaks | Solitaire layout | Clear the three peaks |
+| Spider | Solitaire layout | Clear eight suits |
 
 ### Platforms
 

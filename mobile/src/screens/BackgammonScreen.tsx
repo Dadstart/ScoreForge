@@ -29,6 +29,7 @@ import {
   ensureBackgammonState,
   legalMoves,
   offerDouble,
+  oppositeSide,
   pipCount,
   playMove,
   resign,
@@ -39,15 +40,13 @@ import {
   type BackgammonState,
   type Side,
 } from '../domain/backgammon';
-import { findLocalPlayerId } from '../domain/localPlayer';
-import { playModeOf, type  Game  } from '../domain/models';
+import { deviceMayAct } from '../domain/localPlayer';
+import { playModeOf, type Game } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
-import { getTemplate } from '../domain/templates';
+import { useLiveGame } from '../hooks/useLiveGame';
 import { usePlaySpark } from '../hooks/usePlaySpark';
-import { useWinCelebration } from '../hooks/useWinCelebration';
 import type { RootStackParamList } from '../navigation/types';
-import { loadDisplayName } from '../storage/displayNameStore';
-import { addPlayerToGame, preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
+import { addPlayerToGame, preferNewerGame } from '../storage/gameStore';
 import { colors, radii, space, typography } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Backgammon'>;
@@ -57,52 +56,30 @@ export function BackgammonScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
   const wide = window.width >= 980;
-  const { gameId } = route.params;
-  const [game, setGame] = useState<Game | null>(null);
-  const [displayName, setDisplayName] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const {
+    game,
+    setGame,
+    template,
+    snapshot,
+    localPlayerId,
+    error,
+    setError,
+    saving,
+    persist,
+    showCelebration,
+    dismissCelebration,
+    beginSuppress,
+    endSuppress,
+    noteLocalResult,
+  } = useLiveGame(route.params.gameId, {
+    repair: ensureBackgammonState,
+    repairError: 'Could not set up the board',
+  });
   const [addingPlayer, setAddingPlayer] = useState(false);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const [confirmResign, setConfirmResign] = useState(false);
-  const saving = useRef(false);
-  const { showCelebration, onSnapshot, dismissCelebration, beginSuppress, endSuppress, noteLocalResult } =
-    useWinCelebration();
   const { sparks, spark } = usePlaySpark();
-
-  useEffect(() => {
-    void loadDisplayName().then(setDisplayName);
-  }, []);
-
-  useEffect(() => {
-    const unsub = subscribeGame(
-      gameId,
-      (found) => {
-        setGame((current) => (found ? preferNewerGame(current, found) : null));
-        if (found) {
-          const tmpl = getTemplate(found.templateId);
-          if (tmpl) onSnapshot(calculate(found, tmpl));
-        }
-      },
-      (err) => setError(err.message),
-    );
-    return unsub;
-  }, [gameId, onSnapshot]);
-
-  const template = game ? getTemplate(game.templateId) : undefined;
-  const snapshot = useMemo(() => (game && template ? calculate(game, template) : null), [game, template]);
-  const localPlayerId = useMemo(() => (game ? findLocalPlayerId(game, displayName) : null), [game, displayName]);
-
-  useEffect(() => {
-    if (!game) return;
-    const next = ensureBackgammonState(game);
-    if (next === game) return;
-    void saveGame(next)
-      .then((saved) => setGame((current) => preferNewerGame(current, saved)))
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : 'Could not set up the board');
-      });
-  }, [game]);
 
   const board = game?.backgammon ?? null;
   const priorBoard = useRef<BackgammonState | null>(null);
@@ -137,22 +114,6 @@ export function BackgammonScreen({ navigation, route }: Props) {
   }, [moves]);
   const selected = selection ?? (origins.length === 1 ? origins[0] : null);
 
-  const persist = async (next: Game, celebrate: boolean) => {
-    if (!template || saving.current) return;
-    saving.current = true;
-    const snap = calculate(next, template);
-    if (celebrate) noteLocalResult(snap);
-    try {
-      const saved = await saveGame(next);
-      setGame((current) => preferNewerGame(current, saved));
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Autosave failed');
-    } finally {
-      saving.current = false;
-    }
-  };
-
   if (!game || !template || !snapshot || !board) {
     return (
       <Screen>
@@ -167,6 +128,12 @@ export function BackgammonScreen({ navigation, route }: Props) {
   const currentSide = BACKGAMMON_SIDES[board.turn];
   const currentPlayer = game.players.find((player) => board.sides[player.id] === board.turn) ?? null;
   const yourTurn = currentPlayer?.id === localPlayerId;
+  const canAct = !finished && deviceMayAct(game, localPlayerId, currentPlayer?.id ?? null);
+  const offer = board.offer;
+  const answerId = offer
+    ? (game.players.find((player) => board.sides[player.id] === oppositeSide(offer))?.id ?? null)
+    : null;
+  const canAnswer = !finished && deviceMayAct(game, localPlayerId, answerId);
   const localSide = localPlayerId ? board.sides[localPlayerId] : undefined;
   const winnerSide = board.winnerSide ? BACKGAMMON_SIDES[board.winnerSide] : null;
   const winnerPlayer = board.winnerSide
@@ -195,12 +162,12 @@ export function BackgammonScreen({ navigation, route }: Props) {
   };
 
   const play = (from: Selection, to: number | 'off') => {
-    if (finished || saving.current) return;
+    if (!canAct || saving.current) return;
     void apply(playMove(board, game.players, { from, to }));
   };
 
   const onPoint = (point: number) => {
-    if (finished || saving.current) return;
+    if (!canAct || saving.current) return;
     if (selected != null && moves.some((move) => move.from === selected && move.to === point)) {
       play(selected, point);
       return;
@@ -213,7 +180,7 @@ export function BackgammonScreen({ navigation, route }: Props) {
   };
 
   const onBar = () => {
-    if (finished || saving.current) return;
+    if (!canAct || saving.current) return;
     if (moves.some((move) => move.from === 'bar')) setSelection('bar');
   };
 
@@ -282,7 +249,7 @@ export function BackgammonScreen({ navigation, route }: Props) {
             </View>
             <MoveHints
               board={board}
-              moves={finished || board.offer ? [] : moves}
+              moves={!canAct || board.offer ? [] : moves}
               selected={selected}
               localSide={localSide}
               onSelect={setSelection}
@@ -290,10 +257,10 @@ export function BackgammonScreen({ navigation, route }: Props) {
             />
             <BackgammonBoard
               state={board}
-              moves={finished || board.offer ? [] : moves}
+              moves={!canAct || board.offer ? [] : moves}
               selected={selected}
               flip={localSide === 'dark'}
-              disabled={finished || Boolean(board.offer)}
+              disabled={!canAct || Boolean(board.offer)}
               onPoint={onPoint}
               onBar={onBar}
               onBearOff={onBearOff}
@@ -303,22 +270,22 @@ export function BackgammonScreen({ navigation, route }: Props) {
           <View style={styles.panel}>
             <Text style={[typography.section, styles.section]}>Turn</Text>
             <View style={styles.actions}>
-              {!finished && !board.dice && !board.offer ? (
+              {canAct && !board.dice && !board.offer ? (
                 <Button label="Roll" variant="primary" onPress={() => void apply(rollDice(board, game.players))} />
               ) : null}
-              {canDouble ? (
+              {canAct && canDouble ? (
                 <Button label={`Double to ${board.cube * 2}`} onPress={() => void apply(offerDouble(board, game.players))} />
               ) : null}
-              {board.offer && !finished ? (
+              {board.offer && canAnswer ? (
                 <>
                   <Button label="Take" variant="primary" onPress={() => void apply(answerDouble(board, game.players, true))} />
                   <Button label="Drop" variant="danger" onPress={() => void apply(answerDouble(board, game.players, false))} />
                 </>
               ) : null}
-              {!finished && board.dice && moves.length === 0 ? (
+              {canAct && board.dice && moves.length === 0 ? (
                 <Button label="No legal move" variant="primary" onPress={() => void apply(endTurn(board, game.players))} />
               ) : null}
-              {!finished && board.undo.length > 0 ? (
+              {canAct && board.undo.length > 0 ? (
                 <Button label="Undo" onPress={() => void apply(undoMove(board, game.players))} />
               ) : null}
             </View>
@@ -349,7 +316,7 @@ export function BackgammonScreen({ navigation, route }: Props) {
             </Text>
             <View style={styles.actions}>
               <Button label={confirmReset ? 'Reset board?' : 'Reset board'} variant="danger" onPress={() => void onReset()} />
-              {!finished ? (
+              {canAct ? (
                 <Button
                   label={confirmResign ? 'Resign?' : 'Resign'}
                   onPress={() => {

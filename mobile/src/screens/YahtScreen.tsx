@@ -11,10 +11,9 @@ import { ShareCodePanel } from '../components/ShareCodePanel';
 import { YahtDice } from '../components/YahtDice';
 import { YahtScoreboard } from '../components/YahtScoreboard';
 import { Badge, Button, Screen } from '../components/ui';
-import { findLocalPlayerId } from '../domain/localPlayer';
-import { playModeOf, type  Game, ScoreEvent  } from '../domain/models';
+import { deviceMayAct } from '../domain/localPlayer';
+import { playModeOf, type Game, type ScoreEvent } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
-import { getTemplate } from '../domain/templates';
 import {
   boxById,
   buildPlayerCard,
@@ -35,61 +34,41 @@ import {
   type YahtBox,
 } from '../domain/yaht';
 import { playDiceRoll, prepareDiceRoll } from '../audio/diceRollSound';
+import { useLiveGame } from '../hooks/useLiveGame';
 import { usePlaySpark, type SparkTone } from '../hooks/usePlaySpark';
-import { useWinCelebration } from '../hooks/useWinCelebration';
 import type { RootStackParamList } from '../navigation/types';
-import { loadDisplayName } from '../storage/displayNameStore';
-import { addPlayerToGame, preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
+import { addPlayerToGame, preferNewerGame } from '../storage/gameStore';
 import { colors, radii, space, typography } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Yaht'>;
 
 export function YahtScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const { gameId } = route.params;
-  const [game, setGame] = useState<Game | null>(null);
-  const [displayName, setDisplayName] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [addingPlayer, setAddingPlayer] = useState(false);
-  const [scratch, setScratch] = useState<{ boxId: string; label: string } | null>(null);
   const {
+    game,
+    setGame,
+    template,
+    snapshot,
+    localPlayerId,
+    error,
+    setError,
+    persist,
     showCelebration,
-    onSnapshot,
     dismissCelebration,
     beginSuppress,
     endSuppress,
     noteLocalResult,
-  } = useWinCelebration();
+  } = useLiveGame(route.params.gameId, {
+    repair: ensureYahtState,
+    repairError: 'Could not start the turn',
+  });
+  const [addingPlayer, setAddingPlayer] = useState(false);
+  const [scratch, setScratch] = useState<{ boxId: string; label: string } | null>(null);
   const { sparks, spark } = usePlaySpark();
-
-  useEffect(() => {
-    void loadDisplayName().then(setDisplayName);
-  }, []);
 
   useEffect(() => {
     prepareDiceRoll();
   }, []);
-
-  useEffect(() => {
-    const unsub = subscribeGame(
-      gameId,
-      (found) => {
-        setGame((current) => (found ? preferNewerGame(current, found) : null));
-        if (found) {
-          const tmpl = getTemplate(found.templateId);
-          if (tmpl) onSnapshot(calculate(found, tmpl));
-        }
-      },
-      (err) => setError(err.message),
-    );
-    return unsub;
-  }, [gameId, onSnapshot]);
-
-  const template = game ? getTemplate(game.templateId) : undefined;
-  const snapshot = useMemo(
-    () => (game && template ? calculate(game, template) : null),
-    [game, template],
-  );
   const seenScores = useRef<ScoreEvent[] | null>(null);
   useEffect(() => {
     if (!game) return;
@@ -107,21 +86,6 @@ export function YahtScreen({ navigation, route }: Props) {
     if (cheer) spark(cheer.label, cheer.tone);
   }, [game, spark]);
 
-  useEffect(() => {
-    if (!game) return;
-    const next = ensureYahtState(game);
-    if (next === game) return;
-    void saveGame(next)
-      .then((saved) => setGame((current) => preferNewerGame(current, saved)))
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : 'Could not start the turn');
-      });
-  }, [game]);
-  const localPlayerId = useMemo(
-    () => (game ? findLocalPlayerId(game, displayName) : null),
-    [game, displayName],
-  );
-
   const cards = useMemo(() => {
     if (!game || !snapshot) return [];
     return game.players.map((player) => {
@@ -133,11 +97,6 @@ export function YahtScreen({ navigation, route }: Props) {
       });
     });
   }, [game, snapshot, localPlayerId]);
-
-  const persist = async (next: Game) => {
-    const saved = await saveGame(next);
-    setGame((current) => preferNewerGame(current, saved));
-  };
 
   const applyGame = async (
     mutator: (current: Game) => Game,
@@ -157,21 +116,13 @@ export function YahtScreen({ navigation, route }: Props) {
       try {
         noteLocalResult(snap);
         await persist(next);
-        setError(null);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Autosave failed');
       } finally {
         endSuppress(snap.isComplete);
       }
       return;
     }
-    try {
-      noteLocalResult(snap);
-      await persist(next);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Autosave failed');
-    }
+    noteLocalResult(snap);
+    await persist(next);
   };
 
   if (!game || !template || !snapshot) {
@@ -194,7 +145,10 @@ export function YahtScreen({ navigation, route }: Props) {
       : 'Card complete'
     : turnBanner(turnName, board?.turn.dice ?? null, board?.turn.rollsLeft ?? 3);
 
+  const canAct = !locked && deviceMayAct(game, localPlayerId, board?.turn.playerId ?? null);
+
   const scoreBox = (boxId: string) => {
+    if (!canAct) return;
     setScratch(null);
     void applyGame((current) => {
       const base = ensureYahtState(current);
@@ -238,7 +192,7 @@ export function YahtScreen({ navigation, route }: Props) {
             offers={rollOffers(preview)}
             onScore={scoreBox}
             onRoll={() => {
-              if (board.turn.rollsLeft <= 0) return;
+              if (!canAct || board.turn.rollsLeft <= 0) return;
               playDiceRoll();
               void applyGame((current) => {
                 const base = ensureYahtState(current);
@@ -248,7 +202,7 @@ export function YahtScreen({ navigation, route }: Props) {
               });
             }}
             onToggleHold={(index) => {
-              if (!toggleHold(board, index)) return;
+              if (!canAct || !toggleHold(board, index)) return;
               void applyGame((current) => {
                 const base = ensureYahtState(current);
                 if (!base.yaht) return current;
@@ -262,7 +216,9 @@ export function YahtScreen({ navigation, route }: Props) {
         <View style={styles.row}>
           <Button
             label="Undo"
+            disabled={!canAct || !game.events.some((event) => event.box && !isYahtBonusBox(event.box))}
             onPress={() => {
+              if (!canAct) return;
               void applyGame(
                 (current) => {
                   if (!current.yaht) return current;
@@ -273,7 +229,6 @@ export function YahtScreen({ navigation, route }: Props) {
                 { suppressWin: true },
               );
             }}
-            disabled={!game.events.some((event) => event.box && !isYahtBonusBox(event.box))}
           />
           <Button
             label="Reset card"
@@ -292,7 +247,7 @@ export function YahtScreen({ navigation, route }: Props) {
           {game.players.length < template.maxPlayers ? (
             <Button label="Add player" onPress={() => setAddingPlayer(true)} />
           ) : null}
-          {!locked ? (
+          {canAct ? (
             <Button
               label="Mark complete"
               onPress={() => void applyGame((current) => current, { forceComplete: true })}
@@ -308,6 +263,7 @@ export function YahtScreen({ navigation, route }: Props) {
           activePlayerId={locked ? null : board?.turn.playerId}
           suggestions={preview && board ? { playerId: board.turn.playerId, scores: preview } : null}
           onPressBox={(_playerId, boxId) => {
+            if (!canAct) return;
             const points = preview?.[boxId];
             if (points == null) return;
             if (points === 0) {

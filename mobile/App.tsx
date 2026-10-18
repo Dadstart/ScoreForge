@@ -22,7 +22,6 @@ import { TriPeaksScreen } from './src/screens/TriPeaksScreen';
 import { SpiderScreen } from './src/screens/SpiderScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { JoinScreen } from './src/screens/JoinScreen';
-import { SettingsScreen } from './src/screens/SettingsScreen';
 import { SetupScreen } from './src/screens/SetupScreen';
 import { colors, fonts } from './src/theme';
 
@@ -173,7 +172,6 @@ export default function App() {
             component={SpiderScreen}
             options={{ title: 'Spider', headerShown: false }}
           />
-          <Stack.Screen name="Settings" component={SettingsScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>

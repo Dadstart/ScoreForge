@@ -35,15 +35,13 @@ import {
   type ChineseSetup,
   type ChineseState,
 } from '../domain/chineseCheckers';
-import { findLocalPlayerId } from '../domain/localPlayer';
-import { playModeOf, type  Game  } from '../domain/models';
+import { deviceMayAct } from '../domain/localPlayer';
+import { playModeOf, type Game } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
-import { getTemplate } from '../domain/templates';
+import { useLiveGame } from '../hooks/useLiveGame';
 import { usePlaySpark } from '../hooks/usePlaySpark';
-import { useWinCelebration } from '../hooks/useWinCelebration';
 import type { RootStackParamList } from '../navigation/types';
-import { loadDisplayName } from '../storage/displayNameStore';
-import { addPlayerToGame, preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
+import { addPlayerToGame, preferNewerGame } from '../storage/gameStore';
 import { colors, radii, space, typography } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ChineseCheckers'>;
@@ -53,66 +51,32 @@ export function ChineseCheckersScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
   const wide = window.width >= 980;
-  const { gameId } = route.params;
-  const [game, setGame] = useState<Game | null>(null);
-  const [displayName, setDisplayName] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const {
+    game,
+    setGame,
+    template,
+    snapshot,
+    localPlayerId,
+    error,
+    setError,
+    saving,
+    persist,
+    showCelebration,
+    dismissCelebration,
+    beginSuppress,
+    endSuppress,
+    noteLocalResult,
+  } = useLiveGame(route.params.gameId, {
+    repair: ensureChineseState,
+    repairError: 'Could not set up the board',
+  });
   const [addingPlayer, setAddingPlayer] = useState(false);
   const [selection, setSelection] = useState<Cell | null>(null);
   const [draft, setDraft] = useState<ChineseSetup | null>(null);
   const [confirmSetup, setConfirmSetup] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [confirmResign, setConfirmResign] = useState(false);
-  const saving = useRef(false);
-  const {
-    showCelebration,
-    onSnapshot,
-    dismissCelebration,
-    beginSuppress,
-    endSuppress,
-    noteLocalResult,
-  } = useWinCelebration();
   const { sparks, spark } = usePlaySpark();
-
-  useEffect(() => {
-    void loadDisplayName().then(setDisplayName);
-  }, []);
-
-  useEffect(() => {
-    const unsub = subscribeGame(
-      gameId,
-      (found) => {
-        setGame((current) => (found ? preferNewerGame(current, found) : null));
-        if (found) {
-          const tmpl = getTemplate(found.templateId);
-          if (tmpl) onSnapshot(calculate(found, tmpl));
-        }
-      },
-      (err) => setError(err.message),
-    );
-    return unsub;
-  }, [gameId, onSnapshot]);
-
-  const template = game ? getTemplate(game.templateId) : undefined;
-  const snapshot = useMemo(
-    () => (game && template ? calculate(game, template) : null),
-    [game, template],
-  );
-  const localPlayerId = useMemo(
-    () => (game ? findLocalPlayerId(game, displayName) : null),
-    [game, displayName],
-  );
-
-  useEffect(() => {
-    if (!game) return;
-    const next = ensureChineseState(game);
-    if (next === game) return;
-    void saveGame(next)
-      .then((saved) => setGame((current) => preferNewerGame(current, saved)))
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : 'Could not set up the board');
-      });
-  }, [game]);
 
   const chinese = game?.chinese ?? null;
   const priorChinese = useRef<ChineseState | null>(null);
@@ -144,22 +108,6 @@ export function ChineseCheckersScreen({ navigation, route }: Props) {
   const hops = useMemo(() => (chinese ? legalHops(chinese) : []), [chinese]);
   const selected = chinese?.chain ?? selection;
 
-  const persist = async (next: Game, celebrate: boolean) => {
-    if (!template || saving.current) return;
-    saving.current = true;
-    const snap = calculate(next, template);
-    if (celebrate) noteLocalResult(snap);
-    try {
-      const saved = await saveGame(next);
-      setGame((current) => preferNewerGame(current, saved));
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Autosave failed');
-    } finally {
-      saving.current = false;
-    }
-  };
-
   if (!game || !template || !snapshot || !chinese) {
     return (
       <Screen>
@@ -180,6 +128,8 @@ export function ChineseCheckersScreen({ navigation, route }: Props) {
   const currentColors = currentCorners.map((corner) => CORNERS[corner].name).join(' & ');
   const currentOwner = game.players.find((player) => player.id === chinese.owners[chinese.turnSeat]) ?? null;
   const yourTurn = currentOwner?.id === localPlayerId;
+  const canAct = !finished && deviceMayAct(game, localPlayerId, currentOwner?.id ?? null);
+  const canSetup = dirty ? canAct : playModeOf(game) === 'pass-and-play' || localPlayerId != null;
   const localSeat = localPlayerId ? chinese.owners.indexOf(localPlayerId) : -1;
   const rotation = localSeat >= 0 ? rotationSteps(seatCorners(chinese, localSeat)[0] ?? 0) : 0;
   const rows = placeRows(chinese);
@@ -209,7 +159,7 @@ export function ChineseCheckersScreen({ navigation, route }: Props) {
   };
 
   const playBetween = (fromQ: number, fromR: number, toQ: number, toR: number) => {
-    if (finished || saving.current) return false;
+    if (!canAct || saving.current) return false;
     const hop = hops.find(
       (candidate) =>
         candidate.fromQ === fromQ && candidate.fromR === fromR && candidate.toQ === toQ && candidate.toR === toR,
@@ -225,7 +175,7 @@ export function ChineseCheckersScreen({ navigation, route }: Props) {
   };
 
   const onCell = (q: number, r: number) => {
-    if (finished || saving.current) return;
+    if (!canAct || saving.current) return;
     if (selected && selected.q === q && selected.r === r) {
       if (chinese.chain) void applyResult(stopJumping(chinese, game.players));
       else setSelection(null);
@@ -268,7 +218,7 @@ export function ChineseCheckersScreen({ navigation, route }: Props) {
   };
 
   const onApplySetup = async () => {
-    if (sameSetup(shown, chinese)) return;
+    if (!canSetup || sameSetup(shown, chinese)) return;
     if (game.players.length > shown.playerCount) {
       setError(`This table seats ${shown.playerCount}, and ${game.players.length} players have already joined.`);
       return;
@@ -296,6 +246,7 @@ export function ChineseCheckersScreen({ navigation, route }: Props) {
   };
 
   const onResign = async () => {
+    if (!canAct) return;
     if (!confirmResign) {
       setConfirmResign(true);
       return;
@@ -350,14 +301,14 @@ export function ChineseCheckersScreen({ navigation, route }: Props) {
           <View style={[styles.boardPane, wide && styles.boardPaneWide]}>
             <ChineseCheckersBoard
               pieces={chinese.pieces}
-              hops={finished ? [] : hops}
+              hops={canAct ? hops : []}
               selected={selected}
               lastMove={chinese.lastMove}
               camps={paintedCamps(chinese)}
               goals={goalCorners(currentCorners)}
               fifteen={usesFifteen(chinese)}
               rotation={rotation}
-              disabled={finished}
+              disabled={!canAct}
               onCell={onCell}
               onDrop={playBetween}
             />
@@ -454,12 +405,14 @@ export function ChineseCheckersScreen({ navigation, route }: Props) {
               })}
             </View>
             <Text style={typography.body}>
-              {game.players.length < cap
-                ? 'Share the code to fill the other seats. Anyone can move the color whose turn it is.'
-                : 'Anyone can move the color whose turn it is.'}
+              {playModeOf(game) === 'pass-and-play'
+                ? 'Pass the phone for the color whose turn it is.'
+                : game.players.length < cap
+                  ? 'Share the code to fill the other seats. Each phone moves only its own colors.'
+                  : 'Each phone moves only its own colors.'}
             </Text>
 
-            {!finished ? (
+            {canAct ? (
               <View style={styles.actions}>
                 {chinese.chain ? (
                   <Button label="Stop jumping" variant="primary" onPress={() => void applyResult(stopJumping(chinese, game.players))} />

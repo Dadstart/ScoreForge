@@ -82,7 +82,7 @@ describe('freecell moves', () => {
     const built = play(state, { pile: 'cell', index: 0 }, { pile: 'foundation', index: 0 });
     assert.ok(built);
     assert.deepEqual(built.foundations[0], [up(1, 'H')]);
-    assert.equal(play(built, { pile: 'cascade', index: 0 }, { pile: 'foundation', index: 0 }), null);
+    assert.equal(play(built, { pile: 'cascade', index: 0, at: 0 }, { pile: 'foundation', index: 0 }), null);
     const undone = undo(built);
     assert.equal(undone?.cells[0], up(1, 'H'));
     assert.equal(homeCount(undone!), 0);

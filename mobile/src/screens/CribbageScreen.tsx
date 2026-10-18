@@ -17,12 +17,12 @@ import { HomeButton } from '../components/HomeButton';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Screen } from '../components/ui';
 import { findLocalPlayerId } from '../domain/localPlayer';
+import { useDeviceIdentity } from '../hooks/useLiveGame';
 import { playModeOf,  createScoreEvent, type Game  } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
 import { usePlaySpark } from '../hooks/usePlaySpark';
 import { useWinCelebration } from '../hooks/useWinCelebration';
-import { loadDisplayName } from '../storage/displayNameStore';
 import { addPlayerToGame, preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
 import { colors, radii, space, typography } from '../theme';
 import type { RootStackParamList } from '../navigation/types';
@@ -36,7 +36,7 @@ export function CribbageScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { gameId } = route.params;
   const [game, setGame] = useState<Game | null>(null);
-  const [displayName, setDisplayName] = useState('');
+  const { displayName, uid } = useDeviceIdentity();
   const [error, setError] = useState<string | null>(null);
   const [addingPlayer, setAddingPlayer] = useState(false);
   const {
@@ -48,10 +48,6 @@ export function CribbageScreen({ navigation, route }: Props) {
     noteLocalResult,
   } = useWinCelebration();
   const { sparks, spark } = usePlaySpark();
-
-  useEffect(() => {
-    void loadDisplayName().then(setDisplayName);
-  }, []);
 
   useEffect(() => {
     const unsub = subscribeGame(
@@ -88,8 +84,8 @@ export function CribbageScreen({ navigation, route }: Props) {
   }, [game, spark]);
 
   const localPlayerId = useMemo(
-    () => (game ? findLocalPlayerId(game, displayName) : null),
-    [game, displayName],
+    () => (game ? findLocalPlayerId(game, displayName, uid) : null),
+    [game, displayName, uid],
   );
 
   const pegPlayers: CribbagePegPlayer[] = useMemo(() => {

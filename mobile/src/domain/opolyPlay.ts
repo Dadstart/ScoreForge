@@ -1453,7 +1453,7 @@ function setHeldCount(map: Record<string, number>, playerId: string, count: numb
   else map[playerId] = count;
 }
 
-export function useJailCard(play: OpolyPlay, tokens: Record<string, number>, players: PlayPlayer[]): PlayOutcome | { error: string } {
+export function spendJailCard(play: OpolyPlay, tokens: Record<string, number>, players: PlayPlayer[]): PlayOutcome | { error: string } {
   if (play.jail[play.turn] == null) return { error: 'That player is not in jail.' };
   const held = jailCardsHeld(play, play.turn);
   if (held.total <= 0) return { error: 'No Get Out of Jail Free card.' };

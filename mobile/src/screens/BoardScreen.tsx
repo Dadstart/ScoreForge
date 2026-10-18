@@ -15,11 +15,11 @@ import { HomeButton } from '../components/HomeButton';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Field, Screen } from '../components/ui';
 import { findLocalPlayerId, nextRoundForPlayer } from '../domain/localPlayer';
+import { useDeviceIdentity } from '../hooks/useLiveGame';
 import { playModeOf,  createScoreEvent, type Game  } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
 import { useWinCelebration } from '../hooks/useWinCelebration';
-import { loadDisplayName } from '../storage/displayNameStore';
 import { addPlayerToGame, preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
 import { colors, radii, space, typography } from '../theme';
 import type { RootStackParamList } from '../navigation/types';
@@ -29,7 +29,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Board'>;
 export function BoardScreen({ navigation, route }: Props) {
   const { gameId } = route.params;
   const [game, setGame] = useState<Game | null>(null);
-  const [displayName, setDisplayName] = useState('');
+  const { displayName, uid } = useDeviceIdentity();
   const [error, setError] = useState<string | null>(null);
   const [enteringScore, setEnteringScore] = useState(false);
   const [myRoundScore, setMyRoundScore] = useState('0');
@@ -42,10 +42,6 @@ export function BoardScreen({ navigation, route }: Props) {
     endSuppress,
     noteLocalResult,
   } = useWinCelebration();
-
-  useEffect(() => {
-    void loadDisplayName().then(setDisplayName);
-  }, []);
 
   useEffect(() => {
     const unsub = subscribeGame(
@@ -68,8 +64,8 @@ export function BoardScreen({ navigation, route }: Props) {
     [game, template],
   );
   const localPlayerId = useMemo(
-    () => (game ? findLocalPlayerId(game, displayName) : null),
-    [game, displayName],
+    () => (game ? findLocalPlayerId(game, displayName, uid) : null),
+    [game, displayName, uid],
   );
   const localPlayer = game?.players.find((p) => p.id === localPlayerId) ?? null;
 

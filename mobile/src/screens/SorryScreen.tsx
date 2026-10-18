@@ -17,8 +17,8 @@ import { HomeButton } from '../components/HomeButton';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { SorryBoard } from '../components/SorryBoard';
 import { Badge, Button, Screen } from '../components/ui';
-import { findLocalPlayerId } from '../domain/localPlayer';
-import { playModeOf, type  Game  } from '../domain/models';
+import { deviceMayAct } from '../domain/localPlayer';
+import { playModeOf, type Game } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import {
   PAWNS_PER_PLAYER,
@@ -34,11 +34,9 @@ import {
   createSorryState,
   type SorryMove,
 } from '../domain/sorry';
-import { getTemplate } from '../domain/templates';
+import { useLiveGame } from '../hooks/useLiveGame';
 import { usePlaySpark } from '../hooks/usePlaySpark';
-import { useWinCelebration } from '../hooks/useWinCelebration';
-import { loadDisplayName } from '../storage/displayNameStore';
-import { addPlayerToGame, preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
+import { addPlayerToGame, preferNewerGame } from '../storage/gameStore';
 import { colors, radii, space, typography } from '../theme';
 import type { RootStackParamList } from '../navigation/types';
 
@@ -48,64 +46,29 @@ export function SorryScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
   const wide = window.width >= 980;
-  const { gameId } = route.params;
-  const [game, setGame] = useState<Game | null>(null);
-  const [displayName, setDisplayName] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [addingPlayer, setAddingPlayer] = useState(false);
-  const [selectedPawn, setSelectedPawn] = useState<number | null>(null);
-  const [sorryMenu, setSorryMenu] = useState(false);
-  const [confirmReset, setConfirmReset] = useState(false);
-  const saving = useRef(false);
   const {
+    game,
+    setGame,
+    template,
+    snapshot,
+    localPlayerId,
+    error,
+    setError,
+    persist,
     showCelebration,
-    onSnapshot,
     dismissCelebration,
     beginSuppress,
     endSuppress,
     noteLocalResult,
-  } = useWinCelebration();
+  } = useLiveGame(route.params.gameId, {
+    repair: ensureSorryState,
+    repairError: 'Could not set up the board',
+  });
+  const [addingPlayer, setAddingPlayer] = useState(false);
+  const [selectedPawn, setSelectedPawn] = useState<number | null>(null);
+  const [sorryMenu, setSorryMenu] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
   const { sparks, spark } = usePlaySpark();
-
-  useEffect(() => {
-    void loadDisplayName().then(setDisplayName);
-  }, []);
-
-  useEffect(() => {
-    const unsub = subscribeGame(
-      gameId,
-      (found) => {
-        setGame((current) => (found ? preferNewerGame(current, found) : null));
-        if (found) {
-          const tmpl = getTemplate(found.templateId);
-          if (tmpl) onSnapshot(calculate(found, tmpl));
-        }
-      },
-      (err) => setError(err.message),
-    );
-    return unsub;
-  }, [gameId, onSnapshot]);
-
-  const template = game ? getTemplate(game.templateId) : undefined;
-  const snapshot = useMemo(
-    () => (game && template ? calculate(game, template) : null),
-    [game, template],
-  );
-  const localPlayerId = useMemo(
-    () => (game ? findLocalPlayerId(game, displayName) : null),
-    [game, displayName],
-  );
-
-  useEffect(() => {
-    if (!game) return;
-    const next = ensureSorryState(game);
-    if (next === game) return;
-    void saveGame(next)
-      .then((saved) => setGame((current) => preferNewerGame(current, saved)))
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : 'Could not set up the board');
-      });
-  }, [game]);
 
   const sorry = game?.sorry ?? null;
   const drawnKey = sorry?.drawn ?? null;
@@ -136,22 +99,6 @@ export function SorryScreen({ navigation, route }: Props) {
       ? moves
       : moves.filter((move) => move.pawn === selectedPawn || ('pawn2' in move && move.pawn2 === selectedPawn));
 
-  const persist = async (next: Game, celebrate: boolean) => {
-    if (!template || saving.current) return;
-    saving.current = true;
-    const snap = calculate(next, template);
-    if (celebrate) noteLocalResult(snap);
-    try {
-      const saved = await saveGame(next);
-      setGame((current) => preferNewerGame(current, saved));
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Autosave failed');
-    } finally {
-      saving.current = false;
-    }
-  };
-
   if (!game || !template || !snapshot || !sorry) {
     return (
       <Screen>
@@ -167,6 +114,7 @@ export function SorryScreen({ navigation, route }: Props) {
   const currentColor = current ? SORRY_COLORS[colorIndexFor(sorry, current.id)] : null;
   const yourTurn = current?.id === localPlayerId;
   const finished = Boolean(sorry.winnerId) || snapshot.isComplete;
+  const canAct = !finished && deviceMayAct(game, localPlayerId, current?.id ?? null);
   const movablePawns = [...new Set(moves.map((move) => move.pawn))];
 
   const banner = finished
@@ -192,12 +140,14 @@ export function SorryScreen({ navigation, route }: Props) {
   };
 
   const onDraw = async () => {
+    if (!canAct) return;
     const next = drawFromDeck(sorry, game.players);
     if (!next) return;
     await apply(next);
   };
 
   const onPlay = async (move: SorryMove) => {
+    if (!canAct) return;
     const next = playMove(sorry, game.players, move, target);
     if (!next) {
       setError('That move is no longer legal.');
@@ -207,6 +157,7 @@ export function SorryScreen({ navigation, route }: Props) {
   };
 
   const onPass = async () => {
+    if (!canAct) return;
     const next = passTurn(sorry, game.players);
     if (!next) return;
     await apply(next);
@@ -240,7 +191,7 @@ export function SorryScreen({ navigation, route }: Props) {
     (move) => move.type !== 'sorry' && (sorry.drawn !== 11 || (move.type !== 'forward' && move.type !== 'switch')),
   );
 
-  const boardAction = finished ? null : !sorry.drawn ? (
+  const boardAction = !canAct ? null : !sorry.drawn ? (
     <Button
       label={`Draw for ${current?.name ?? 'this turn'}`}
       variant="primary"
@@ -347,7 +298,7 @@ export function SorryScreen({ navigation, route }: Props) {
               movablePawns={movablePawns}
               action={boardAction}
               onDraw={
-                finished || (sorry.drawn && moves.length > 0) ? undefined : () => void onDraw()
+                !canAct || (sorry.drawn && moves.length > 0) ? undefined : () => void onDraw()
               }
             />
             <Text style={styles.hint}>

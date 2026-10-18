@@ -20,7 +20,6 @@ export type RootStackParamList = {
   Pyramid: { gameId: string };
   TriPeaks: { gameId: string };
   Spider: { gameId: string };
-  Settings: { gameId?: string } | undefined;
 };
 
 export function gameScreenForTemplate(

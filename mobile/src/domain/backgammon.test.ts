@@ -38,7 +38,7 @@ function fill(counts: Record<number, number>): number[] {
 
 describe('backgammon', () => {
   const [ada, bea] = players();
-  const names = [ada, bea];
+  const names: [Player, Player] = [ada, bea];
 
   it('opens with 15 checkers on each side and white to play', () => {
     const state = createBackgammonState(names);

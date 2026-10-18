@@ -31,7 +31,6 @@ export const linking: LinkingOptions<RootStackParamList> = {
       Pyramid: 'pyramid/:gameId',
       TriPeaks: 'tripeaks/:gameId',
       Spider: 'spider/:gameId',
-      Settings: 'settings',
     },
   },
 };
