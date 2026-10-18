@@ -55,10 +55,15 @@ npm run deploy:rules
 | Opoly | Track own cash, optional board | Highest total |
 | Yaht | Fill any score-card column | Highest total |
 | Sorry | Shared board and card deck | First to get 4 pawns home |
+| Backgammon | Shared board. White moves first. Double before you roll | Bear off all 15 checkers |
 | Checkers | Shared board, Black moves first. Jumps required or optional. Optional computer opponent | Capture every piece, or leave no move |
+| Reversi | Shared board, Black moves first | Higher disc count. An equal count is a draw |
 | Chinese Checkers | Shared star. Two to six players, one or more colors, alone or in teams | Fill the opposite corner. Later places keep playing |
 | Klondike | Solitaire layout. Draw one or three | Build all 52 cards on the foundations |
 | FreeCell | Eight columns, four free cells | Build all 52 cards on the foundations |
+| Pyramid | Pair uncovered cards that add to 13 | Clear the pyramid |
+| TriPeaks | Play a free card one rank off the waste | Clear the three peaks |
+| Spider | Ten columns. One, two, or four suits | Clear eight suits |
 
 ## Project layout
 

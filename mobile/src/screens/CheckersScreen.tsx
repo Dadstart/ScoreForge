@@ -29,15 +29,13 @@ import {
   type CheckersState,
 } from '../domain/checkers';
 import { chooseCheckersHop, chooseDrawAnswer } from '../domain/checkersAi';
-import { findLocalPlayerId } from '../domain/localPlayer';
+import { deviceMayAct } from '../domain/localPlayer';
 import { playModeOf, type Game } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
-import { getTemplate } from '../domain/templates';
+import { useLiveGame } from '../hooks/useLiveGame';
 import { usePlaySpark } from '../hooks/usePlaySpark';
-import { useWinCelebration } from '../hooks/useWinCelebration';
 import type { RootStackParamList } from '../navigation/types';
-import { loadDisplayName } from '../storage/displayNameStore';
-import { addPlayerToGame, preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
+import { addPlayerToGame, preferNewerGame } from '../storage/gameStore';
 import { colors, radii, space, typography } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Checkers'>;
@@ -46,64 +44,32 @@ export function CheckersScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
   const wide = window.width >= 980;
-  const { gameId } = route.params;
-  const [game, setGame] = useState<Game | null>(null);
-  const [displayName, setDisplayName] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [addingPlayer, setAddingPlayer] = useState(false);
-  const [selection, setSelection] = useState<CheckersSquare | null>(null);
-  const [confirmReset, setConfirmReset] = useState(false);
-  const [confirmResign, setConfirmResign] = useState(false);
-  const saving = useRef(false);
   const {
+    game,
+    setGame,
+    template,
+    snapshot,
+    localPlayerId,
+    error,
+    setError,
+    saving,
+    persist,
     showCelebration,
-    onSnapshot,
     dismissCelebration,
     beginSuppress,
     endSuppress,
     noteLocalResult,
-  } = useWinCelebration();
+  } = useLiveGame(route.params.gameId, {
+    repair: ensureCheckersState,
+    repairError: 'Could not set up the board',
+  });
+  const [addingPlayer, setAddingPlayer] = useState(false);
+  const [selection, setSelection] = useState<CheckersSquare | null>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [confirmResign, setConfirmResign] = useState(false);
   const { sparks, spark } = usePlaySpark();
-
-  useEffect(() => {
-    void loadDisplayName().then(setDisplayName);
-  }, []);
-
-  useEffect(() => {
-    const unsub = subscribeGame(
-      gameId,
-      (found) => {
-        setGame((current) => (found ? preferNewerGame(current, found) : null));
-        if (found) {
-          const tmpl = getTemplate(found.templateId);
-          if (tmpl) onSnapshot(calculate(found, tmpl));
-        }
-      },
-      (err) => setError(err.message),
-    );
-    return unsub;
-  }, [gameId, onSnapshot]);
-
-  const template = game ? getTemplate(game.templateId) : undefined;
-  const snapshot = useMemo(
-    () => (game && template ? calculate(game, template) : null),
-    [game, template],
-  );
-  const localPlayerId = useMemo(
-    () => (game ? findLocalPlayerId(game, displayName) : null),
-    [game, displayName],
-  );
-
-  useEffect(() => {
-    if (!game) return;
-    const next = ensureCheckersState(game);
-    if (next === game) return;
-    void saveGame(next)
-      .then((saved) => setGame((current) => preferNewerGame(current, saved)))
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : 'Could not set up the board');
-      });
-  }, [game]);
+  const persistRef = useRef(persist);
+  persistRef.current = persist;
 
   const checkers = game?.checkers ?? null;
   const priorCheckers = useRef<CheckersState | null>(null);
@@ -142,24 +108,6 @@ export function CheckersScreen({ navigation, route }: Props) {
   const selected = checkers?.chain ?? selection ?? (origins.length === 1 ? origins[0] : null);
   const vsComputer = Boolean(checkers?.aiPlayerId);
   const computerThinking = Boolean(checkers && (isAiTurn(checkers) || aiShouldAnswerDraw(checkers)));
-
-  const persist = async (next: Game, celebrate: boolean) => {
-    if (!template || saving.current) return;
-    saving.current = true;
-    const snap = calculate(next, template);
-    if (celebrate) noteLocalResult(snap);
-    try {
-      const saved = await saveGame(next);
-      setGame((current) => preferNewerGame(current, saved));
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Autosave failed');
-    } finally {
-      saving.current = false;
-    }
-  };
-  const persistRef = useRef(persist);
-  persistRef.current = persist;
 
   useEffect(() => {
     if (!game || !checkers || !template) return;
@@ -222,6 +170,7 @@ export function CheckersScreen({ navigation, route }: Props) {
     checkers?.aiPlayerId,
     checkers?.aiDifficulty,
     checkers?.pieces.length,
+    saving,
   ]);
 
   if (!game || !template || !snapshot || !checkers) {
@@ -239,12 +188,19 @@ export function CheckersScreen({ navigation, route }: Props) {
   const currentPlayer = game.players.find((player) => checkers.sides[player.id] === checkers.turn) ?? null;
   const aiTurn = isAiTurn(checkers);
   const yourTurn = !aiTurn && currentPlayer?.id === localPlayerId;
-  const localSide = localPlayerId ? checkers.sides[localPlayerId] : undefined;
-  const humanMayMove =
+  const canAct =
     !finished &&
     !aiTurn &&
     !aiShouldAnswerDraw(checkers) &&
-    (!vsComputer || (localPlayerId != null && checkers.sides[localPlayerId] === checkers.turn));
+    deviceMayAct(game, localPlayerId, currentPlayer?.id ?? null);
+  const drawResponderId = checkers.drawOffer
+    ? (game.players.find(
+        (player) => checkers.sides[player.id] === (checkers.drawOffer === 'dark' ? 'light' : 'dark'),
+      )?.id ?? null)
+    : null;
+  const canAnswerDraw =
+    !vsComputer && deviceMayAct(game, localPlayerId, drawResponderId);
+  const localSide = localPlayerId ? checkers.sides[localPlayerId] : undefined;
   const winnerSide = checkers.winnerSide ? CHECKERS_SIDES[checkers.winnerSide] : null;
   const winnerPlayer = checkers.winnerSide
     ? game.players.find((player) => checkers.sides[player.id] === checkers.winnerSide)
@@ -280,7 +236,7 @@ export function CheckersScreen({ navigation, route }: Props) {
   };
 
   const playBetween = (fromRow: number, fromCol: number, toRow: number, toCol: number) => {
-    if (!humanMayMove || saving.current) return false;
+    if (!canAct || saving.current) return false;
     const hop = hops.find(
       (candidate) =>
         candidate.fromRow === fromRow &&
@@ -299,7 +255,7 @@ export function CheckersScreen({ navigation, route }: Props) {
   };
 
   const onSquare = (row: number, col: number) => {
-    if (!humanMayMove || saving.current) return;
+    if (!canAct || saving.current) return;
     if (selected && playBetween(selected.row, selected.col, row, col)) return;
     const piece = pieceAt(checkers.pieces, row, col);
     if (
@@ -404,11 +360,11 @@ export function CheckersScreen({ navigation, route }: Props) {
           <View style={[styles.boardPane, wide && styles.boardPaneWide]}>
             <CheckersBoard
               pieces={checkers.pieces}
-              hops={finished || !humanMayMove ? [] : hops}
-              selected={humanMayMove ? selected : null}
+              hops={canAct ? hops : []}
+              selected={canAct ? selected : null}
               lastMove={checkers.lastMove}
               flip={localSide === 'light'}
-              disabled={finished || !humanMayMove}
+              disabled={!canAct}
               onSquare={onSquare}
               onDrop={playBetween}
             />
@@ -418,7 +374,13 @@ export function CheckersScreen({ navigation, route }: Props) {
                 ? 'Jumps are required, and a crowned piece keeps jumping.'
                 : 'Jumps are optional. A piece that jumps still keeps jumping.'}
               {localSide ? ` Your ${CHECKERS_SIDES[localSide].name} pieces sit at the bottom.` : ' Black sits at the bottom.'}
-              {computerThinking ? ' Computer is moving…' : ''}
+              {vsComputer
+                ? computerThinking
+                  ? ' Computer is moving…'
+                  : ' You play Black. The computer plays Red.'
+                : playModeOf(game) === 'pass-and-play'
+                  ? ' Pass the phone when the color changes.'
+                  : ' Only the phone seated as the current color can move.'}
             </Text>
           </View>
 
@@ -490,15 +452,17 @@ export function CheckersScreen({ navigation, route }: Props) {
               <Text style={typography.body}>
                 {vsComputer
                   ? 'You play Black. The computer plays Red.'
-                  : game.players.length < 2
-                    ? 'Share the code for Red. Either phone can play the color whose turn it is.'
-                    : 'Either phone can play the color whose turn it is.'}
+                  : playModeOf(game) === 'pass-and-play'
+                    ? 'Pass the phone for the color whose turn it is.'
+                    : game.players.length < 2
+                      ? 'Share the code for Red. Each phone moves only its own color.'
+                      : 'Each phone moves only its own color.'}
               </Text>
             )}
 
-            {!finished ? (
+            {!finished && (canAct || canAnswerDraw) ? (
               <View style={styles.actions}>
-                {!vsComputer && !checkers.chain && checkers.drawOffer ? (
+                {!checkers.chain && checkers.drawOffer && canAnswerDraw ? (
                   <>
                     <Button
                       label="Accept draw"
@@ -511,10 +475,10 @@ export function CheckersScreen({ navigation, route }: Props) {
                     />
                   </>
                 ) : null}
-                {!checkers.chain && !checkers.drawOffer && humanMayMove ? (
+                {canAct && !checkers.chain && !checkers.drawOffer ? (
                   <Button label="Offer draw" onPress={() => void applyResult(offerDraw(checkers, game.players))} />
                 ) : null}
-                {humanMayMove ? (
+                {canAct ? (
                   <Button
                     label={confirmResign ? 'Confirm resign' : 'Resign'}
                     variant="danger"

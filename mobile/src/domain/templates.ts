@@ -119,6 +119,16 @@ export const templates: GameTemplate[] = [
     maxPlayers: 2,
   },
   {
+    id: 'reversi',
+    name: 'Reversi',
+    description:
+      'Outflank a line and flip those discs. Black moves first from the center four. The higher count wins when neither side can move.',
+    scoringMode: 'Instant',
+    winCondition: 'HighestTotal',
+    minPlayers: 1,
+    maxPlayers: 2,
+  },
+  {
     id: 'klondike',
     name: 'Klondike',
     description:

@@ -1,5 +1,6 @@
 import { ensureBackgammonState } from './backgammon';
 import { ensureCheckersState } from './checkers';
+import { ensureReversiState } from './reversi';
 import { ensureChineseState, playerCap } from './chineseCheckers';
 import { createPlayer, type Game, type Player } from './models';
 import { PLAYER_TOKENS, playerLabel, playerToken, singleEmoji } from './opoly';
@@ -7,7 +8,7 @@ import { withoutOpolyPlayer } from './opolyPlay';
 import { ensureSorryState } from './sorry';
 
 /** Add a named player to a game, enforcing uniqueness and max capacity. */
-export function withAddedPlayer(game: Game, rawName: string, maxPlayers: number): Game {
+export function withAddedPlayer(game: Game, rawName: string, maxPlayers: number, uid?: string | null): Game {
   const name = rawName.trim();
   if (!name) {
     throw new Error('Enter a player name.');
@@ -22,14 +23,16 @@ export function withAddedPlayer(game: Game, rawName: string, maxPlayers: number)
   if (taken) {
     throw new Error('A player with that name is already in the game.');
   }
-  return ensureChineseState(
-    ensureCheckersState(
-      ensureSorryState(
-        ensureBackgammonState({
-          ...game,
-          players: [...game.players, seatedPlayer(game.templateId, game.players, name)],
-          updatedAt: new Date().toISOString(),
-        }),
+  return ensureReversiState(
+    ensureChineseState(
+      ensureCheckersState(
+        ensureSorryState(
+          ensureBackgammonState({
+            ...game,
+            players: [...game.players, seatedPlayer(game.templateId, game.players, name, uid)],
+            updatedAt: new Date().toISOString(),
+          }),
+        ),
       ),
     ),
   );
@@ -74,14 +77,52 @@ export function nextOpolyToken(used: Array<string | null | undefined>): string {
   return PLAYER_TOKENS.find((token) => !taken.has(token.emoji))?.id ?? PLAYER_TOKENS[0].id;
 }
 
+/**
+ * Join a seat, or return the game unchanged when this device already sits under that name.
+ * A different device cannot take a name that is already bound to a uid.
+ */
+export function joinedGame(game: Game, rawName: string, maxPlayers: number, uid?: string | null): Game {
+  const name = rawName.trim();
+  if (!name) throw new Error('Enter a player name.');
+  const existing = game.players.find((player) => player.name.trim().toLowerCase() === name.toLowerCase());
+  if (existing) {
+    if (uid && existing.uid && existing.uid !== uid) {
+      throw new Error('A player with that name is already in the game.');
+    }
+    return game;
+  }
+  return withAddedPlayer(game, name, maxPlayers, uid);
+}
+
+/**
+ * The device that creates a separate-devices game owns the first seat.
+ * Vs-computer starts with two seats; bind the non-computer seat instead.
+ */
+export function withHostUid(
+  players: Player[],
+  playMode: Game['playMode'],
+  uid?: string | null,
+  aiPlayerId?: string | null,
+): Player[] {
+  if (!uid || playMode === 'pass-and-play') return players;
+  if (aiPlayerId) {
+    return players.map((player) =>
+      player.id === aiPlayerId || player.uid ? player : { ...player, uid },
+    );
+  }
+  if (players.length !== 1 || players[0]?.uid) return players;
+  return [{ ...players[0], uid }];
+}
+
 /** The player who starts a game. A Opoly host takes the first piece. */
 export function openingPlayer(templateId: string, name: string): Player {
   return seatedPlayer(templateId, [], name);
 }
 
 /** A new Opoly player gets the first unused piece. Other games stay nameless of tokens. */
-function seatedPlayer(templateId: string, existing: Player[], name: string): Player {
+function seatedPlayer(templateId: string, existing: Player[], name: string, uid?: string | null): Player {
   const player = createPlayer(name);
+  if (uid) player.uid = uid;
   if (templateId !== 'monopoly') return player;
   const taken = new Set(
     existing.map((entry) => playerToken(entry.token)?.emoji).filter((emoji) => emoji),
@@ -103,17 +144,19 @@ export function withoutPlayer(game: Game, playerId: string): Game {
   const remaining = game.players.filter((player) => player.id !== playerId);
   const events = game.events.filter((event) => event.playerId !== playerId);
   const monopoly = game.monopoly ? withoutOpolyPlayer(game.monopoly, playerId, game.players, events) : game.monopoly;
-  return ensureChineseState(
-    ensureCheckersState(
-      ensureSorryState(
-        ensureBackgammonState({
-          ...game,
-          players: remaining,
-          events,
-          tokenSpaces,
-          monopoly,
-          updatedAt: new Date().toISOString(),
-        }),
+  return ensureReversiState(
+    ensureChineseState(
+      ensureCheckersState(
+        ensureSorryState(
+          ensureBackgammonState({
+            ...game,
+            players: remaining,
+            events,
+            tokenSpaces,
+            monopoly,
+            updatedAt: new Date().toISOString(),
+          }),
+        ),
       ),
     ),
   );

@@ -13,6 +13,7 @@ import { YahtScreen } from './src/screens/YahtScreen';
 import { SorryScreen } from './src/screens/SorryScreen';
 import { BackgammonScreen } from './src/screens/BackgammonScreen';
 import { CheckersScreen } from './src/screens/CheckersScreen';
+import { ReversiScreen } from './src/screens/ReversiScreen';
 import { ChineseCheckersScreen } from './src/screens/ChineseCheckersScreen';
 import { KlondikeScreen } from './src/screens/KlondikeScreen';
 import { FreecellScreen } from './src/screens/FreecellScreen';
@@ -21,7 +22,6 @@ import { TriPeaksScreen } from './src/screens/TriPeaksScreen';
 import { SpiderScreen } from './src/screens/SpiderScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { JoinScreen } from './src/screens/JoinScreen';
-import { SettingsScreen } from './src/screens/SettingsScreen';
 import { SetupScreen } from './src/screens/SetupScreen';
 import { colors, fonts } from './src/theme';
 
@@ -138,6 +138,11 @@ export default function App() {
             options={{ title: 'Checkers', headerShown: false }}
           />
           <Stack.Screen
+            name="Reversi"
+            component={ReversiScreen}
+            options={{ title: 'Reversi', headerShown: false }}
+          />
+          <Stack.Screen
             name="ChineseCheckers"
             component={ChineseCheckersScreen}
             options={{ title: 'Chinese Checkers', headerShown: false }}
@@ -167,7 +172,6 @@ export default function App() {
             component={SpiderScreen}
             options={{ title: 'Spider', headerShown: false }}
           />
-          <Stack.Screen name="Settings" component={SettingsScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>

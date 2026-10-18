@@ -1,5 +1,6 @@
 import type { BackgammonState } from './backgammon';
 import type { CheckersState } from './checkers';
+import type { ReversiState } from './reversi';
 import type { ChineseState } from './chineseCheckers';
 import type { FreecellState } from './freecell';
 import type { KlondikeState } from './klondike';
@@ -21,6 +22,8 @@ export interface Player {
   name: string;
   /** Opoly piece id, or a custom emoji. Absent means the initial circle. */
   token?: string | null;
+  /** Anonymous Firebase uid of the device that sits here. Absent on older saves and on pass-and-play seats. */
+  uid?: string | null;
 }
 
 export interface ScoreEvent {
@@ -54,6 +57,8 @@ export interface Game {
   backgammon?: BackgammonState | null;
   /** Shared checkers board and turn. */
   checkers?: CheckersState | null;
+  /** Shared Reversi board and turn. */
+  reversi?: ReversiState | null;
   /** Shared Chinese checkers star, seats, and turn. */
   chinese?: ChineseState | null;
   /** Klondike layout, stock, and undo. */

@@ -24,7 +24,7 @@ service cloud.firestore {
     //   - targetScore: number 0-1000000 or null (required key)
     //   - maxRounds: number 0-1000000 or null (required key)
     //   - tokenSpaces: map (required, max 12 entries)
-    //   - sorry, backgammon, checkers, chinese, klondike, freecell, pyramid, tripeaks, spider, yahtzee, monopoly: map or null (required keys)
+    //   - sorry, backgammon, checkers, reversi, chinese, klondike, freecell, pyramid, tripeaks, spider, yahtzee, monopoly: map or null, optional until every client sends them
     //   - revision: int (required, starts at 1, increases by 1)
     //   - createdAt, updatedAt: ISO-8601 strings (createdAt immutable)
     //
@@ -54,13 +54,9 @@ service cloud.firestore {
       return value == null || (value is number && value >= 0 && value <= 1000000);
     }
 
-    function isBoard(value) {
-      return value == null || value is map;
-    }
-
     function playerValid(player) {
       return player is map
-        && player.keys().hasOnly(['id', 'name', 'token'])
+        && player.keys().hasOnly(['id', 'name', 'token', 'uid'])
         && player.keys().hasAll(['id', 'name'])
         && player.id is string
         && player.id.size() > 0
@@ -72,7 +68,18 @@ service cloud.firestore {
           !('token' in player)
           || player.token == null
           || (player.token is string && player.token.size() > 0 && player.token.size() <= 40)
+        )
+        && (
+          !('uid' in player)
+          || player.uid == null
+          || (player.uid is string && player.uid.size() > 0 && player.uid.size() <= 128)
         );
+    }
+
+    // A board key may be absent so an older client can still save after a new game ships.
+    // When the key is present it is null or a map. Unknown keys stay rejected by hasOnly.
+    function optionalBoard(data, key) {
+      return !(key in data) || data[key] == null || data[key] is map;
     }
 
     function playersValid(players) {
@@ -106,6 +113,7 @@ service cloud.firestore {
         'sorry',
         'backgammon',
         'checkers',
+        'reversi',
         'chinese-checkers',
         'klondike',
         'freecell',
@@ -131,6 +139,7 @@ service cloud.firestore {
           'sorry',
           'backgammon',
           'checkers',
+          'reversi',
           'chinese',
           'klondike',
           'freecell',
@@ -155,17 +164,6 @@ service cloud.firestore {
           'targetScore',
           'maxRounds',
           'tokenSpaces',
-          'sorry',
-          'backgammon',
-          'checkers',
-          'chinese',
-          'klondike',
-          'freecell',
-          'pyramid',
-          'tripeaks',
-          'spider',
-          'yahtzee',
-          'monopoly',
           'revision',
           'createdAt',
           'updatedAt'
@@ -185,17 +183,18 @@ service cloud.firestore {
         && isOptionalScore(data.maxRounds)
         && data.tokenSpaces is map
         && data.tokenSpaces.size() <= 12
-        && isBoard(data.sorry)
-        && isBoard(data.backgammon)
-        && isBoard(data.checkers)
-        && isBoard(data.chinese)
-        && isBoard(data.klondike)
-        && isBoard(data.freecell)
-        && isBoard(data.pyramid)
-        && isBoard(data.tripeaks)
-        && isBoard(data.spider)
-        && isBoard(data.yahtzee)
-        && isBoard(data.monopoly)
+        && optionalBoard(data, 'sorry')
+        && optionalBoard(data, 'backgammon')
+        && optionalBoard(data, 'checkers')
+        && optionalBoard(data, 'reversi')
+        && optionalBoard(data, 'chinese')
+        && optionalBoard(data, 'klondike')
+        && optionalBoard(data, 'freecell')
+        && optionalBoard(data, 'pyramid')
+        && optionalBoard(data, 'tripeaks')
+        && optionalBoard(data, 'spider')
+        && optionalBoard(data, 'yahtzee')
+        && optionalBoard(data, 'monopoly')
         && data.revision is int
         && data.revision >= 1
         && data.revision <= 1000000

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { openingPlayer, withAddedPlayer, withoutPlayer } from './addPlayer';
+import { joinedGame, openingPlayer, withAddedPlayer, withHostUid, withoutPlayer } from './addPlayer';
 import { deviceMayAct, findLocalPlayerId, nextRoundForPlayer } from './localPlayer';
 import { createGame, createPlayer, createScoreEvent, normalizeShareCode } from './models';
 import { gameScreenForTemplate } from '../navigation/types';
@@ -68,6 +68,25 @@ describe('players', () => {
     assert.equal(nextRoundForPlayer(played, ada.id), 3);
     assert.equal(nextRoundForPlayer(played, 'missing'), 1);
   });
+
+  it('keeps a bound seat on its own device', () => {
+    const game = fresh();
+    const ada = { ...game.players[0], uid: 'device-a' };
+    const bound = { ...game, players: [ada] };
+    assert.equal(findLocalPlayerId(bound, 'Ada', 'device-a'), ada.id);
+    assert.equal(findLocalPlayerId(bound, 'Ada', 'device-b'), null);
+    assert.equal(findLocalPlayerId(bound, 'Ada'), null);
+    assert.equal(joinedGame(bound, 'Ada', 4, 'device-a'), bound);
+    assert.throws(() => joinedGame(bound, 'Ada', 4, 'device-b'), /already in the game/);
+    const hosted = withHostUid([createPlayer('Ada')], 'multi-device', 'device-a');
+    assert.equal(hosted[0]?.uid, 'device-a');
+    assert.equal(withHostUid([createPlayer('Ada'), createPlayer('Bea')], 'pass-and-play', 'device-a')[0]?.uid, undefined);
+    const human = createPlayer('Ada');
+    const computer = createPlayer('Computer');
+    const vsComputer = withHostUid([human, computer], 'multi-device', 'device-a', computer.id);
+    assert.equal(vsComputer.find((player) => player.id === human.id)?.uid, 'device-a');
+    assert.equal(vsComputer.find((player) => player.id === computer.id)?.uid, undefined);
+  });
 });
 
 describe('separate devices', () => {
@@ -89,6 +108,7 @@ describe('navigation and sync', () => {
     assert.equal(gameScreenForTemplate('backgammon'), 'Backgammon');
     assert.equal(gameScreenForTemplate('yaht'), 'Yaht');
     assert.equal(gameScreenForTemplate('yahtzee'), 'Yaht');
+    assert.equal(gameScreenForTemplate('reversi'), 'Reversi');
     assert.equal(gameScreenForTemplate('chinese-checkers'), 'ChineseCheckers');
     assert.equal(gameScreenForTemplate('free-play'), 'Board');
     assert.equal(gameScreenForTemplate('rounds'), 'Board');
