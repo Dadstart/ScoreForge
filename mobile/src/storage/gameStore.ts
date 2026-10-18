@@ -12,7 +12,7 @@ import {
   type Transaction,
   type Unsubscribe,
 } from 'firebase/firestore';
-import { withAddedPlayer } from '../domain/addPlayer';
+import { joinedGame, withHostUid } from '../domain/addPlayer';
 import { createBackgammonState } from '../domain/backgammon';
 import { createCheckersState } from '../domain/checkers';
 import { createReversiState } from '../domain/reversi';
@@ -34,7 +34,7 @@ import {
 } from '../domain/models';
 import { nextSavedRevision } from '../domain/revisions';
 import { createSorryState } from '../domain/sorry';
-import { db, ensureAnonymousAuth } from '../firebase/app';
+import { auth, db, ensureAnonymousAuth } from '../firebase/app';
 import { forgetShareCode, loadKnownShareCodes, rememberShareCode } from './knownCodesStore';
 
 export { preferNewerGame, StaleGameError } from '../domain/revisions';
@@ -93,6 +93,7 @@ function revisionOf(data: StoredGame): number {
 function cleanPlayer(player: Player): Player {
   const next: Player = { id: player.id, name: player.name };
   if (player.token != null) next.token = player.token;
+  if (player.uid) next.uid = player.uid;
   return next;
 }
 
@@ -308,9 +309,8 @@ export async function addPlayerToGame(shareCode: string, rawName: string, maxPla
   const code = requireShareCode(shareCode);
   const saved = await runTransaction(db, async (transaction) => {
     const current = await readForWrite(transaction, code);
-    const existing = current.players.find((player) => player.name.trim().toLowerCase() === name.toLowerCase());
-    if (existing) return current;
-    const next = withAddedPlayer(current, name, maxPlayers);
+    const next = joinedGame(current, name, maxPlayers, auth.currentUser?.uid ?? null);
+    if (next === current) return current;
     const revision = nextSavedRevision(current.revision, current.revision);
     return writeGame(transaction, code, { ...next, revision });
   });
@@ -342,7 +342,7 @@ export async function createAndSaveGame(partial: {
       name: partial.name,
       templateId: partial.templateId,
       playMode: partial.playMode === 'pass-and-play' ? 'pass-and-play' : 'multi-device',
-      players: partial.players,
+      players: withHostUid(partial.players, partial.playMode, auth.currentUser?.uid ?? null),
       events: [],
       status: 'InProgress',
       targetScore: partial.targetScore ?? null,

@@ -20,6 +20,7 @@ import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Card, Field, Screen } from '../components/ui';
 import { withoutPlayer } from '../domain/addPlayer';
 import { deviceMayAct, findLocalPlayerId } from '../domain/localPlayer';
+import { useDeviceIdentity } from '../hooks/useLiveGame';
 import { playModeOf,  type Game, createScoreEvent  } from '../domain/models';
 import {
   BANK_PARTY_ID,
@@ -86,7 +87,7 @@ import {
   undoOpoly,
   unmortgageCost,
   unmortgageProperty,
-  useJailCard,
+  spendJailCard,
   type DrawnCard,
   type PlayOutcome,
 } from '../domain/opolyPlay';
@@ -94,7 +95,6 @@ import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
 import { usePlaySpark } from '../hooks/usePlaySpark';
 import { useWinCelebration } from '../hooks/useWinCelebration';
-import { loadDisplayName } from '../storage/displayNameStore';
 import { addPlayerToGame, preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
 import { colors, radii, space, typography } from '../theme';
 import type { RootStackParamList } from '../navigation/types';
@@ -153,7 +153,7 @@ export function OpolyScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { gameId } = route.params;
   const [game, setGame] = useState<Game | null>(null);
-  const [displayName, setDisplayName] = useState('');
+  const { displayName, uid } = useDeviceIdentity();
   const [error, setError] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
   const [auctionBid, setAuctionBid] = useState('');
@@ -229,10 +229,6 @@ export function OpolyScreen({ navigation, route }: Props) {
   }, []);
 
   useEffect(() => {
-    void loadDisplayName().then(setDisplayName);
-  }, []);
-
-  useEffect(() => {
     const unsub = subscribeGame(
       gameId,
       (found) => {
@@ -286,8 +282,8 @@ export function OpolyScreen({ navigation, route }: Props) {
     if (pending !== closedCard) setClosedCard(null);
   }, [play, closedCard]);
   const localPlayerId = useMemo(
-    () => (game ? findLocalPlayerId(game, displayName) : null),
-    [game, displayName],
+    () => (game ? findLocalPlayerId(game, displayName, uid) : null),
+    [game, displayName, uid],
   );
   const knownParty = (id: string | null) =>
     id === BANK_PARTY_ID || (game?.players.some((player) => player.id === id) ?? false);
@@ -740,7 +736,7 @@ export function OpolyScreen({ navigation, route }: Props) {
             <Button
               label="Use Get Out of Jail Free"
               disabled={!canAct}
-              onPress={() => void commitPlay(useJailCard(play, game.tokenSpaces ?? {}, game.players))}
+              onPress={() => void commitPlay(spendJailCard(play, game.tokenSpaces ?? {}, game.players))}
             />
           ) : null}
         </>

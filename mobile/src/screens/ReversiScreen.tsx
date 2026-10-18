@@ -10,7 +10,7 @@ import { PlaySpark } from '../components/PlaySpark';
 import { ReversiBoard } from '../components/ReversiBoard';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Screen } from '../components/ui';
-import { findLocalPlayerId } from '../domain/localPlayer';
+import { deviceMayAct } from '../domain/localPlayer';
 import { playModeOf, type Game } from '../domain/models';
 import {
   REVERSI_SIDES,
@@ -25,12 +25,10 @@ import {
   type ReversiState,
 } from '../domain/reversi';
 import { calculate } from '../domain/scoreCalculator';
-import { getTemplate } from '../domain/templates';
+import { useLiveGame } from '../hooks/useLiveGame';
 import { usePlaySpark } from '../hooks/usePlaySpark';
-import { useWinCelebration } from '../hooks/useWinCelebration';
 import type { RootStackParamList } from '../navigation/types';
-import { loadDisplayName } from '../storage/displayNameStore';
-import { addPlayerToGame, preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
+import { addPlayerToGame, preferNewerGame } from '../storage/gameStore';
 import { colors, radii, space, typography } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Reversi'>;
@@ -39,63 +37,29 @@ export function ReversiScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
   const wide = window.width >= 980;
-  const { gameId } = route.params;
-  const [game, setGame] = useState<Game | null>(null);
-  const [displayName, setDisplayName] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [addingPlayer, setAddingPlayer] = useState(false);
-  const [confirmReset, setConfirmReset] = useState(false);
-  const [confirmResign, setConfirmResign] = useState(false);
-  const saving = useRef(false);
   const {
+    game,
+    setGame,
+    template,
+    snapshot,
+    localPlayerId,
+    error,
+    setError,
+    saving,
+    persist,
     showCelebration,
-    onSnapshot,
     dismissCelebration,
     beginSuppress,
     endSuppress,
     noteLocalResult,
-  } = useWinCelebration();
+  } = useLiveGame(route.params.gameId, {
+    repair: ensureReversiState,
+    repairError: 'Could not set up the board',
+  });
+  const [addingPlayer, setAddingPlayer] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [confirmResign, setConfirmResign] = useState(false);
   const { sparks, spark } = usePlaySpark();
-
-  useEffect(() => {
-    void loadDisplayName().then(setDisplayName);
-  }, []);
-
-  useEffect(() => {
-    const unsub = subscribeGame(
-      gameId,
-      (found) => {
-        setGame((current) => (found ? preferNewerGame(current, found) : null));
-        if (found) {
-          const tmpl = getTemplate(found.templateId);
-          if (tmpl) onSnapshot(calculate(found, tmpl));
-        }
-      },
-      (err) => setError(err.message),
-    );
-    return unsub;
-  }, [gameId, onSnapshot]);
-
-  const template = game ? getTemplate(game.templateId) : undefined;
-  const snapshot = useMemo(
-    () => (game && template ? calculate(game, template) : null),
-    [game, template],
-  );
-  const localPlayerId = useMemo(
-    () => (game ? findLocalPlayerId(game, displayName) : null),
-    [game, displayName],
-  );
-
-  useEffect(() => {
-    if (!game) return;
-    const next = ensureReversiState(game);
-    if (next === game) return;
-    void saveGame(next)
-      .then((saved) => setGame((current) => preferNewerGame(current, saved)))
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : 'Could not set up the board');
-      });
-  }, [game]);
 
   const reversi = game?.reversi ?? null;
   const priorReversi = useRef<ReversiState | null>(null);
@@ -117,22 +81,6 @@ export function ReversiScreen({ navigation, route }: Props) {
 
   const moves = useMemo(() => (reversi ? legalMoves(reversi) : []), [reversi]);
 
-  const persist = async (next: Game, celebrate: boolean) => {
-    if (!template || saving.current) return;
-    saving.current = true;
-    const snap = calculate(next, template);
-    if (celebrate) noteLocalResult(snap);
-    try {
-      const saved = await saveGame(next);
-      setGame((current) => preferNewerGame(current, saved));
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Autosave failed');
-    } finally {
-      saving.current = false;
-    }
-  };
-
   if (!game || !template || !snapshot || !reversi) {
     return (
       <Screen>
@@ -147,6 +95,13 @@ export function ReversiScreen({ navigation, route }: Props) {
   const currentSide = REVERSI_SIDES[reversi.turn];
   const currentPlayer = game.players.find((player) => reversi.sides[player.id] === reversi.turn) ?? null;
   const yourTurn = currentPlayer?.id === localPlayerId;
+  const canAct = !finished && deviceMayAct(game, localPlayerId, currentPlayer?.id ?? null);
+  const drawResponderId = reversi.drawOffer
+    ? (game.players.find(
+        (player) => reversi.sides[player.id] === (reversi.drawOffer === 'dark' ? 'light' : 'dark'),
+      )?.id ?? null)
+    : null;
+  const canAnswerDraw = deviceMayAct(game, localPlayerId, drawResponderId);
   const winnerSide = reversi.winnerSide ? REVERSI_SIDES[reversi.winnerSide] : null;
   const winnerPlayer = reversi.winnerSide
     ? game.players.find((player) => reversi.sides[player.id] === reversi.winnerSide)
@@ -173,7 +128,7 @@ export function ReversiScreen({ navigation, route }: Props) {
   };
 
   const onSquare = (row: number, col: number) => {
-    if (finished || saving.current) return;
+    if (!canAct || saving.current) return;
     const next = playMove(reversi, game.players, row, col);
     if (!next) return;
     void apply(next);
@@ -241,11 +196,11 @@ export function ReversiScreen({ navigation, route }: Props) {
           <View style={[styles.boardPane, wide && styles.boardPaneWide]}>
             <ReversiBoard
               cells={reversi.cells}
-              moves={finished ? [] : moves}
+              moves={canAct ? moves : []}
               turn={reversi.turn}
               lastMove={reversi.lastMove}
               lastFlips={reversi.lastFlips}
-              disabled={finished}
+              disabled={!canAct}
               onSquare={onSquare}
             />
             <Text style={styles.hint}>
@@ -280,15 +235,17 @@ export function ReversiScreen({ navigation, route }: Props) {
               </Text>
             ) : (
               <Text style={typography.body}>
-                {game.players.length < 2
-                  ? 'Share the code for White. Either phone can play the color whose turn it is.'
-                  : 'Either phone can play the color whose turn it is.'}
+                {playModeOf(game) === 'pass-and-play'
+                  ? 'Pass the phone for the color whose turn it is.'
+                  : game.players.length < 2
+                    ? 'Share the code for White. Each phone moves only its own color.'
+                    : 'Each phone moves only its own color.'}
               </Text>
             )}
 
-            {!finished ? (
+            {!finished && (canAct || canAnswerDraw) ? (
               <View style={styles.actions}>
-                {reversi.drawOffer ? (
+                {reversi.drawOffer && canAnswerDraw ? (
                   <>
                     <Button
                       label="Accept draw"
@@ -297,14 +254,16 @@ export function ReversiScreen({ navigation, route }: Props) {
                     />
                     <Button label="Decline" onPress={() => void applyResult(answerDraw(reversi, game.players, false))} />
                   </>
-                ) : (
+                ) : canAct ? (
                   <Button label="Offer draw" onPress={() => void applyResult(offerDraw(reversi, game.players))} />
-                )}
-                <Button
-                  label={confirmResign ? 'Confirm resign' : 'Resign'}
-                  variant="danger"
-                  onPress={() => void onResign()}
-                />
+                ) : null}
+                {canAct ? (
+                  <Button
+                    label={confirmResign ? 'Confirm resign' : 'Resign'}
+                    variant="danger"
+                    onPress={() => void onResign()}
+                  />
+                ) : null}
               </View>
             ) : null}
 

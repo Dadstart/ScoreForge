@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -26,13 +26,11 @@ import {
   type KlondikeState,
   type Source,
 } from '../domain/klondike';
-import { playModeOf, type  Game  } from '../domain/models';
+import { playModeOf, type Game } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
-import { getTemplate } from '../domain/templates';
+import { useLiveGame } from '../hooks/useLiveGame';
 import { usePlaySpark } from '../hooks/usePlaySpark';
-import { useWinCelebration } from '../hooks/useWinCelebration';
 import type { RootStackParamList } from '../navigation/types';
-import { preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
 import { colors, radii, space, typography } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Klondike'>;
@@ -41,62 +39,28 @@ export function KlondikeScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
   const wide = window.width >= 980;
-  const { gameId } = route.params;
-  const [game, setGame] = useState<Game | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    game,
+    template,
+    snapshot,
+    error,
+    persist,
+    showCelebration,
+    dismissCelebration,
+    beginSuppress,
+    endSuppress,
+    noteLocalResult,
+  } = useLiveGame(route.params.gameId, {
+    repair: ensureKlondikeState,
+    repairError: 'Could not deal the cards',
+    optimistic: true,
+  });
   const [selection, setSelection] = useState<Source | null>(null);
   const [hintText, setHintText] = useState<string | null>(null);
   const [confirmDeal, setConfirmDeal] = useState(false);
   const [dragging, setDragging] = useState(false);
   usePageScroll(!dragging);
-  const saving = useRef(false);
-  const serverGame = useRef<Game | null>(null);
-  const {
-    showCelebration,
-    onSnapshot,
-    dismissCelebration,
-    beginSuppress,
-    endSuppress,
-    noteLocalResult,
-  } = useWinCelebration();
   const { sparks, spark } = usePlaySpark();
-
-  useEffect(() => {
-    const unsub = subscribeGame(
-      gameId,
-      (found) => {
-        setGame((current) => {
-          if (!found) return null;
-          if (saving.current && current && found.revision <= current.revision) return current;
-          serverGame.current = found;
-          return preferNewerGame(current, found);
-        });
-        if (found) {
-          const tmpl = getTemplate(found.templateId);
-          if (tmpl) onSnapshot(calculate(found, tmpl));
-        }
-      },
-      (err) => setError(err.message),
-    );
-    return unsub;
-  }, [gameId, onSnapshot]);
-
-  const template = game ? getTemplate(game.templateId) : undefined;
-  const snapshot = useMemo(
-    () => (game && template ? calculate(game, template) : null),
-    [game, template],
-  );
-
-  useEffect(() => {
-    if (!game) return;
-    const next = ensureKlondikeState(game);
-    if (next === game) return;
-    void saveGame(next)
-      .then((saved) => setGame((current) => preferNewerGame(current, saved)))
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : 'Could not deal the cards');
-      });
-  }, [game]);
 
   const klondike = game?.klondike ?? null;
   const moveKey = `${klondike?.moves ?? 0}|${klondike?.won ?? false}|${klondike?.lastAction ?? ''}`;
@@ -113,25 +77,6 @@ export function KlondikeScreen({ navigation, route }: Props) {
     const cheer = foundationCheer(prior, klondike);
     if (cheer) spark(cheer.label, cheer.tone);
   }, [klondike, spark]);
-
-  const persist = async (next: Game, celebrate: boolean) => {
-    if (!template || saving.current) return;
-    saving.current = true;
-    setGame(next);
-    const snap = calculate(next, template);
-    if (celebrate) noteLocalResult(snap);
-    try {
-      const saved = await saveGame(next);
-      serverGame.current = saved;
-      setGame((current) => preferNewerGame(current, saved));
-      setError(null);
-    } catch (err) {
-      if (serverGame.current) setGame(serverGame.current);
-      setError(err instanceof Error ? err.message : 'Autosave failed');
-    } finally {
-      saving.current = false;
-    }
-  };
 
   if (!game || !template || !snapshot || !klondike) {
     return (

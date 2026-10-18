@@ -4,6 +4,7 @@ import { createPlayer, type Player } from './models';
 import { slidePoint } from './sorryBoard';
 import {
   createSorryState,
+  type CardKind,
   drawCard,
   drawFromDeck,
   legalMoves,
@@ -23,7 +24,7 @@ describe('sorry', () => {
   const players: Player[] = [ada, bea];
 
   it('draws the top card and will not draw a second before it is played', () => {
-    const state = { ...createSorryState(players), deck: [2, 1], discard: [] };
+    const state = { ...createSorryState(players), deck: [2, 1] as CardKind[], discard: [] };
     const drawn = drawCard(state);
     assert.ok(drawn);
     assert.equal(drawn.drawn, 1);
@@ -32,7 +33,7 @@ describe('sorry', () => {
   });
 
   it('discards an unusable card and draws the next one from the deck', () => {
-    const state = { ...createSorryState(players), deck: [1, 3], discard: [], drawn: null };
+    const state = { ...createSorryState(players), deck: [1, 3] as CardKind[], discard: [], drawn: null };
     const first = drawFromDeck(state, players);
     assert.ok(first);
     assert.equal(first.drawn, 3);

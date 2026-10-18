@@ -3,6 +3,7 @@ import type { Game } from './models';
 import { fillRandom } from './secureRandom';
 
 export { cardFace };
+export type { Suit };
 
 /**
  * TriPeaks solitaire.

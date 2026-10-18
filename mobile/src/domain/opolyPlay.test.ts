@@ -36,7 +36,7 @@ import {
   skipBankruptTurn,
   turnPrompt,
   undoOpoly,
-  useJailCard,
+  spendJailCard,
   withoutOpolyPlayer,
   type OpolyPlay,
   type PlayPlayer,
@@ -501,7 +501,7 @@ describe('monopoly play', () => {
 
   it('returns a kept jail card to the deck when it is used', () => {
     const play = table({ jail: { ada: 1 }, chanceFree: { ada: 1 }, chance: ['go'] });
-    const used = useJailCard(play, { ada: 10 }, players);
+    const used = spendJailCard(play, { ada: 10 }, players);
     assert.ok(!('error' in used));
     if ('error' in used) return;
     assert.equal(used.play.jail.ada, undefined);
@@ -666,7 +666,7 @@ describe('monopoly play', () => {
         () => 0,
       );
       assert.ok(!('error' in result));
-      if ('error' in result) throw new Error(result.error);
+      if ('error' in result) throw new Error(String(result.error));
       return result;
     };
     const collected = (result: { events: { playerId: string; points: number }[] }, id = 'ada') =>
@@ -748,7 +748,7 @@ describe('monopoly play', () => {
         players,
       );
       assert.ok(!('error' in result));
-      if ('error' in result) throw new Error(result.error);
+      if ('error' in result) throw new Error(String(result.error));
       assert.equal(result.tokens.ada, 7);
       assert.equal(result.route, null);
       return result;
