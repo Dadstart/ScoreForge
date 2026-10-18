@@ -13,6 +13,7 @@ import { YahtScreen } from './src/screens/YahtScreen';
 import { SorryScreen } from './src/screens/SorryScreen';
 import { BackgammonScreen } from './src/screens/BackgammonScreen';
 import { CheckersScreen } from './src/screens/CheckersScreen';
+import { ReversiScreen } from './src/screens/ReversiScreen';
 import { ChineseCheckersScreen } from './src/screens/ChineseCheckersScreen';
 import { KlondikeScreen } from './src/screens/KlondikeScreen';
 import { FreecellScreen } from './src/screens/FreecellScreen';
@@ -136,6 +137,11 @@ export default function App() {
             name="Checkers"
             component={CheckersScreen}
             options={{ title: 'Checkers', headerShown: false }}
+          />
+          <Stack.Screen
+            name="Reversi"
+            component={ReversiScreen}
+            options={{ title: 'Reversi', headerShown: false }}
           />
           <Stack.Screen
             name="ChineseCheckers"

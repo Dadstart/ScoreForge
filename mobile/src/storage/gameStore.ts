@@ -15,6 +15,7 @@ import {
 import { withAddedPlayer } from '../domain/addPlayer';
 import { createBackgammonState } from '../domain/backgammon';
 import { createCheckersState } from '../domain/checkers';
+import { createReversiState } from '../domain/reversi';
 import { createChineseState, type ChineseSetup } from '../domain/chineseCheckers';
 import { createFreecellState, packFreecell, unpackFreecell } from '../domain/freecell';
 import { createKlondikeState, packKlondike, unpackKlondike, type DrawCount } from '../domain/klondike';
@@ -55,6 +56,7 @@ type StoredGame = {
   sorry?: Game['sorry'];
   backgammon?: Game['backgammon'];
   checkers?: Game['checkers'];
+  reversi?: Game['reversi'];
   chinese?: Game['chinese'];
   klondike?: unknown;
   freecell?: unknown;
@@ -122,6 +124,7 @@ function toStored(game: Game): Record<string, unknown> {
     sorry: game.sorry ?? null,
     backgammon: game.backgammon ?? null,
     checkers: game.checkers ?? null,
+    reversi: game.reversi ?? null,
     chinese: game.chinese ?? null,
     klondike: game.klondike ? packKlondike(game.klondike) : null,
     freecell: game.freecell ? packFreecell(game.freecell) : null,
@@ -152,6 +155,7 @@ function fromStored(shareCode: string, data: StoredGame, events: ScoreEvent[]): 
     sorry: data.sorry ?? null,
     backgammon: data.backgammon ?? null,
     checkers: data.checkers ?? null,
+    reversi: data.reversi ?? null,
     chinese: data.chinese ?? null,
     klondike: unpackKlondike(data.klondike),
     freecell: unpackFreecell(data.freecell),
@@ -352,6 +356,7 @@ export async function createAndSaveGame(partial: {
     if (partial.templateId === 'checkers') {
       game.checkers = createCheckersState(partial.players, { requireJumps: partial.requireJumps !== false });
     }
+    if (partial.templateId === 'reversi') game.reversi = createReversiState(partial.players);
     if (partial.templateId === 'chinese-checkers') {
       game.chinese = createChineseState(partial.players, partial.chinese);
     }

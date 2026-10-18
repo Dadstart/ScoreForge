@@ -2,6 +2,7 @@ import type { Game, Player } from './models';
 import type { GameTemplate, WinCondition } from './templates';
 import { borneOff, playerIdForSide as backgammonPlayerId } from './backgammon';
 import { capturedCount, playerIdForSide } from './checkers';
+import { discCount, playerIdForSide as reversiPlayerId } from './reversi';
 import { piecesHomeForPlayer, winnerPlayerIds } from './chineseCheckers';
 import { homeCount as freecellHome } from './freecell';
 import { foundationCount } from './klondike';
@@ -97,6 +98,7 @@ function pointsForPlayer(game: Game, playerId: string, template: GameTemplate): 
   if (template.id === 'sorry' && game.sorry) return homeCount(game.sorry, playerId);
   if (template.id === 'backgammon' && game.backgammon) return borneOff(game.backgammon, playerId);
   if (template.id === 'checkers' && game.checkers) return capturedCount(game.checkers, playerId);
+  if (template.id === 'reversi' && game.reversi) return discCount(game.reversi, playerId);
   if (template.id === 'chinese-checkers' && game.chinese) return piecesHomeForPlayer(game.chinese, playerId);
   if (template.id === 'klondike') return foundationCount(game.klondike);
   if (template.id === 'freecell') return freecellHome(game.freecell);
@@ -134,6 +136,7 @@ function detectCompletion(game: Game, template: GameTemplate, totals: Map<string
   if (template.id === 'yaht') return isScorecardComplete(game);
   if (template.id === 'backgammon') return Boolean(game.backgammon?.winnerSide);
   if (template.id === 'checkers') return Boolean(game.checkers?.winnerSide || game.checkers?.draw);
+  if (template.id === 'reversi') return Boolean(game.reversi?.winnerSide || game.reversi?.draw);
   if (template.id === 'chinese-checkers') return Boolean(game.chinese?.over);
   if (template.id === 'klondike') return Boolean(game.klondike?.won);
   if (template.id === 'freecell') return Boolean(game.freecell?.won);
@@ -185,6 +188,12 @@ function getWinnerIds(
   if (template.id === 'checkers') {
     if (!game.checkers || game.checkers.draw || !game.checkers.winnerSide) return new Set();
     const winnerId = playerIdForSide(game.checkers, game.checkers.winnerSide);
+    return winnerId ? new Set([winnerId]) : new Set();
+  }
+
+  if (template.id === 'reversi') {
+    if (!game.reversi || game.reversi.draw || !game.reversi.winnerSide) return new Set();
+    const winnerId = reversiPlayerId(game.reversi, game.reversi.winnerSide);
     return winnerId ? new Set([winnerId]) : new Set();
   }
 
