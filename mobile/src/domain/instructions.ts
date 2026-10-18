@@ -109,6 +109,16 @@ const INSTRUCTIONS: Record<string, GameInstructions> = {
       'You win by taking every opposing piece, or by leaving the other player with no move.',
     ],
   },
+  freecell: {
+    title: 'FreeCell',
+    lines: [
+      'All 52 cards are dealt face up into eight columns. Four free cells and four foundations start empty.',
+      'Build each foundation up by suit, from ace to king.',
+      'On the columns, build down in alternating colors. An empty column takes any card.',
+      'Move one card at a time. A built run can move together when the free cells and empty columns can carry it.',
+      'Tap a card again to build it up. Finish sends home every card that cannot be needed on a column.',
+    ],
+  },
   klondike: {
     title: 'Klondike',
     lines: [

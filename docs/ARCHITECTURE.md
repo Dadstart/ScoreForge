@@ -17,7 +17,7 @@ mobile/
 │   ├── storage/               # Firestore game store + known codes + displayName
 │   ├── linking/               # share URL create/parse for QR + deep links
 │   ├── navigation/            # types + React Navigation linking config
-│   ├── screens/               # Home, Setup, Join, Board, Cribbage, Opoly, Yaht, Sorry, Checkers, Chinese Checkers, Klondike, Settings
+│   ├── screens/               # Home, Setup, Join, Board, Cribbage, Opoly, Yaht, Sorry, Checkers, Chinese Checkers, Klondike, FreeCell, Settings
 │   └── components/            # CribbageBoard, OpolyBoard, YahtScoreboard, SorryBoard, CheckersBoard, ChineseCheckersBoard, FireworksOverlay, ShareCodePanel
 ```
 
@@ -38,6 +38,7 @@ React Navigation native stack with `expo-linking` prefixes (`scoreforge://` and 
 | **Checkers** | Live subscribe; shared board and turn |
 | **Chinese Checkers** | Live subscribe; shared star, seats, and turn |
 | **Klondike** | Live subscribe; solitaire layout, stock, and undo |
+| **FreeCell** | Live subscribe; free cells, cascades, and foundations |
 | **Settings** | Notes / future theme |
 
 Deep link: `join?code=XXXXXX`. QR encodes `Linking.createURL('join', { queryParams: { code } })`.
@@ -91,6 +92,7 @@ All templates start with `minPlayers: 1`; others join via code.
 | Checkers | Shared board | Capture all pieces, or leave no move |
 | Chinese Checkers | Shared star | Fill the opposite corner; later places play on |
 | Klondike | Solitaire layout | All 52 cards on the foundations |
+| FreeCell | Free cells and cascades | All 52 cards on the foundations |
 
 ### Platforms
 

@@ -16,6 +16,7 @@ import { withAddedPlayer } from '../domain/addPlayer';
 import { createBackgammonState } from '../domain/backgammon';
 import { createCheckersState } from '../domain/checkers';
 import { createChineseState, type ChineseSetup } from '../domain/chineseCheckers';
+import { createFreecellState, packFreecell, unpackFreecell } from '../domain/freecell';
 import { createKlondikeState, packKlondike, unpackKlondike, type DrawCount } from '../domain/klondike';
 import { createPyramidState, packPyramid, unpackPyramid } from '../domain/pyramid';
 import { createSpiderState, packSpider, unpackSpider, type SuitCount } from '../domain/spider';
@@ -56,6 +57,7 @@ type StoredGame = {
   checkers?: Game['checkers'];
   chinese?: Game['chinese'];
   klondike?: unknown;
+  freecell?: unknown;
   pyramid?: unknown;
   spider?: unknown;
   tripeaks?: unknown;
@@ -122,6 +124,7 @@ function toStored(game: Game): Record<string, unknown> {
     checkers: game.checkers ?? null,
     chinese: game.chinese ?? null,
     klondike: game.klondike ? packKlondike(game.klondike) : null,
+    freecell: game.freecell ? packFreecell(game.freecell) : null,
     pyramid: game.pyramid ? packPyramid(game.pyramid) : null,
     spider: game.spider ? packSpider(game.spider) : null,
     tripeaks: game.tripeaks ? packTriPeaks(game.tripeaks) : null,
@@ -151,6 +154,7 @@ function fromStored(shareCode: string, data: StoredGame, events: ScoreEvent[]): 
     checkers: data.checkers ?? null,
     chinese: data.chinese ?? null,
     klondike: unpackKlondike(data.klondike),
+    freecell: unpackFreecell(data.freecell),
     pyramid: unpackPyramid(data.pyramid),
     spider: unpackSpider(data.spider),
     tripeaks: unpackTriPeaks(data.tripeaks),
@@ -353,6 +357,9 @@ export async function createAndSaveGame(partial: {
     }
     if (partial.templateId === 'klondike') {
       game.klondike = createKlondikeState(partial.drawCount === 3 ? 3 : 1);
+    }
+    if (partial.templateId === 'freecell') {
+      game.freecell = createFreecellState();
     }
     if (partial.templateId === 'pyramid') {
       game.pyramid = createPyramidState();

@@ -433,7 +433,7 @@ export function SetupScreen({ navigation }: Props) {
           <>
             <Text style={[typography.section, styles.section]}>Your name</Text>
             <Text style={styles.hint}>
-              {template.id === 'klondike' || template.id === 'pyramid' || template.id === 'tripeaks' || template.id === 'spider'
+              {template.id === 'klondike' || template.id === 'freecell' || template.id === 'pyramid' || template.id === 'tripeaks' || template.id === 'spider'
                 ? 'Solo. Use this name on another device to keep playing.'
                 : 'Start alone, then share the code so others can join.'}
             </Text>

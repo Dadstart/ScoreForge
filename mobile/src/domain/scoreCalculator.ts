@@ -3,6 +3,7 @@ import type { GameTemplate, WinCondition } from './templates';
 import { borneOff, playerIdForSide as backgammonPlayerId } from './backgammon';
 import { capturedCount, playerIdForSide } from './checkers';
 import { piecesHomeForPlayer, winnerPlayerIds } from './chineseCheckers';
+import { homeCount as freecellHome } from './freecell';
 import { foundationCount } from './klondike';
 import { clearedCount } from './pyramid';
 import { completedCount } from './spider';
@@ -98,6 +99,7 @@ function pointsForPlayer(game: Game, playerId: string, template: GameTemplate): 
   if (template.id === 'checkers' && game.checkers) return capturedCount(game.checkers, playerId);
   if (template.id === 'chinese-checkers' && game.chinese) return piecesHomeForPlayer(game.chinese, playerId);
   if (template.id === 'klondike') return foundationCount(game.klondike);
+  if (template.id === 'freecell') return freecellHome(game.freecell);
   if (template.id === 'pyramid') return clearedCount(game.pyramid);
   if (template.id === 'spider') return completedCount(game.spider);
   if (template.id === 'tripeaks') return game.tripeaks?.score ?? 0;
@@ -134,6 +136,7 @@ function detectCompletion(game: Game, template: GameTemplate, totals: Map<string
   if (template.id === 'checkers') return Boolean(game.checkers?.winnerSide || game.checkers?.draw);
   if (template.id === 'chinese-checkers') return Boolean(game.chinese?.over);
   if (template.id === 'klondike') return Boolean(game.klondike?.won);
+  if (template.id === 'freecell') return Boolean(game.freecell?.won);
   if (template.id === 'pyramid') return Boolean(game.pyramid?.won);
   if (template.id === 'spider') return Boolean(game.spider?.won);
   if (template.id === 'tripeaks') return Boolean(game.tripeaks?.won);
@@ -197,6 +200,12 @@ function getWinnerIds(
 
   if (template.id === 'klondike') {
     if (!game.klondike?.won) return new Set();
+    const winnerId = game.players[0]?.id;
+    return winnerId ? new Set([winnerId]) : new Set();
+  }
+
+  if (template.id === 'freecell') {
+    if (!game.freecell?.won) return new Set();
     const winnerId = game.players[0]?.id;
     return winnerId ? new Set([winnerId]) : new Set();
   }

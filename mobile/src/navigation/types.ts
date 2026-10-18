@@ -15,6 +15,7 @@ export type RootStackParamList = {
   Checkers: { gameId: string };
   ChineseCheckers: { gameId: string };
   Klondike: { gameId: string };
+  Freecell: { gameId: string };
   Pyramid: { gameId: string };
   TriPeaks: { gameId: string };
   Spider: { gameId: string };
@@ -23,7 +24,7 @@ export type RootStackParamList = {
 
 export function gameScreenForTemplate(
   templateId: string,
-): 'Board' | 'Cribbage' | 'Opoly' | 'Yaht' | 'Sorry' | 'Backgammon' | 'Checkers' | 'ChineseCheckers' | 'Klondike' | 'Pyramid' | 'TriPeaks' | 'Spider' {
+): 'Board' | 'Cribbage' | 'Opoly' | 'Yaht' | 'Sorry' | 'Backgammon' | 'Checkers' | 'ChineseCheckers' | 'Klondike' | 'Freecell' | 'Pyramid' | 'TriPeaks' | 'Spider' {
   if (templateId === 'cribbage') return 'Cribbage';
   if (templateId === 'monopoly') return 'Opoly';
   if (templateId === 'yaht' || templateId === 'yahtzee') return 'Yaht';
@@ -32,6 +33,7 @@ export function gameScreenForTemplate(
   if (templateId === 'checkers') return 'Checkers';
   if (templateId === 'chinese-checkers') return 'ChineseCheckers';
   if (templateId === 'klondike') return 'Klondike';
+  if (templateId === 'freecell') return 'Freecell';
   if (templateId === 'pyramid') return 'Pyramid';
   if (templateId === 'tripeaks') return 'TriPeaks';
   if (templateId === 'spider') return 'Spider';
