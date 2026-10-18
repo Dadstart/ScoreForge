@@ -12,20 +12,25 @@ import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Screen } from '../components/ui';
 import {
   CHECKERS_SIDES,
+  aiShouldAnswerDraw,
   answerDraw,
   createCheckersState,
   ensureCheckersState,
+  isAiTurn,
   legalHops,
   offerDraw,
   pieceAt,
   playHop,
   resign,
+  setAiDifficulty,
   setRequireJumps,
+  type AiDifficulty,
   type CheckersSquare,
   type CheckersState,
 } from '../domain/checkers';
+import { chooseCheckersHop, chooseDrawAnswer } from '../domain/checkersAi';
 import { findLocalPlayerId } from '../domain/localPlayer';
-import { playModeOf, type  Game  } from '../domain/models';
+import { playModeOf, type Game } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import { getTemplate } from '../domain/templates';
 import { usePlaySpark } from '../hooks/usePlaySpark';
@@ -135,6 +140,8 @@ export function CheckersScreen({ navigation, route }: Props) {
     return squares;
   }, [hops]);
   const selected = checkers?.chain ?? selection ?? (origins.length === 1 ? origins[0] : null);
+  const vsComputer = Boolean(checkers?.aiPlayerId);
+  const computerThinking = Boolean(checkers && (isAiTurn(checkers) || aiShouldAnswerDraw(checkers)));
 
   const persist = async (next: Game, celebrate: boolean) => {
     if (!template || saving.current) return;
@@ -151,6 +158,71 @@ export function CheckersScreen({ navigation, route }: Props) {
       saving.current = false;
     }
   };
+  const persistRef = useRef(persist);
+  persistRef.current = persist;
+
+  useEffect(() => {
+    if (!game || !checkers || !template) return;
+    if (checkers.winnerSide || checkers.draw || snapshot?.isComplete) return;
+    if (saving.current) return;
+    if (!isAiTurn(checkers) && !aiShouldAnswerDraw(checkers)) return;
+
+    const difficulty = checkers.aiDifficulty ?? 'medium';
+    const players = game.players;
+    const base = game;
+    const board = checkers;
+    let cancelled = false;
+
+    const run = async () => {
+      if (aiShouldAnswerDraw(board)) {
+        await new Promise((resolve) => setTimeout(resolve, 450));
+        if (cancelled || saving.current) return;
+        const accept = chooseDrawAnswer(board, difficulty);
+        const nextCheckers = answerDraw(board, players, accept);
+        if (!nextCheckers) return;
+        const next: Game = {
+          ...base,
+          checkers: nextCheckers,
+          status: nextCheckers.draw ? 'Completed' : 'InProgress',
+          updatedAt: new Date().toISOString(),
+        };
+        await persistRef.current(next, true);
+        return;
+      }
+
+      if (!isAiTurn(board)) return;
+      await new Promise((resolve) => setTimeout(resolve, board.chain ? 320 : 520));
+      if (cancelled || saving.current) return;
+      const hop = chooseCheckersHop(board, difficulty);
+      if (!hop) return;
+      const nextCheckers = playHop(board, players, hop);
+      if (!nextCheckers) return;
+      const next: Game = {
+        ...base,
+        checkers: nextCheckers,
+        status: nextCheckers.winnerSide || nextCheckers.draw ? 'Completed' : 'InProgress',
+        updatedAt: new Date().toISOString(),
+      };
+      await persistRef.current(next, true);
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    game,
+    checkers,
+    template,
+    snapshot?.isComplete,
+    turnKey,
+    chainKey,
+    moveKey,
+    checkers?.drawOffer,
+    checkers?.aiPlayerId,
+    checkers?.aiDifficulty,
+    checkers?.pieces.length,
+  ]);
 
   if (!game || !template || !snapshot || !checkers) {
     return (
@@ -165,24 +237,37 @@ export function CheckersScreen({ navigation, route }: Props) {
   const finished = Boolean(checkers.winnerSide || checkers.draw || snapshot.isComplete);
   const currentSide = CHECKERS_SIDES[checkers.turn];
   const currentPlayer = game.players.find((player) => checkers.sides[player.id] === checkers.turn) ?? null;
-  const yourTurn = currentPlayer?.id === localPlayerId;
+  const aiTurn = isAiTurn(checkers);
+  const yourTurn = !aiTurn && currentPlayer?.id === localPlayerId;
   const localSide = localPlayerId ? checkers.sides[localPlayerId] : undefined;
+  const humanMayMove =
+    !finished &&
+    !aiTurn &&
+    !aiShouldAnswerDraw(checkers) &&
+    (!vsComputer || (localPlayerId != null && checkers.sides[localPlayerId] === checkers.turn));
   const winnerSide = checkers.winnerSide ? CHECKERS_SIDES[checkers.winnerSide] : null;
   const winnerPlayer = checkers.winnerSide
     ? game.players.find((player) => checkers.sides[player.id] === checkers.winnerSide)
     : null;
   const jumpsRequired = checkers.requireJumps !== false;
   const mustJump = jumpsRequired && hops.some((hop) => hop.captureRow != null);
+  const aiLevel = checkers.aiDifficulty ?? 'medium';
 
-  const actor = yourTurn ? 'Your turn' : currentPlayer ? `${currentPlayer.name}'s turn` : null;
+  const actor = aiTurn
+    ? 'Computer thinking'
+    : yourTurn
+      ? 'Your turn'
+      : currentPlayer
+        ? `${currentPlayer.name}'s turn`
+        : null;
   const turnLine = actor ? `${actor} · ${currentSide.name}` : `${currentSide.name}'s turn`;
   const banner = checkers.draw
     ? 'Draw'
     : winnerSide
       ? `${winnerPlayer?.name ?? winnerSide.name} wins`
-      : checkers.chain
+      : checkers.chain && !aiTurn
         ? `${currentPlayer?.name ?? currentSide.name} must keep jumping`
-        : `${turnLine}${mustJump ? ' · a jump is required' : ''}`;
+        : `${turnLine}${mustJump && !aiTurn ? ' · a jump is required' : ''}`;
 
   const apply = async (nextCheckers: typeof checkers) => {
     const next: Game = {
@@ -195,7 +280,7 @@ export function CheckersScreen({ navigation, route }: Props) {
   };
 
   const playBetween = (fromRow: number, fromCol: number, toRow: number, toCol: number) => {
-    if (finished || saving.current) return false;
+    if (!humanMayMove || saving.current) return false;
     const hop = hops.find(
       (candidate) =>
         candidate.fromRow === fromRow &&
@@ -214,7 +299,7 @@ export function CheckersScreen({ navigation, route }: Props) {
   };
 
   const onSquare = (row: number, col: number) => {
-    if (finished || saving.current) return;
+    if (!humanMayMove || saving.current) return;
     if (selected && playBetween(selected.row, selected.col, row, col)) return;
     const piece = pieceAt(checkers.pieces, row, col);
     if (
@@ -235,7 +320,11 @@ export function CheckersScreen({ navigation, route }: Props) {
     }
     const next: Game = {
       ...game,
-      checkers: createCheckersState(game.players, { requireJumps: checkers.requireJumps }),
+      checkers: createCheckersState(game.players, {
+        requireJumps: checkers.requireJumps,
+        aiPlayerId: checkers.aiPlayerId,
+        aiDifficulty: checkers.aiDifficulty,
+      }),
       events: [],
       status: 'InProgress',
       updatedAt: new Date().toISOString(),
@@ -261,11 +350,23 @@ export function CheckersScreen({ navigation, route }: Props) {
     await persist(next, false);
   };
 
+  const onAiDifficulty = async (difficulty: AiDifficulty) => {
+    const nextCheckers = setAiDifficulty(checkers, difficulty);
+    if (!nextCheckers) return;
+    const next: Game = {
+      ...game,
+      checkers: nextCheckers,
+      updatedAt: new Date().toISOString(),
+    };
+    await persist(next, false);
+  };
+
   const onResign = async () => {
     if (!confirmResign) {
       setConfirmResign(true);
       return;
     }
+    if (aiTurn || aiShouldAnswerDraw(checkers)) return;
     const next = resign(checkers, game.players);
     setConfirmResign(false);
     if (next) await apply(next);
@@ -303,11 +404,11 @@ export function CheckersScreen({ navigation, route }: Props) {
           <View style={[styles.boardPane, wide && styles.boardPaneWide]}>
             <CheckersBoard
               pieces={checkers.pieces}
-              hops={finished ? [] : hops}
-              selected={selected}
+              hops={finished || !humanMayMove ? [] : hops}
+              selected={humanMayMove ? selected : null}
               lastMove={checkers.lastMove}
               flip={localSide === 'light'}
-              disabled={finished}
+              disabled={finished || !humanMayMove}
               onSquare={onSquare}
               onDrop={playBetween}
             />
@@ -317,6 +418,7 @@ export function CheckersScreen({ navigation, route }: Props) {
                 ? 'Jumps are required, and a crowned piece keeps jumping.'
                 : 'Jumps are optional. A piece that jumps still keeps jumping.'}
               {localSide ? ` Your ${CHECKERS_SIDES[localSide].name} pieces sit at the bottom.` : ' Black sits at the bottom.'}
+              {computerThinking ? ' Computer is moving…' : ''}
             </Text>
           </View>
 
@@ -335,6 +437,29 @@ export function CheckersScreen({ navigation, route }: Props) {
               />
             </View>
 
+            {vsComputer ? (
+              <>
+                <Text style={[typography.section, styles.section]}>Computer</Text>
+                <View style={styles.actions}>
+                  <Button
+                    label="Easy"
+                    variant={aiLevel === 'easy' ? 'primary' : 'secondary'}
+                    onPress={() => void onAiDifficulty('easy')}
+                  />
+                  <Button
+                    label="Medium"
+                    variant={aiLevel === 'medium' ? 'primary' : 'secondary'}
+                    onPress={() => void onAiDifficulty('medium')}
+                  />
+                  <Button
+                    label="Hard"
+                    variant={aiLevel === 'hard' ? 'primary' : 'secondary'}
+                    onPress={() => void onAiDifficulty('hard')}
+                  />
+                </View>
+              </>
+            ) : null}
+
             <Text style={[typography.section, styles.section]}>Players</Text>
             <View style={styles.playerRow}>
               {game.players.map((player) => {
@@ -342,12 +467,14 @@ export function CheckersScreen({ navigation, route }: Props) {
                 const side = sideId ? CHECKERS_SIDES[sideId] : null;
                 const left = sideId ? checkers.pieces.filter((piece) => piece.side === sideId).length : 0;
                 const active = sideId === checkers.turn && !finished;
+                const isComputer = player.id === checkers.aiPlayerId;
                 return (
                   <View key={player.id} style={[styles.playerChip, active && styles.playerChipActive]}>
                     <View style={[styles.dot, { backgroundColor: side?.fill ?? colors.muted }]} />
                     <Text style={typography.label}>
                       {player.name}
                       {player.id === localPlayerId ? ' · you' : ''}
+                      {isComputer ? ' · AI' : ''}
                       {side ? ` · ${side.name}` : ''} · {left} left
                     </Text>
                   </View>
@@ -361,15 +488,17 @@ export function CheckersScreen({ navigation, route }: Props) {
               </Text>
             ) : (
               <Text style={typography.body}>
-                {game.players.length < 2
-                  ? 'Share the code for Red. Either phone can play the color whose turn it is.'
-                  : 'Either phone can play the color whose turn it is.'}
+                {vsComputer
+                  ? 'You play Black. The computer plays Red.'
+                  : game.players.length < 2
+                    ? 'Share the code for Red. Either phone can play the color whose turn it is.'
+                    : 'Either phone can play the color whose turn it is.'}
               </Text>
             )}
 
             {!finished ? (
               <View style={styles.actions}>
-                {!checkers.chain && checkers.drawOffer ? (
+                {!vsComputer && !checkers.chain && checkers.drawOffer ? (
                   <>
                     <Button
                       label="Accept draw"
@@ -382,20 +511,22 @@ export function CheckersScreen({ navigation, route }: Props) {
                     />
                   </>
                 ) : null}
-                {!checkers.chain && !checkers.drawOffer ? (
+                {!checkers.chain && !checkers.drawOffer && humanMayMove ? (
                   <Button label="Offer draw" onPress={() => void applyResult(offerDraw(checkers, game.players))} />
                 ) : null}
-                <Button
-                  label={confirmResign ? 'Confirm resign' : 'Resign'}
-                  variant="danger"
-                  onPress={() => void onResign()}
-                />
+                {humanMayMove ? (
+                  <Button
+                    label={confirmResign ? 'Confirm resign' : 'Resign'}
+                    variant="danger"
+                    onPress={() => void onResign()}
+                  />
+                ) : null}
               </View>
             ) : null}
 
             <View style={styles.actions}>
               <Button label={confirmReset ? 'Confirm reset' : 'Reset board'} onPress={() => void onReset()} />
-              {game.players.length < template.maxPlayers ? (
+              {!vsComputer && game.players.length < template.maxPlayers ? (
                 <Button label="Add player" onPress={() => setAddingPlayer(true)} />
               ) : null}
             </View>

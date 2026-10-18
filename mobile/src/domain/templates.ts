@@ -112,7 +112,7 @@ export const templates: GameTemplate[] = [
     id: 'checkers',
     name: 'Checkers',
     description:
-      'American checkers on a shared board. Black moves first. Jumps can be required or optional. You win by taking every piece or leaving no move.',
+      'American checkers on a shared board. Black moves first. Play a friend, pass the device, or face the computer. Jumps can be required or optional.',
     scoringMode: 'Instant',
     winCondition: 'HighestTotal',
     minPlayers: 1,

@@ -323,6 +323,8 @@ export async function createAndSaveGame(partial: {
   targetScore?: number | null;
   maxRounds?: number | null;
   requireJumps?: boolean;
+  aiPlayerId?: string | null;
+  aiDifficulty?: 'easy' | 'medium' | 'hard' | null;
   chinese?: ChineseSetup;
   drawCount?: DrawCount;
   suits?: SuitCount;
@@ -350,7 +352,11 @@ export async function createAndSaveGame(partial: {
     if (partial.templateId === 'sorry') game.sorry = createSorryState(partial.players);
     if (partial.templateId === 'backgammon') game.backgammon = createBackgammonState(partial.players);
     if (partial.templateId === 'checkers') {
-      game.checkers = createCheckersState(partial.players, { requireJumps: partial.requireJumps !== false });
+      game.checkers = createCheckersState(partial.players, {
+        requireJumps: partial.requireJumps !== false,
+        aiPlayerId: partial.aiPlayerId ?? null,
+        aiDifficulty: partial.aiDifficulty ?? null,
+      });
     }
     if (partial.templateId === 'chinese-checkers') {
       game.chinese = createChineseState(partial.players, partial.chinese);

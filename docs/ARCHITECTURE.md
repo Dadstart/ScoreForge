@@ -89,7 +89,7 @@ All templates start with `minPlayers: 1`; others join via code.
 | Opoly | Instant cash | Highest |
 | Yaht | Score-card boxes | Highest |
 | Sorry | Board pawns home | First to 4 |
-| Checkers | Shared board | Capture all pieces, or leave no move |
+| Checkers | Shared board; optional computer seat | Capture all pieces, or leave no move |
 | Chinese Checkers | Shared star | Fill the opposite corner; later places play on |
 | Klondike | Solitaire layout | All 52 cards on the foundations |
 | FreeCell | Free cells and cascades | All 52 cards on the foundations |
