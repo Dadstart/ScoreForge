@@ -17,8 +17,8 @@ mobile/
 │   ├── storage/               # Firestore game store + known codes + displayName
 │   ├── linking/               # share URL create/parse for QR + deep links
 │   ├── navigation/            # types + React Navigation linking config
-│   ├── screens/               # Home, Setup, Join, Board, Cribbage, Opoly, Yaht, Sorry, Checkers, Chinese Checkers, Klondike, FreeCell, Settings
-│   └── components/            # CribbageBoard, OpolyBoard, YahtScoreboard, SorryBoard, CheckersBoard, ChineseCheckersBoard, FireworksOverlay, ShareCodePanel
+│   ├── screens/               # Home, Setup, Join, Board, Cribbage, Opoly, Yaht, Sorry, Checkers, Reversi, Chinese Checkers, Klondike, FreeCell, Settings
+│   └── components/            # CribbageBoard, OpolyBoard, YahtScoreboard, SorryBoard, CheckersBoard, ReversiBoard, ChineseCheckersBoard, FireworksOverlay, ShareCodePanel
 ```
 
 ### Startup / navigation
@@ -36,6 +36,7 @@ React Navigation native stack with `expo-linking` prefixes (`scoreforge://` and 
 | **Yaht** | Live subscribe; score any column |
 | **Sorry** | Live subscribe; shared board, deck, and turn |
 | **Checkers** | Live subscribe; shared board and turn |
+| **Reversi** | Live subscribe; shared board and turn |
 | **Chinese Checkers** | Live subscribe; shared star, seats, and turn |
 | **Klondike** | Live subscribe; solitaire layout, stock, and undo |
 | **FreeCell** | Live subscribe; free cells, cascades, and foundations |
@@ -90,6 +91,7 @@ All templates start with `minPlayers: 1`; others join via code.
 | Yaht | Score-card boxes | Highest |
 | Sorry | Board pawns home | First to 4 |
 | Checkers | Shared board | Capture all pieces, or leave no move |
+| Reversi | Shared board | Higher disc count. An equal count is a draw |
 | Chinese Checkers | Shared star | Fill the opposite corner; later places play on |
 | Klondike | Solitaire layout | All 52 cards on the foundations |
 | FreeCell | Free cells and cascades | All 52 cards on the foundations |

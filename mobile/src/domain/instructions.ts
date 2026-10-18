@@ -109,6 +109,16 @@ const INSTRUCTIONS: Record<string, GameInstructions> = {
       'You win by taking every opposing piece, or by leaving the other player with no move.',
     ],
   },
+  reversi: {
+    title: 'Reversi',
+    lines: [
+      'Black moves first. Four discs start in the center, on the diagonals.',
+      'Tap a dotted square. The new disc has to bracket a straight line of the other color.',
+      'Every bracketed disc flips. A line can run across, down, or on a diagonal, and one move can flip several.',
+      'A side that cannot flip anything is skipped. Play ends when neither side can move.',
+      'The higher count wins. An equal count is a draw.',
+    ],
+  },
   freecell: {
     title: 'FreeCell',
     lines: [
