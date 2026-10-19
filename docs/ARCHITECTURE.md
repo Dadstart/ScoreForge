@@ -17,8 +17,8 @@ mobile/
 │   ├── storage/               # Firestore game store + known codes + displayName
 │   ├── linking/               # share URL create/parse for QR + deep links
 │   ├── navigation/            # types + React Navigation linking config
-│   ├── screens/               # Home, Setup, Join, Board, Cribbage, Opoly, Yaht, Sorry, Backgammon, Checkers, Reversi, Chinese Checkers, Klondike, FreeCell, Pyramid, TriPeaks, Spider
-│   └── components/            # CribbageBoard, OpolyBoard, YahtScoreboard, SorryBoard, BackgammonBoard, CheckersBoard, ReversiBoard, ChineseCheckersBoard, solitaire boards, FireworksOverlay, ShareCodePanel
+│   ├── screens/               # Home, Setup, Join, Board, Cribbage, Opoly, Yaht, Sorry, Backgammon, Checkers, Chess, Reversi, Chinese Checkers, Klondike, FreeCell, Pyramid, TriPeaks, Spider
+│   └── components/            # CribbageBoard, OpolyBoard, YahtScoreboard, SorryBoard, BackgammonBoard, CheckersBoard, ChessBoard, ReversiBoard, ChineseCheckersBoard, solitaire boards, FireworksOverlay, ShareCodePanel
 ```
 
 ### Startup / navigation
@@ -37,6 +37,7 @@ React Navigation native stack with `expo-linking` prefixes (`scoreforge://` and 
 | **Sorry** | Live subscribe; shared board, deck, and turn |
 | **Backgammon** | Live subscribe; shared board, dice, and cube |
 | **Checkers** | Live subscribe; shared board and turn |
+| **Chess** | Live subscribe; shared board and turn |
 | **Reversi** | Live subscribe; shared board and turn |
 | **Chinese Checkers** | Live subscribe; shared star, seats, and turn |
 | **Klondike** | Live subscribe; solitaire layout, stock, and undo |
@@ -96,6 +97,7 @@ All templates start with `minPlayers: 1`; others join via code.
 | Sorry | Board pawns home | First to 4 |
 | Backgammon | Shared board | Bear off all 15 checkers |
 | Checkers | Shared board | Capture all pieces, or leave no move |
+| Chess | Shared board | Checkmate. Stalemate and the drawn endings are a draw |
 | Reversi | Shared board | Higher disc count. An equal count is a draw |
 | Chinese Checkers | Shared star | Fill the opposite corner; later places play on |
 | Klondike | Solitaire layout | All 52 cards on the foundations |
