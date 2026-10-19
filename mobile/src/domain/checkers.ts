@@ -20,6 +20,7 @@ export const CHECKERS_SIDES = {
 
 export type Side = keyof typeof CHECKERS_SIDES;
 export type Kind = 'man' | 'king';
+export type AiDifficulty = 'easy' | 'medium' | 'hard';
 
 export type CheckersPiece = {
   row: number;
@@ -52,6 +53,9 @@ export type CheckersState = {
   drawOffer: Side | null;
   lastMove: CheckersHop | null;
   lastAction: string | null;
+  /** Player id controlled by the computer, if any. */
+  aiPlayerId: string | null;
+  aiDifficulty: AiDifficulty | null;
 };
 
 const KING_DIRS: ReadonlyArray<readonly [number, number]> = [
@@ -79,8 +83,14 @@ export function isDarkSquare(row: number, col: number): boolean {
 
 export function createCheckersState(
   players: { id: string }[],
-  options?: { requireJumps?: boolean },
+  options?: {
+    requireJumps?: boolean;
+    aiPlayerId?: string | null;
+    aiDifficulty?: AiDifficulty | null;
+  },
 ): CheckersState {
+  const aiPlayerId = cleanAiPlayerId(options?.aiPlayerId, players);
+  const aiDifficulty = aiPlayerId ? cleanAiDifficulty(options?.aiDifficulty) ?? 'medium' : null;
   return {
     pieces: startingPieces(),
     sides: assignSides(players, undefined),
@@ -92,6 +102,33 @@ export function createCheckersState(
     drawOffer: null,
     lastMove: null,
     lastAction: null,
+    aiPlayerId,
+    aiDifficulty,
+  };
+}
+
+/** True when the side to move is the computer seat. */
+export function isAiTurn(state: CheckersState): boolean {
+  if (!state.aiPlayerId || state.winnerSide || state.draw) return false;
+  return state.sides[state.aiPlayerId] === state.turn;
+}
+
+/** True when the computer should accept or decline a draw offer. */
+export function aiShouldAnswerDraw(state: CheckersState): boolean {
+  if (!state.aiPlayerId || !state.drawOffer || state.winnerSide || state.draw) return false;
+  return state.sides[state.aiPlayerId] === oppositeSide(state.drawOffer);
+}
+
+export function setAiDifficulty(
+  state: CheckersState,
+  difficulty: AiDifficulty,
+): CheckersState | null {
+  if (!state.aiPlayerId) return null;
+  if (state.aiDifficulty === difficulty) return null;
+  return {
+    ...state,
+    aiDifficulty: difficulty,
+    lastAction: `Computer level set to ${difficulty}.`,
   };
 }
 
@@ -133,6 +170,8 @@ export function setRequireJumps(state: CheckersState, requireJumps: boolean): Ch
     ...state,
     requireJumps,
     lastAction: requireJumps ? 'Jumps are required.' : 'Jumps are optional.',
+    aiPlayerId: state.aiPlayerId ?? null,
+    aiDifficulty: state.aiPlayerId ? state.aiDifficulty ?? 'medium' : null,
   };
 }
 
@@ -172,6 +211,8 @@ export function playHop(
     drawOffer: null,
     lastMove: match,
     lastAction: describeHop(who, captured, crowned, continuing),
+    aiPlayerId: state.aiPlayerId ?? null,
+    aiDifficulty: state.aiPlayerId ? state.aiDifficulty ?? 'medium' : null,
   };
   if (continuing) return next;
   return finishTurn(next, players);
@@ -183,7 +224,13 @@ export function offerDraw(state: CheckersState, players: readonly { id: string; 
   if (state.drawOffer === state.turn) {
     return { ...state, drawOffer: null, lastAction: `${who} withdrew the draw offer.` };
   }
-  return { ...state, drawOffer: state.turn, lastAction: `${who} offers a draw.` };
+  return {
+    ...state,
+    drawOffer: state.turn,
+    lastAction: `${who} offers a draw.`,
+    aiPlayerId: state.aiPlayerId ?? null,
+    aiDifficulty: state.aiPlayerId ? state.aiDifficulty ?? 'medium' : null,
+  };
 }
 
 export function answerDraw(
@@ -194,13 +241,23 @@ export function answerDraw(
   if (!state.drawOffer || state.winnerSide || state.draw) return null;
   const responder = oppositeSide(state.drawOffer);
   const who = sideName(state, players, responder);
-  if (!accept) return { ...state, drawOffer: null, lastAction: `${who} declines the draw.` };
+  if (!accept) {
+    return {
+      ...state,
+      drawOffer: null,
+      lastAction: `${who} declines the draw.`,
+      aiPlayerId: state.aiPlayerId ?? null,
+      aiDifficulty: state.aiPlayerId ? state.aiDifficulty ?? 'medium' : null,
+    };
+  }
   return {
     ...state,
     draw: true,
     drawOffer: null,
     chain: null,
     lastAction: 'The game is a draw.',
+    aiPlayerId: state.aiPlayerId ?? null,
+    aiDifficulty: state.aiPlayerId ? state.aiDifficulty ?? 'medium' : null,
   };
 }
 
@@ -215,6 +272,8 @@ export function resign(state: CheckersState, players: readonly { id: string; nam
     chain: null,
     drawOffer: null,
     lastAction: `${who} resigns. ${winnerName} wins.`,
+    aiPlayerId: state.aiPlayerId ?? null,
+    aiDifficulty: state.aiPlayerId ? state.aiDifficulty ?? 'medium' : null,
   };
 }
 
@@ -440,6 +499,10 @@ function repairCheckersState(game: Game): CheckersState {
       : null;
   const lastMove = kept ? cleanHop(previous?.lastMove) : null;
   const lastAction = typeof previous?.lastAction === 'string' ? previous.lastAction : null;
+  const aiPlayerId = cleanAiPlayerId(previous?.aiPlayerId, game.players);
+  const aiDifficulty = aiPlayerId
+    ? cleanAiDifficulty(previous?.aiDifficulty) ?? 'medium'
+    : null;
 
   if (chain) {
     const piece = pieceAt(pieces, chain.row, chain.col);
@@ -458,6 +521,8 @@ function repairCheckersState(game: Game): CheckersState {
     drawOffer,
     lastMove,
     lastAction,
+    aiPlayerId,
+    aiDifficulty,
   };
   if (!winnerSide && !draw) {
     const result = resolution(repaired);
@@ -486,11 +551,25 @@ function sameState(a: CheckersState, b: CheckersState): boolean {
     a.draw === b.draw &&
     a.drawOffer === b.drawOffer &&
     a.lastAction === b.lastAction &&
+    (a.aiPlayerId ?? null) === (b.aiPlayerId ?? null) &&
+    (a.aiDifficulty ?? null) === (b.aiDifficulty ?? null) &&
     sameSquare(a.chain, b.chain) &&
     sameHop(a.lastMove, b.lastMove) &&
     sameSides(a.sides, b.sides) &&
     samePieces(a.pieces, b.pieces)
   );
+}
+
+function cleanAiPlayerId(
+  value: unknown,
+  players: readonly { id: string }[],
+): string | null {
+  if (typeof value !== 'string' || !value) return null;
+  return players.some((player) => player.id === value) ? value : null;
+}
+
+function cleanAiDifficulty(value: unknown): AiDifficulty | null {
+  return value === 'easy' || value === 'medium' || value === 'hard' ? value : null;
 }
 
 function samePieces(a: readonly CheckersPiece[], b: readonly CheckersPiece[]): boolean {

@@ -12,6 +12,7 @@ import { setupDetail, setupSummary, type ChineseMode, type PlayerCount, type Set
 import type { DrawCount } from '../domain/klondike';
 import type { SuitCount } from '../domain/spider';
 import { nextOpolyToken, openingPlayer, playersFromOpolySeats } from '../domain/addPlayer';
+import type { AiDifficulty } from '../domain/checkers';
 import { createPlayer, type PlayMode, type Player } from '../domain/models';
 import { playerToken } from '../domain/opoly';
 import { getTemplate, templates, type GameTemplate } from '../domain/templates';
@@ -23,6 +24,7 @@ import { gameScreenForTemplate, type RootStackParamList } from '../navigation/ty
 type Props = NativeStackScreenProps<RootStackParamList, 'Setup'>;
 
 type Seat = { id: string; name: string; token: string; emojiText: string };
+type HowToPlay = PlayMode | 'vs-computer';
 
 function asksPlayMode(template: GameTemplate): boolean {
   return template.maxPlayers > 1;
@@ -57,13 +59,14 @@ export function SetupScreen({ navigation }: Props) {
   const template = useMemo(() => getTemplate(templateId)!, [templateId]);
   const [name, setName] = useState(templates[0].name);
   const [hostName, setHostName] = useState('Player 1');
-  const [playMode, setPlayMode] = useState<PlayMode | null>(
+  const [playMode, setPlayMode] = useState<HowToPlay | null>(
     asksPlayMode(templates[0]) ? null : 'multi-device',
   );
   const [seats, setSeats] = useState<Seat[]>(() => [newSeat('Player 1', 'car')]);
   const [targetScore, setTargetScore] = useState(String(templates[0].defaultTargetScore ?? ''));
   const [maxRounds, setMaxRounds] = useState(String(templates[0].defaultMaxRounds ?? '18'));
   const [requireJumps, setRequireJumps] = useState(true);
+  const [aiDifficulty, setAiDifficulty] = useState<AiDifficulty>('medium');
   const [drawCount, setDrawCount] = useState<DrawCount>(1);
   const [suitCount, setSuitCount] = useState<SuitCount>(1);
   const [tableSize, setTableSize] = useState<PlayerCount>(6);
@@ -73,6 +76,7 @@ export function SetupScreen({ navigation }: Props) {
   const [validation, setValidation] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const passAndPlay = playMode === 'pass-and-play';
+  const vsComputer = playMode === 'vs-computer';
   const showSeats =
     playMode === 'pass-and-play' || (playMode === 'multi-device' && template.id === 'monopoly');
 
@@ -100,6 +104,7 @@ export function SetupScreen({ navigation }: Props) {
     setTargetScore(t.defaultTargetScore != null ? String(t.defaultTargetScore) : '');
     setMaxRounds(String(t.defaultMaxRounds ?? 18));
     setRequireJumps(true);
+    setAiDifficulty('medium');
     setDrawCount(1);
     setSuitCount(1);
     setTableSize(6);
@@ -111,7 +116,7 @@ export function SetupScreen({ navigation }: Props) {
     setValidation(null);
   };
 
-  const selectPlayMode = (mode: PlayMode) => {
+  const selectPlayMode = (mode: HowToPlay) => {
     setPlayMode(mode);
     setSeats([newSeat(hostName.trim() || 'Player 1', 'car')]);
     setValidation(null);
@@ -141,13 +146,19 @@ export function SetupScreen({ navigation }: Props) {
 
   const start = async () => {
     const host = hostName.trim();
-    const resolvedMode: PlayMode = asksPlayMode(template) ? playMode ?? 'multi-device' : 'multi-device';
     if (asksPlayMode(template) && playMode == null) {
-      setValidation('Choose Pass ’n Play or separate devices.');
+      setValidation(
+        template.id === 'checkers'
+          ? 'Choose Pass ’n Play, separate devices, or vs Computer.'
+          : 'Choose Pass ’n Play or separate devices.',
+      );
       return;
     }
+    const resolvedMode: PlayMode =
+      playMode === 'pass-and-play' ? 'pass-and-play' : 'multi-device';
 
     let players: Player[];
+    let computerId: string | null = null;
     if (template.id === 'monopoly') {
       const seatsForGame =
         resolvedMode === 'pass-and-play' ? seats : seats.slice(0, 1).map((seat) => ({
@@ -160,6 +171,19 @@ export function SetupScreen({ navigation }: Props) {
         return;
       }
       players = monopolyPlayers.players;
+    } else if (vsComputer && template.id === 'checkers') {
+      if (!host) {
+        setValidation('Enter your display name.');
+        return;
+      }
+      if (host.toLowerCase() === 'computer') {
+        setValidation('Choose a different name than Computer.');
+        return;
+      }
+      const human = openingPlayer(template.id, host);
+      const computer = createPlayer('Computer');
+      players = [human, computer];
+      computerId = computer.id;
     } else if (resolvedMode === 'pass-and-play') {
       const named = playersFromNameSeats(seats);
       if ('error' in named) {
@@ -188,6 +212,8 @@ export function SetupScreen({ navigation }: Props) {
         targetScore: showTarget && targetScore ? Number(targetScore) : null,
         maxRounds: showMaxRounds && maxRounds ? Number(maxRounds) : null,
         requireJumps: template.id === 'checkers' ? requireJumps : undefined,
+        aiPlayerId: computerId,
+        aiDifficulty: computerId ? aiDifficulty : null,
         drawCount: template.id === 'klondike' ? drawCount : undefined,
         suits: template.id === 'spider' ? suitCount : undefined,
         chinese:
@@ -241,13 +267,24 @@ export function SetupScreen({ navigation }: Props) {
                 selected={playMode === 'multi-device'}
                 onPress={() => selectPlayMode('multi-device')}
               />
+              {template.id === 'checkers' ? (
+                <Choice
+                  label="vs Computer"
+                  selected={playMode === 'vs-computer'}
+                  onPress={() => selectPlayMode('vs-computer')}
+                />
+              ) : null}
             </View>
             <Text style={styles.hint}>
               {playMode === 'pass-and-play'
                 ? 'Everyone takes turns on this device. Add all players before you start.'
-                : playMode === 'multi-device'
-                  ? 'Start here, then share the join code so friends open the game on their own phones.'
-                  : 'Pass ’n Play keeps everyone on one device. Separate devices uses the login / join code.'}
+                : playMode === 'vs-computer'
+                  ? 'You play Black. The computer plays Red on this device.'
+                  : playMode === 'multi-device'
+                    ? 'Start here, then share the join code so friends open the game on their own phones.'
+                    : template.id === 'checkers'
+                      ? 'Pass ’n Play, share a code, or face the computer.'
+                      : 'Pass ’n Play keeps everyone on one device. Separate devices uses the login / join code.'}
             </Text>
           </>
         ) : null}
@@ -366,6 +403,27 @@ export function SetupScreen({ navigation }: Props) {
             <Text style={styles.hint}>
               {requireJumps ? 'You must jump when you can.' : 'You may move without capturing.'}
             </Text>
+            {vsComputer ? (
+              <>
+                <Text style={[typography.section, styles.section]}>Computer level</Text>
+                <View style={styles.wrap}>
+                  <Choice label="Easy" selected={aiDifficulty === 'easy'} onPress={() => setAiDifficulty('easy')} />
+                  <Choice
+                    label="Medium"
+                    selected={aiDifficulty === 'medium'}
+                    onPress={() => setAiDifficulty('medium')}
+                  />
+                  <Choice label="Hard" selected={aiDifficulty === 'hard'} onPress={() => setAiDifficulty('hard')} />
+                </View>
+                <Text style={styles.hint}>
+                  {aiDifficulty === 'easy'
+                    ? 'Plays quickly and makes mistakes.'
+                    : aiDifficulty === 'hard'
+                      ? 'Looks several moves ahead.'
+                      : 'A fair challenge for most players.'}
+                </Text>
+              </>
+            ) : null}
           </>
         ) : null}
 
@@ -435,7 +493,9 @@ export function SetupScreen({ navigation }: Props) {
             <Text style={styles.hint}>
               {template.id === 'klondike' || template.id === 'freecell' || template.id === 'pyramid' || template.id === 'tripeaks' || template.id === 'spider'
                 ? 'Solo. Use this name on another device to keep playing.'
-                : 'Start alone, then share the code so others can join.'}
+                : vsComputer
+                  ? 'You are Black. The computer sits as Red.'
+                  : 'Start alone, then share the code so others can join.'}
             </Text>
             <Field
               value={hostName}

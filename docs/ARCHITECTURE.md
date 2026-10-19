@@ -95,7 +95,7 @@ All templates start with `minPlayers: 1`; others join via code.
 | Yaht | Score-card boxes | Highest |
 | Sorry | Board pawns home | First to 4 |
 | Backgammon | Shared board | Bear off all 15 checkers |
-| Checkers | Shared board | Capture all pieces, or leave no move |
+| Checkers | Shared board; optional computer seat | Capture all pieces, or leave no move |
 | Reversi | Shared board | Higher disc count. An equal count is a draw |
 | Chinese Checkers | Shared star | Fill the opposite corner; later places play on |
 | Klondike | Solitaire layout | All 52 cards on the foundations |
