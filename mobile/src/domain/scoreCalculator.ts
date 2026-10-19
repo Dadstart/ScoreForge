@@ -2,6 +2,7 @@ import type { Game, Player } from './models';
 import type { GameTemplate, WinCondition } from './templates';
 import { borneOff, playerIdForSide as backgammonPlayerId } from './backgammon';
 import { capturedCount, playerIdForSide } from './checkers';
+import { scoreForPlayer as canastaScore, winnerIds as canastaWinners } from './canasta';
 import { capturedValue, playerIdForSide as chessPlayerId } from './chess';
 import { discCount, playerIdForSide as reversiPlayerId } from './reversi';
 import { piecesHomeForPlayer, winnerPlayerIds } from './chineseCheckers';
@@ -100,6 +101,7 @@ function pointsForPlayer(game: Game, playerId: string, template: GameTemplate): 
   if (template.id === 'backgammon' && game.backgammon) return borneOff(game.backgammon, playerId);
   if (template.id === 'checkers' && game.checkers) return capturedCount(game.checkers, playerId);
   if (template.id === 'chess' && game.chess) return capturedValue(game.chess, playerId);
+  if (template.id === 'canasta' && game.canasta) return canastaScore(game.canasta, playerId);
   if (template.id === 'reversi' && game.reversi) return discCount(game.reversi, playerId);
   if (template.id === 'chinese-checkers' && game.chinese) return piecesHomeForPlayer(game.chinese, playerId);
   if (template.id === 'klondike') return foundationCount(game.klondike);
@@ -139,6 +141,7 @@ function detectCompletion(game: Game, template: GameTemplate, totals: Map<string
   if (template.id === 'backgammon') return Boolean(game.backgammon?.winnerSide);
   if (template.id === 'checkers') return Boolean(game.checkers?.winnerSide || game.checkers?.draw);
   if (template.id === 'chess') return Boolean(game.chess?.winnerSide || game.chess?.draw);
+  if (template.id === 'canasta') return game.canasta?.phase === 'gameOver';
   if (template.id === 'reversi') return Boolean(game.reversi?.winnerSide || game.reversi?.draw);
   if (template.id === 'chinese-checkers') return Boolean(game.chinese?.over);
   if (template.id === 'klondike') return Boolean(game.klondike?.won);
@@ -198,6 +201,10 @@ function getWinnerIds(
     if (!game.chess || game.chess.draw || !game.chess.winnerSide) return new Set();
     const winnerId = chessPlayerId(game.chess, game.chess.winnerSide);
     return winnerId ? new Set([winnerId]) : new Set();
+  }
+
+  if (template.id === 'canasta') {
+    return new Set(game.canasta ? canastaWinners(game.canasta) : []);
   }
 
   if (template.id === 'reversi') {

@@ -109,6 +109,18 @@ const INSTRUCTIONS: Record<string, GameInstructions> = {
       'A pawn that reaches the far rank promotes. Checkmate wins. Stalemate, repetition, the fifty-move rule, and insufficient material are draws.',
     ],
   },
+  canasta: {
+    title: 'Canasta',
+    lines: [
+      'Two decks and four jokers. Two or three players each play alone. Four players play as partners, sitting opposite.',
+      'Two players draw two cards from the stock. Three or four draw one. Or take the whole discard pile when you can meld the top card. Until you have opened, and whenever the pack is frozen, that takes a natural pair from your hand. Cards under the top card do not count. Then meld and discard one card.',
+      'A meld is three or more of one rank, with at least two natural cards and no more wilds than natural cards. Jokers and twos are wild. Twos cannot be melded on their own.',
+      'You need 50 points to open, 90 from 1,500, 120 from 3,000, and 15 when your score is below zero. A canasta is seven cards of one rank.',
+      'Red threes are laid down for 100 each, or 800 for all four. They count against you if your side never opens. A black three on top blocks the pack. A wild card in the pack freezes it.',
+      'You need a canasta to go out. The first side to 5,000 wins. A tie at the target deals another hand.',
+      'Undo takes back the last draw, meld, or discard.',
+    ],
+  },
   checkers: {
     title: 'Checkers',
     lines: [

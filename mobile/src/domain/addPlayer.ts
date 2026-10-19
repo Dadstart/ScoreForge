@@ -1,5 +1,6 @@
 import { ensureBackgammonState } from './backgammon';
 import { ensureCheckersState } from './checkers';
+import { ensureCanastaState } from './canasta';
 import { ensureChessState } from './chess';
 import { ensureReversiState } from './reversi';
 import { ensureChineseState, playerCap } from './chineseCheckers';
@@ -24,16 +25,18 @@ export function withAddedPlayer(game: Game, rawName: string, maxPlayers: number,
   if (taken) {
     throw new Error('A player with that name is already in the game.');
   }
-  return ensureChessState(
-    ensureReversiState(
-      ensureChineseState(
-        ensureCheckersState(
-          ensureSorryState(
-            ensureBackgammonState({
-              ...game,
-              players: [...game.players, seatedPlayer(game.templateId, game.players, name, uid)],
-              updatedAt: new Date().toISOString(),
-            }),
+  return ensureCanastaState(
+    ensureChessState(
+      ensureReversiState(
+        ensureChineseState(
+          ensureCheckersState(
+            ensureSorryState(
+              ensureBackgammonState({
+                ...game,
+                players: [...game.players, seatedPlayer(game.templateId, game.players, name, uid)],
+                updatedAt: new Date().toISOString(),
+              }),
+            ),
           ),
         ),
       ),
@@ -147,19 +150,21 @@ export function withoutPlayer(game: Game, playerId: string): Game {
   const remaining = game.players.filter((player) => player.id !== playerId);
   const events = game.events.filter((event) => event.playerId !== playerId);
   const monopoly = game.monopoly ? withoutOpolyPlayer(game.monopoly, playerId, game.players, events) : game.monopoly;
-  return ensureChessState(
-    ensureReversiState(
-      ensureChineseState(
-        ensureCheckersState(
-          ensureSorryState(
-            ensureBackgammonState({
-              ...game,
-              players: remaining,
-              events,
-              tokenSpaces,
-              monopoly,
-              updatedAt: new Date().toISOString(),
-            }),
+  return ensureCanastaState(
+    ensureChessState(
+      ensureReversiState(
+        ensureChineseState(
+          ensureCheckersState(
+            ensureSorryState(
+              ensureBackgammonState({
+                ...game,
+                players: remaining,
+                events,
+                tokenSpaces,
+                monopoly,
+                updatedAt: new Date().toISOString(),
+              }),
+            ),
           ),
         ),
       ),
