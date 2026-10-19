@@ -119,6 +119,16 @@ export const templates: GameTemplate[] = [
     maxPlayers: 2,
   },
   {
+    id: 'chess',
+    name: 'Chess',
+    description:
+      'Standard chess on a shared board. White moves first. Castle, take en passant, and promote. Checkmate wins. Stalemate and the drawn endings are a draw.',
+    scoringMode: 'Instant',
+    winCondition: 'HighestTotal',
+    minPlayers: 1,
+    maxPlayers: 2,
+  },
+  {
     id: 'reversi',
     name: 'Reversi',
     description:

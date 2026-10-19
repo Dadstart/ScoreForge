@@ -99,6 +99,16 @@ const INSTRUCTIONS: Record<string, GameInstructions> = {
       'You may offer the doubling cube before you roll.',
     ],
   },
+  chess: {
+    title: 'Chess',
+    lines: [
+      'White moves first. Tap a piece, then a highlighted square. You can also drag a piece onto a square.',
+      'Pawns move one square forward and capture diagonally. A pawn may step two squares on its first move. The next turn, an enemy pawn can capture it en passant if it passed that pawn.',
+      'Knights jump in an L. Bishops move on a diagonal, rooks on a rank or file, and the queen either way. The king moves one square.',
+      'Castle when the king and that rook have not moved, the squares between them are empty, and the king does not pass through check.',
+      'A pawn that reaches the far rank promotes. Checkmate wins. Stalemate, repetition, the fifty-move rule, and insufficient material are draws.',
+    ],
+  },
   checkers: {
     title: 'Checkers',
     lines: [

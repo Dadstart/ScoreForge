@@ -57,6 +57,7 @@ npm run deploy:rules
 | Sorry | Shared board and card deck | First to get 4 pawns home |
 | Backgammon | Shared board. White moves first. Double before you roll | Bear off all 15 checkers |
 | Checkers | Shared board, Black moves first. Jumps required or optional. Optional computer opponent | Capture every piece, or leave no move |
+| Chess | Shared board, White moves first | Checkmate. Stalemate and the drawn endings are a draw |
 | Reversi | Shared board, Black moves first | Higher disc count. An equal count is a draw |
 | Chinese Checkers | Shared star. Two to six players, one or more colors, alone or in teams | Fill the opposite corner. Later places keep playing |
 | Klondike | Solitaire layout. Draw one or three | Build all 52 cards on the foundations |

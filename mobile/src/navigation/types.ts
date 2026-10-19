@@ -13,6 +13,7 @@ export type RootStackParamList = {
   Sorry: { gameId: string };
   Backgammon: { gameId: string };
   Checkers: { gameId: string };
+  Chess: { gameId: string };
   Reversi: { gameId: string };
   ChineseCheckers: { gameId: string };
   Klondike: { gameId: string };
@@ -24,13 +25,14 @@ export type RootStackParamList = {
 
 export function gameScreenForTemplate(
   templateId: string,
-): 'Board' | 'Cribbage' | 'Opoly' | 'Yaht' | 'Sorry' | 'Backgammon' | 'Checkers' | 'Reversi' | 'ChineseCheckers' | 'Klondike' | 'Freecell' | 'Pyramid' | 'TriPeaks' | 'Spider' {
+): 'Board' | 'Cribbage' | 'Opoly' | 'Yaht' | 'Sorry' | 'Backgammon' | 'Checkers' | 'Chess' | 'Reversi' | 'ChineseCheckers' | 'Klondike' | 'Freecell' | 'Pyramid' | 'TriPeaks' | 'Spider' {
   if (templateId === 'cribbage') return 'Cribbage';
   if (templateId === 'monopoly') return 'Opoly';
   if (templateId === 'yaht' || templateId === 'yahtzee') return 'Yaht';
   if (templateId === 'sorry') return 'Sorry';
   if (templateId === 'backgammon') return 'Backgammon';
   if (templateId === 'checkers') return 'Checkers';
+  if (templateId === 'chess') return 'Chess';
   if (templateId === 'reversi') return 'Reversi';
   if (templateId === 'chinese-checkers') return 'ChineseCheckers';
   if (templateId === 'klondike') return 'Klondike';
