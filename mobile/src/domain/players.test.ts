@@ -81,6 +81,11 @@ describe('players', () => {
     const hosted = withHostUid([createPlayer('Ada')], 'multi-device', 'device-a');
     assert.equal(hosted[0]?.uid, 'device-a');
     assert.equal(withHostUid([createPlayer('Ada'), createPlayer('Bea')], 'pass-and-play', 'device-a')[0]?.uid, undefined);
+    const human = createPlayer('Ada');
+    const computer = createPlayer('Computer');
+    const vsComputer = withHostUid([human, computer], 'multi-device', 'device-a', computer.id);
+    assert.equal(vsComputer.find((player) => player.id === human.id)?.uid, 'device-a');
+    assert.equal(vsComputer.find((player) => player.id === computer.id)?.uid, undefined);
   });
 });
 

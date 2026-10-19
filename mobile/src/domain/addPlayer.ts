@@ -97,9 +97,23 @@ export function joinedGame(game: Game, rawName: string, maxPlayers: number, uid?
   return withAddedPlayer(game, name, maxPlayers, uid);
 }
 
-/** The device that creates a separate-devices game owns the first seat. */
-export function withHostUid(players: Player[], playMode: Game['playMode'], uid?: string | null): Player[] {
-  if (!uid || playMode === 'pass-and-play' || players.length !== 1 || players[0]?.uid) return players;
+/**
+ * The device that creates a separate-devices game owns the first seat.
+ * Vs-computer starts with two seats; bind the non-computer seat instead.
+ */
+export function withHostUid(
+  players: Player[],
+  playMode: Game['playMode'],
+  uid?: string | null,
+  aiPlayerId?: string | null,
+): Player[] {
+  if (!uid || playMode === 'pass-and-play') return players;
+  if (aiPlayerId) {
+    return players.map((player) =>
+      player.id === aiPlayerId || player.uid ? player : { ...player, uid },
+    );
+  }
+  if (players.length !== 1 || players[0]?.uid) return players;
   return [{ ...players[0], uid }];
 }
 

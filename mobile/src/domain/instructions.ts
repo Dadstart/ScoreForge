@@ -117,6 +117,7 @@ const INSTRUCTIONS: Record<string, GameInstructions> = {
       'When jumps are required, you must capture if you can. A piece that jumps keeps jumping.',
       'A man that reaches the far row becomes a king. If it got there by a jump and another jump is open, it continues as a king.',
       'You win by taking every opposing piece, or by leaving the other player with no move.',
+      'Against the computer, you play Black. Choose Easy, Medium, or Hard at setup or during the game.',
     ],
   },
   reversi: {

@@ -331,6 +331,8 @@ export async function createAndSaveGame(partial: {
   targetScore?: number | null;
   maxRounds?: number | null;
   requireJumps?: boolean;
+  aiPlayerId?: string | null;
+  aiDifficulty?: 'easy' | 'medium' | 'hard' | null;
   chinese?: ChineseSetup;
   drawCount?: DrawCount;
   suits?: SuitCount;
@@ -346,7 +348,12 @@ export async function createAndSaveGame(partial: {
       name: partial.name,
       templateId: partial.templateId,
       playMode: partial.playMode === 'pass-and-play' ? 'pass-and-play' : 'multi-device',
-      players: withHostUid(partial.players, partial.playMode, auth.currentUser?.uid ?? null),
+      players: withHostUid(
+        partial.players,
+        partial.playMode,
+        auth.currentUser?.uid ?? null,
+        partial.aiPlayerId,
+      ),
       events: [],
       status: 'InProgress',
       targetScore: partial.targetScore ?? null,
@@ -358,7 +365,11 @@ export async function createAndSaveGame(partial: {
     if (partial.templateId === 'sorry') game.sorry = createSorryState(partial.players);
     if (partial.templateId === 'backgammon') game.backgammon = createBackgammonState(partial.players);
     if (partial.templateId === 'checkers') {
-      game.checkers = createCheckersState(partial.players, { requireJumps: partial.requireJumps !== false });
+      game.checkers = createCheckersState(partial.players, {
+        requireJumps: partial.requireJumps !== false,
+        aiPlayerId: partial.aiPlayerId ?? null,
+        aiDifficulty: partial.aiDifficulty ?? null,
+      });
     }
     if (partial.templateId === 'chess') game.chess = createChessState(partial.players);
     if (partial.templateId === 'reversi') game.reversi = createReversiState(partial.players);

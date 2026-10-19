@@ -22,6 +22,8 @@ describe('checkers', () => {
     assert.equal(state.pieces.length, 24);
     assert.equal(state.turn, 'dark');
     assert.equal(state.requireJumps, true);
+    assert.equal(state.aiPlayerId, null);
+    assert.equal(state.aiDifficulty, null);
     const hops = legalHops(state);
     assert.ok(hops.length > 0);
     assert.ok(hops.every((hop) => hop.captureRow == null));
