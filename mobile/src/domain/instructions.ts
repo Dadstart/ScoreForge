@@ -116,7 +116,7 @@ const INSTRUCTIONS: Record<string, GameInstructions> = {
       'Draw until you have five cards. Build shared piles from 1 to 12. A wild card can be any number, including the 1 that starts a pile.',
       'Play from your hand, the top of your stock, or the top of one of your four discard piles. A finished pile of 12 is cleared, and those cards refill the draw pile when it runs out.',
       'If you play every card in your hand, draw five more and keep going. Discarding does not count. End the turn by discarding one hand card onto one of your discard piles.',
-      'Playing the last stock card scores 25, plus 5 for each card left in the other stock piles. The first player to 500 wins. A tie at 500 deals another hand. Alone, clearing the stock wins.',
+      'The first player to play the last card of their stock pile wins.',
       'On separate devices, share the code and deal once everyone has joined. Pass and play deals as soon as the seats are filled.',
     ],
   },

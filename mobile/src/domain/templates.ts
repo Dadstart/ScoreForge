@@ -159,7 +159,6 @@ export const templates: GameTemplate[] = [
     winCondition: 'HighestTotal',
     minPlayers: 1,
     maxPlayers: 6,
-    defaultTargetScore: 500,
   },
   {
     id: 'reversi',

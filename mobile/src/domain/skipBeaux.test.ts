@@ -106,23 +106,23 @@ describe('skip-beaux', () => {
     assert.equal(done.completed.length, 12);
   });
 
-  it('plays the stock top and scores a cleared stock', () => {
+  it('plays the stock top and ends the game when the stock is empty', () => {
     const state = table({
       hands: { ada: ['4#1'], bea: [] },
       stocks: { ada: ['8#1', '1#1'], bea: ['2#1', '3#1', '4#2'] },
-      totals: { ada: 480, bea: 100 },
     });
     const played = ok(playBuilding(state, 'ada', { zone: 'stock' }, 0, named));
     assert.equal(played.stocks.ada?.at(-1), '8#1');
     assert.equal(played.turn, 'ada');
+    assert.equal(played.phase, 'play');
     const out = table({
       hands: { ada: [], bea: [] },
       stocks: { ada: ['1#1'], bea: ['2#1', '3#1', '4#2'] },
-      totals: { ada: 480, bea: 100 },
     });
     const won = ok(playBuilding(out, 'ada', { zone: 'stock' }, 0, named));
     assert.equal(won.phase, 'gameOver');
-    assert.equal(won.totals.ada, 480 + 25 + 15);
+    assert.equal(won.wentOut, 'ada');
+    assert.equal(won.totals.ada, 0);
     assert.deepEqual(winnerIds(won), ['ada']);
   });
 
@@ -163,7 +163,7 @@ describe('skip-beaux', () => {
     assert.equal(empty.hands.bea?.[0], '7#1');
   });
 
-  it('reshuffles finished piles, plays alone, and deals again after a tie', () => {
+  it('reshuffles finished piles and ends when the stock is cleared', () => {
     const recycled = ok(
       discardCard(
         table({
@@ -195,12 +195,12 @@ describe('skip-beaux', () => {
       ),
     );
     assert.equal(solo.phase, 'gameOver');
-    const tied = ok(
+    assert.deepEqual(winnerIds(solo), ['ada']);
+    const finished = ok(
       playBuilding(
         table({
           hands: { ada: [], bea: [] },
           stocks: { ada: ['1#1'], bea: ['2#1'] },
-          totals: { ada: 470, bea: 500 },
         }),
         'ada',
         { zone: 'stock' },
@@ -208,13 +208,9 @@ describe('skip-beaux', () => {
         named,
       ),
     );
-    assert.equal(tied.phase, 'handOver');
-    assert.equal(tied.totals.ada, 500);
-    assert.equal(tied.totals.bea, 500);
-    const next = ok(dealNext(tied, named));
-    assert.equal(next.handNumber, 2);
-    assert.equal(next.totals.ada, 500);
-    assert.equal(next.totals.bea, 500);
+    assert.equal(finished.phase, 'gameOver');
+    assert.deepEqual(winnerIds(finished), ['ada']);
+    assert.match(err(dealNext(finished, named)), /still going/);
   });
 
   it('repairs a broken game and leaves a healthy one untouched', () => {
@@ -238,7 +234,7 @@ describe('skip-beaux', () => {
       ...(repaired.skipBeaux as SkipBeauxState),
       phase: 'gameOver',
       turn: null,
-      totals: { [players[0].id]: 520, [players[1].id]: 40 },
+      wentOut: players[0].id,
     };
     const snapshot = calculate({ ...repaired, skipBeaux: finished }, template);
     assert.equal(snapshot.isComplete, true);
