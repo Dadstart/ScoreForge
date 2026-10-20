@@ -103,7 +103,7 @@ All templates start with `minPlayers: 1`; others join via code.
 | Chess | Shared board | Checkmate. Stalemate and the drawn endings are a draw |
 | Canasta | Shared hands and melds | First to 5,000. A tie at the target deals another hand |
 | Uneaux | Match color or symbol | First to 500. A tie at the target deals another hand |
-| Skip-Beaux | Build from 1 to 12 | First to 500. Alone, clearing the stock wins |
+| Skip-Beaux | Build from 1 to 12 | First player to empty their stock wins |
 | Reversi | Shared board | Higher disc count. An equal count is a draw |
 | Chinese Checkers | Shared star | Fill the opposite corner; later places play on |
 | Klondike | Solitaire layout | All 52 cards on the foundations |

@@ -154,12 +154,11 @@ export const templates: GameTemplate[] = [
     id: 'skip-beaux',
     name: 'Skip-Beaux',
     description:
-      'Build piles from 1 to 12. A Beaux card is any number. Empty your stock pile. First to 500 wins.',
+      'Build piles from 1 to 12. A Beaux card is any number. The first player to empty their stock pile wins.',
     scoringMode: 'Instant',
     winCondition: 'HighestTotal',
     minPlayers: 1,
     maxPlayers: 6,
-    defaultTargetScore: 500,
   },
   {
     id: 'reversi',

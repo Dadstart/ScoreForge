@@ -13,7 +13,6 @@ import { Badge, Button, Screen } from '../components/ui';
 import { deviceMayAct } from '../domain/localPlayer';
 import { playModeOf, type Game } from '../domain/models';
 import {
-  SKIP_BEAUX_TARGET,
   createSkipBeauxState,
   dealGame,
   dealNext,
@@ -81,7 +80,6 @@ export function SkipBeauxScreen({ navigation, route }: Props) {
 
   const table = game.skipBeaux;
   const passAndPlay = playModeOf(game) === 'pass-and-play';
-  const target = game.targetScore ?? template.defaultTargetScore ?? SKIP_BEAUX_TARGET;
   const names = game.players.map((player) => ({ id: player.id, name: player.name }));
   const turnPlayer = game.players.find((player) => player.id === table.turn) ?? null;
   const covered = passAndPlay && table.phase === 'play' && table.turn != null && revealed !== table.turn;
@@ -125,7 +123,7 @@ export function SkipBeauxScreen({ navigation, route }: Props) {
         <View style={styles.header}>
           <View style={{ flex: 1, gap: 4 }}>
             <Text style={typography.title}>{game.name}</Text>
-            <Badge label={`Skip-Beaux · ${target.toLocaleString()}`} tone="accent" />
+            <Badge label="Skip-Beaux" tone="accent" />
           </View>
           <GameHelp templateId="skip-beaux" />
           <ShareCodePanel shareCode={game.shareCode} passAndPlay={passAndPlay} />
@@ -135,15 +133,6 @@ export function SkipBeauxScreen({ navigation, route }: Props) {
         <View style={styles.banner}>
           <Text style={styles.bannerText}>{banner}</Text>
           {table.lastAction && table.phase !== 'gameOver' ? <Text style={styles.action}>{table.lastAction}</Text> : null}
-          {table.lastScores ? (
-            <View style={styles.scores}>
-              {table.lastScores.map((score) => (
-                <Text key={score.playerId} style={styles.scoreLine}>
-                  {names.find((player) => player.id === score.playerId)?.name ?? 'Player'}: +{score.points}
-                </Text>
-              ))}
-            </View>
-          ) : null}
         </View>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -157,7 +146,7 @@ export function SkipBeauxScreen({ navigation, route }: Props) {
             handOwnerId={handOwnerId}
             canAct={canAct}
             onPlay={(source: CardSource, building) => {
-              if (table.turn) void apply(playBuilding(table, table.turn, source, building, names, target));
+              if (table.turn) void apply(playBuilding(table, table.turn, source, building, names));
             }}
             onDiscard={(card, pile) => {
               if (table.turn) void apply(discardCard(table, table.turn, card, pile, names));
@@ -225,8 +214,6 @@ const styles = StyleSheet.create({
   banner: { backgroundColor: colors.surface, borderRadius: radii.md, padding: space.sm, gap: 4 },
   bannerText: { color: colors.text, fontSize: 16, fontWeight: '600' },
   action: { color: colors.muted, fontSize: 14 },
-  scores: { gap: 2 },
-  scoreLine: { color: colors.text, fontSize: 14 },
   error: { color: colors.danger, fontSize: 14 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
 });

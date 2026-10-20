@@ -5,10 +5,8 @@ import { fillRandom } from './secureRandom';
  * Skip-Beaux is a sequencing card game for one to six players.
  *
  * Build shared piles from 1 to 12. A Beaux card stands in for any number.
- * Empty your stock pile. With two or more players, the first to 500 wins.
+ * Empty your stock pile. The first player to do that wins.
  */
-
-export const SKIP_BEAUX_TARGET = 500;
 export const HAND_SIZE = 5;
 export const PILE_SLOTS = 4;
 
@@ -99,13 +97,13 @@ export function canBuild(card: string, pile: Pile): boolean {
   return rankOf(card) === needed;
 }
 
-export function scoreForPlayer(state: SkipBeauxState, playerId: string): number {
-  return state.totals[playerId] ?? 0;
+export function scoreForPlayer(_state: SkipBeauxState, _playerId: string): number {
+  return 0;
 }
 
 export function winnerIds(state: SkipBeauxState): string[] {
-  if (state.phase !== 'gameOver') return [];
-  return leading(state.order, state.totals);
+  if (state.phase !== 'gameOver' || !state.wentOut) return [];
+  return [state.wentOut];
 }
 
 export function createSkipBeauxState(
@@ -130,7 +128,6 @@ export function playBuilding(
   source: CardSource,
   buildingIndex: number,
   players: readonly Named[],
-  target = SKIP_BEAUX_TARGET,
 ): SkipBeauxResult {
   if (state.phase !== 'play' || state.turn !== playerId) return fail('Wait for your turn.');
   const building = state.buildings[buildingIndex];
@@ -154,7 +151,7 @@ export function playBuilding(
   }
   const who = nameOf(players, playerId);
   if (source.zone === 'stock' && (next.stocks[playerId] ?? []).length === 0) {
-    return { state: closeHand(next, playerId, players, target) };
+    return { state: closeHand(next, playerId, players) };
   }
   const refilled = (next.hands[playerId] ?? []).length === 0 ? fillHand(next, playerId) : next;
   refilled.lastAction = `${who} plays ${cardLabel(peeked)}.`;
@@ -210,24 +207,15 @@ function passToNext(state: SkipBeauxState, playerId: string, players: readonly N
   return fillHand(passed, nextId);
 }
 
-function closeHand(state: SkipBeauxState, winnerId: string, players: readonly Named[], target: number): SkipBeauxState {
-  let points = 25;
-  for (const id of state.order) {
-    if (id === winnerId) continue;
-    points += (state.stocks[id]?.length ?? 0) * 5;
-  }
-  const totals = { ...state.totals, [winnerId]: (state.totals[winnerId] ?? 0) + points };
-  const leaders = leading(state.order, totals);
-  const over = state.order.length === 1 || (leaders.length === 1 && (totals[leaders[0] ?? ''] ?? 0) >= target);
+function closeHand(state: SkipBeauxState, winnerId: string, players: readonly Named[]): SkipBeauxState {
   const who = nameOf(players, winnerId);
   return {
     ...state,
-    totals,
-    phase: over ? 'gameOver' : 'handOver',
+    phase: 'gameOver',
     turn: null,
     wentOut: winnerId,
-    lastScores: [{ playerId: winnerId, points }],
-    lastAction: over ? `${who} wins the game.` : `${who} clears the stock and scores ${points}.`,
+    lastScores: null,
+    lastAction: `${who} empties the stock and wins.`,
   };
 }
 
@@ -406,19 +394,6 @@ function waitingState(): SkipBeauxState {
 
 function emptyPiles(count: number): Pile[] {
   return Array.from({ length: count }, () => ({ cards: [] }));
-}
-
-function leading(order: readonly string[], totals: Record<string, number>): string[] {
-  let best = -Infinity;
-  let winners: string[] = [];
-  for (const id of order) {
-    const total = totals[id] ?? 0;
-    if (total > best) {
-      best = total;
-      winners = [id];
-    } else if (total === best) winners.push(id);
-  }
-  return winners;
 }
 
 function step(state: SkipBeauxState, from: string): string {

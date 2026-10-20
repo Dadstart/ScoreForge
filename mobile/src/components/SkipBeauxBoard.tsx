@@ -200,8 +200,6 @@ export function SkipBeauxBoard({ state, players, handOwnerId, canAct, onPlay, on
             <Text style={styles.playerName}>
               {players.find((player) => player.id === id)?.name ?? 'Player'}
               {' · '}
-              {state.totals[id] ?? 0}
-              {' · '}
               {state.hands[id]?.length ?? 0} in hand
             </Text>
             <View style={styles.row}>
