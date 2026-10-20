@@ -60,6 +60,7 @@ npm run deploy:rules
 | Chess | Shared board, White moves first | Checkmate. Stalemate and the drawn endings are a draw |
 | Canasta | Shared hands and melds. Draw or take the pack | First to 5,000. A tie at the target deals another hand |
 | Uneaux | Match color or symbol. Say Uneaux with one card left | First to 500. A tie at the target deals another hand |
+| Skip-Beaux | Build from 1 to 12. Empty your stock pile | First to 500. Alone, clearing the stock wins |
 | Reversi | Shared board, Black moves first | Higher disc count. An equal count is a draw |
 | Chinese Checkers | Shared star. Two to six players, one or more colors, alone or in teams | Fill the opposite corner. Later places keep playing |
 | Klondike | Solitaire layout. Draw one or three | Build all 52 cards on the foundations |

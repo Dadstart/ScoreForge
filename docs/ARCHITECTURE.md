@@ -17,8 +17,8 @@ mobile/
 │   ├── storage/               # Firestore game store + known codes + displayName
 │   ├── linking/               # share URL create/parse for QR + deep links
 │   ├── navigation/            # types + React Navigation linking config
-│   ├── screens/               # Home, Setup, Join, Board, Cribbage, Opoly, Yaht, Sorry, Backgammon, Checkers, Chess, Canasta, Uneaux, Reversi, Chinese Checkers, Klondike, FreeCell, Pyramid, TriPeaks, Spider
-│   └── components/            # CribbageBoard, OpolyBoard, YahtScoreboard, SorryBoard, BackgammonBoard, CheckersBoard, ChessBoard, CanastaBoard, UneauxBoard, ReversiBoard, ChineseCheckersBoard, solitaire boards, FireworksOverlay, ShareCodePanel
+│   ├── screens/               # Home, Setup, Join, Board, Cribbage, Opoly, Yaht, Sorry, Backgammon, Checkers, Chess, Canasta, Uneaux, Skip-Beaux, Reversi, Chinese Checkers, Klondike, FreeCell, Pyramid, TriPeaks, Spider
+│   └── components/            # CribbageBoard, OpolyBoard, YahtScoreboard, SorryBoard, BackgammonBoard, CheckersBoard, ChessBoard, CanastaBoard, UneauxBoard, SkipBeauxBoard, ReversiBoard, ChineseCheckersBoard, solitaire boards, FireworksOverlay, ShareCodePanel
 ```
 
 ### Startup / navigation
@@ -40,6 +40,7 @@ React Navigation native stack with `expo-linking` prefixes (`scoreforge://` and 
 | **Chess** | Live subscribe; shared board and turn |
 | **Canasta** | Live subscribe; shared hands, melds, and turn |
 | **Uneaux** | Live subscribe; shared hands, discard, and turn |
+| **Skip-Beaux** | Live subscribe; shared building piles, stock piles, and turn |
 | **Reversi** | Live subscribe; shared board and turn |
 | **Chinese Checkers** | Live subscribe; shared star, seats, and turn |
 | **Klondike** | Live subscribe; solitaire layout, stock, and undo |
@@ -102,6 +103,7 @@ All templates start with `minPlayers: 1`; others join via code.
 | Chess | Shared board | Checkmate. Stalemate and the drawn endings are a draw |
 | Canasta | Shared hands and melds | First to 5,000. A tie at the target deals another hand |
 | Uneaux | Match color or symbol | First to 500. A tie at the target deals another hand |
+| Skip-Beaux | Build from 1 to 12 | First to 500. Alone, clearing the stock wins |
 | Reversi | Shared board | Higher disc count. An equal count is a draw |
 | Chinese Checkers | Shared star | Fill the opposite corner; later places play on |
 | Klondike | Solitaire layout | All 52 cards on the foundations |

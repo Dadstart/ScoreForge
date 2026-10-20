@@ -17,6 +17,7 @@ import { createBackgammonState } from '../domain/backgammon';
 import { createCheckersState } from '../domain/checkers';
 import { createCanastaState } from '../domain/canasta';
 import { createUneauxState } from '../domain/uneaux';
+import { createSkipBeauxState } from '../domain/skipBeaux';
 import { createChessState } from '../domain/chess';
 import { createReversiState } from '../domain/reversi';
 import { createChineseState, type ChineseSetup } from '../domain/chineseCheckers';
@@ -62,6 +63,7 @@ type StoredGame = {
   chess?: Game['chess'];
   canasta?: Game['canasta'];
   uneaux?: Game['uneaux'];
+  skipBeaux?: Game['skipBeaux'];
   reversi?: Game['reversi'];
   chinese?: Game['chinese'];
   klondike?: unknown;
@@ -134,6 +136,7 @@ function toStored(game: Game): Record<string, unknown> {
     chess: game.chess ?? null,
     canasta: game.canasta ?? null,
     uneaux: game.uneaux ?? null,
+    skipBeaux: game.skipBeaux ?? null,
     reversi: game.reversi ?? null,
     chinese: game.chinese ?? null,
     klondike: game.klondike ? packKlondike(game.klondike) : null,
@@ -168,6 +171,7 @@ function fromStored(shareCode: string, data: StoredGame, events: ScoreEvent[]): 
     chess: data.chess ?? null,
     canasta: data.canasta ?? null,
     uneaux: data.uneaux ?? null,
+    skipBeaux: data.skipBeaux ?? null,
     reversi: data.reversi ?? null,
     chinese: data.chinese ?? null,
     klondike: unpackKlondike(data.klondike),
@@ -382,6 +386,9 @@ export async function createAndSaveGame(partial: {
     if (partial.templateId === 'chess') game.chess = createChessState(partial.players);
     if (partial.templateId === 'canasta') game.canasta = createCanastaState(partial.players);
     if (partial.templateId === 'uneaux') game.uneaux = createUneauxState(partial.players);
+    if (partial.templateId === 'skip-beaux') {
+      game.skipBeaux = createSkipBeauxState(partial.players, { waiting: partial.playMode !== 'pass-and-play' });
+    }
     if (partial.templateId === 'reversi') game.reversi = createReversiState(partial.players);
     if (partial.templateId === 'chinese-checkers') {
       game.chinese = createChineseState(partial.players, partial.chinese);

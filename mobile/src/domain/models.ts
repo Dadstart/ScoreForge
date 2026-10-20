@@ -2,6 +2,7 @@ import type { BackgammonState } from './backgammon';
 import type { CheckersState } from './checkers';
 import type { CanastaState } from './canasta';
 import type { UneauxState } from './uneaux';
+import type { SkipBeauxState } from './skipBeaux';
 import type { ChessState } from './chess';
 import type { ReversiState } from './reversi';
 import type { ChineseState } from './chineseCheckers';
@@ -66,6 +67,8 @@ export interface Game {
   canasta?: CanastaState | null;
   /** Shared Uneaux hands, discard, and turn. */
   uneaux?: UneauxState | null;
+  /** Shared Skip-Beaux stock piles, building piles, and turn. */
+  skipBeaux?: SkipBeauxState | null;
   /** Shared Reversi board and turn. */
   reversi?: ReversiState | null;
   /** Shared Chinese checkers star, seats, and turn. */

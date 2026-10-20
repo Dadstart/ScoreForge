@@ -16,6 +16,7 @@ import { CheckersScreen } from './src/screens/CheckersScreen';
 import { ChessScreen } from './src/screens/ChessScreen';
 import { CanastaScreen } from './src/screens/CanastaScreen';
 import { UneauxScreen } from './src/screens/UneauxScreen';
+import { SkipBeauxScreen } from './src/screens/SkipBeauxScreen';
 import { ReversiScreen } from './src/screens/ReversiScreen';
 import { ChineseCheckersScreen } from './src/screens/ChineseCheckersScreen';
 import { KlondikeScreen } from './src/screens/KlondikeScreen';
@@ -154,6 +155,11 @@ export default function App() {
             name="Uneaux"
             component={UneauxScreen}
             options={{ title: 'Uneaux', headerShown: false }}
+          />
+          <Stack.Screen
+            name="SkipBeaux"
+            component={SkipBeauxScreen}
+            options={{ title: 'Skip-Beaux', headerShown: false }}
           />
           <Stack.Screen
             name="Reversi"
