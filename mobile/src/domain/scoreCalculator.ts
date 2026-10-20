@@ -3,6 +3,7 @@ import type { GameTemplate, WinCondition } from './templates';
 import { borneOff, playerIdForSide as backgammonPlayerId } from './backgammon';
 import { capturedCount, playerIdForSide } from './checkers';
 import { scoreForPlayer as canastaScore, winnerIds as canastaWinners } from './canasta';
+import { scoreForPlayer as uneauxScore, winnerIds as uneauxWinners } from './uneaux';
 import { capturedValue, playerIdForSide as chessPlayerId } from './chess';
 import { discCount, playerIdForSide as reversiPlayerId } from './reversi';
 import { piecesHomeForPlayer, winnerPlayerIds } from './chineseCheckers';
@@ -102,6 +103,7 @@ function pointsForPlayer(game: Game, playerId: string, template: GameTemplate): 
   if (template.id === 'checkers' && game.checkers) return capturedCount(game.checkers, playerId);
   if (template.id === 'chess' && game.chess) return capturedValue(game.chess, playerId);
   if (template.id === 'canasta' && game.canasta) return canastaScore(game.canasta, playerId);
+  if (template.id === 'uneaux' && game.uneaux) return uneauxScore(game.uneaux, playerId);
   if (template.id === 'reversi' && game.reversi) return discCount(game.reversi, playerId);
   if (template.id === 'chinese-checkers' && game.chinese) return piecesHomeForPlayer(game.chinese, playerId);
   if (template.id === 'klondike') return foundationCount(game.klondike);
@@ -142,6 +144,7 @@ function detectCompletion(game: Game, template: GameTemplate, totals: Map<string
   if (template.id === 'checkers') return Boolean(game.checkers?.winnerSide || game.checkers?.draw);
   if (template.id === 'chess') return Boolean(game.chess?.winnerSide || game.chess?.draw);
   if (template.id === 'canasta') return game.canasta?.phase === 'gameOver';
+  if (template.id === 'uneaux') return game.uneaux?.phase === 'gameOver';
   if (template.id === 'reversi') return Boolean(game.reversi?.winnerSide || game.reversi?.draw);
   if (template.id === 'chinese-checkers') return Boolean(game.chinese?.over);
   if (template.id === 'klondike') return Boolean(game.klondike?.won);
@@ -205,6 +208,10 @@ function getWinnerIds(
 
   if (template.id === 'canasta') {
     return new Set(game.canasta ? canastaWinners(game.canasta) : []);
+  }
+
+  if (template.id === 'uneaux') {
+    return new Set(game.uneaux ? uneauxWinners(game.uneaux) : []);
   }
 
   if (template.id === 'reversi') {

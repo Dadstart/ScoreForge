@@ -1,6 +1,7 @@
 import { ensureBackgammonState } from './backgammon';
 import { ensureCheckersState } from './checkers';
 import { ensureCanastaState } from './canasta';
+import { ensureUneauxState } from './uneaux';
 import { ensureChessState } from './chess';
 import { ensureReversiState } from './reversi';
 import { ensureChineseState, playerCap } from './chineseCheckers';
@@ -25,7 +26,8 @@ export function withAddedPlayer(game: Game, rawName: string, maxPlayers: number,
   if (taken) {
     throw new Error('A player with that name is already in the game.');
   }
-  return ensureCanastaState(
+  return ensureUneauxState(
+    ensureCanastaState(
     ensureChessState(
       ensureReversiState(
         ensureChineseState(
@@ -40,6 +42,7 @@ export function withAddedPlayer(game: Game, rawName: string, maxPlayers: number,
           ),
         ),
       ),
+    ),
     ),
   );
 }
@@ -150,7 +153,8 @@ export function withoutPlayer(game: Game, playerId: string): Game {
   const remaining = game.players.filter((player) => player.id !== playerId);
   const events = game.events.filter((event) => event.playerId !== playerId);
   const monopoly = game.monopoly ? withoutOpolyPlayer(game.monopoly, playerId, game.players, events) : game.monopoly;
-  return ensureCanastaState(
+  return ensureUneauxState(
+    ensureCanastaState(
     ensureChessState(
       ensureReversiState(
         ensureChineseState(
@@ -168,6 +172,7 @@ export function withoutPlayer(game: Game, playerId: string): Game {
           ),
         ),
       ),
+    ),
     ),
   );
 }
