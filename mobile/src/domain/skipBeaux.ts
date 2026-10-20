@@ -4,7 +4,7 @@ import { fillRandom } from './secureRandom';
 /**
  * Skip-Beaux is a sequencing card game for one to six players.
  *
- * Build shared piles from 1 to 12. A Beaux card stands in for any number.
+ * Build shared piles from 1 to 12. A wild card stands in for any number.
  * Empty your stock pile. With two or more players, the first to 500 wins.
  */
 
@@ -78,7 +78,7 @@ export function rankOf(code: string): number | null {
 }
 
 export function cardLabel(code: string): string {
-  if (isBeaux(code)) return 'Beaux';
+  if (isBeaux(code)) return 'Wild';
   return String(rankOf(code) ?? '');
 }
 
@@ -139,8 +139,8 @@ export function playBuilding(
   if (typeof peeked !== 'string') return peeked;
   if (!canBuild(peeked, building)) {
     const needed = neededRank(building);
-    if (needed === 1) return fail('Play a 1 or a Beaux to start a pile.');
-    return fail(`That pile needs a ${needed} or a Beaux.`);
+    if (needed === 1) return fail('Play a 1 or a Wild to start a pile.');
+    return fail(`That pile needs a ${needed} or a Wild.`);
   }
   const removed = removeCard(clone(state), playerId, source);
   if ('error' in removed) return removed;
