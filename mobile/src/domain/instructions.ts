@@ -109,6 +109,18 @@ const INSTRUCTIONS: Record<string, GameInstructions> = {
       'A pawn that reaches the far rank promotes. Checkmate wins. Stalemate, repetition, the fifty-move rule, and insufficient material are draws.',
     ],
   },
+  uneaux: {
+    title: 'Uneaux',
+    lines: [
+      'Match the color or the symbol on the discard pile. A wild can be played on anything, and you name the color that follows.',
+      'A draw four can be played only when you have no card of the current color. The next player draws four and loses the turn.',
+      'Skip jumps the next player. Reverse changes direction. With two players, reverse sends the turn back to you. Draw two makes the next player draw two cards and skip their turn.',
+      'You may draw even when you have a play. After you draw, play that card or pass.',
+      'With one card left, say Uneaux before the next player acts. If you forget, they can catch you and you draw two.',
+      'The player who goes out scores the cards left in the other hands. Number cards count their face value, skip, reverse, and draw two count 20, and wilds count 50.',
+      'The first player to 500 wins. A tie at the target deals another hand.',
+    ],
+  },
   canasta: {
     title: 'Canasta',
     lines: [

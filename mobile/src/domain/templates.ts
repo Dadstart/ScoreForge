@@ -140,6 +140,17 @@ export const templates: GameTemplate[] = [
     defaultTargetScore: 5000,
   },
   {
+    id: 'uneaux',
+    name: 'Uneaux',
+    description:
+      'Match the color or the symbol. Skip, reverse, and draw cards. Say Uneaux with one card left. First to 500 wins.',
+    scoringMode: 'Instant',
+    winCondition: 'HighestTotal',
+    minPlayers: 1,
+    maxPlayers: 8,
+    defaultTargetScore: 500,
+  },
+  {
     id: 'reversi',
     name: 'Reversi',
     description:
