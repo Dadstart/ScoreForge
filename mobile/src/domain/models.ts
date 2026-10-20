@@ -1,5 +1,6 @@
 import type { BackgammonState } from './backgammon';
 import type { CheckersState } from './checkers';
+import type { CanastaState } from './canasta';
 import type { ChessState } from './chess';
 import type { ReversiState } from './reversi';
 import type { ChineseState } from './chineseCheckers';
@@ -60,6 +61,8 @@ export interface Game {
   checkers?: CheckersState | null;
   /** Shared chess board and turn. */
   chess?: ChessState | null;
+  /** Shared Canasta hands, melds, and turn. */
+  canasta?: CanastaState | null;
   /** Shared Reversi board and turn. */
   reversi?: ReversiState | null;
   /** Shared Chinese checkers star, seats, and turn. */

@@ -15,6 +15,7 @@ import {
 import { joinedGame, withHostUid } from '../domain/addPlayer';
 import { createBackgammonState } from '../domain/backgammon';
 import { createCheckersState } from '../domain/checkers';
+import { createCanastaState } from '../domain/canasta';
 import { createChessState } from '../domain/chess';
 import { createReversiState } from '../domain/reversi';
 import { createChineseState, type ChineseSetup } from '../domain/chineseCheckers';
@@ -58,6 +59,7 @@ type StoredGame = {
   backgammon?: Game['backgammon'];
   checkers?: Game['checkers'];
   chess?: Game['chess'];
+  canasta?: Game['canasta'];
   reversi?: Game['reversi'];
   chinese?: Game['chinese'];
   klondike?: unknown;
@@ -128,6 +130,7 @@ function toStored(game: Game): Record<string, unknown> {
     backgammon: game.backgammon ?? null,
     checkers: game.checkers ?? null,
     chess: game.chess ?? null,
+    canasta: game.canasta ?? null,
     reversi: game.reversi ?? null,
     chinese: game.chinese ?? null,
     klondike: game.klondike ? packKlondike(game.klondike) : null,
@@ -160,6 +163,7 @@ function fromStored(shareCode: string, data: StoredGame, events: ScoreEvent[]): 
     backgammon: data.backgammon ?? null,
     checkers: data.checkers ?? null,
     chess: data.chess ?? null,
+    canasta: data.canasta ?? null,
     reversi: data.reversi ?? null,
     chinese: data.chinese ?? null,
     klondike: unpackKlondike(data.klondike),
@@ -372,6 +376,7 @@ export async function createAndSaveGame(partial: {
       });
     }
     if (partial.templateId === 'chess') game.chess = createChessState(partial.players);
+    if (partial.templateId === 'canasta') game.canasta = createCanastaState(partial.players);
     if (partial.templateId === 'reversi') game.reversi = createReversiState(partial.players);
     if (partial.templateId === 'chinese-checkers') {
       game.chinese = createChineseState(partial.players, partial.chinese);

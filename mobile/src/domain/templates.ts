@@ -129,6 +129,17 @@ export const templates: GameTemplate[] = [
     maxPlayers: 2,
   },
   {
+    id: 'canasta',
+    name: 'Canasta',
+    description:
+      'Two decks and four jokers. Draw or take the pack, then meld. A canasta is seven of one rank. Partners sit opposite. First to 5,000 wins.',
+    scoringMode: 'Instant',
+    winCondition: 'HighestTotal',
+    minPlayers: 1,
+    maxPlayers: 4,
+    defaultTargetScore: 5000,
+  },
+  {
     id: 'reversi',
     name: 'Reversi',
     description:
