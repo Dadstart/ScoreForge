@@ -240,6 +240,11 @@ export function CanastaScreen({ navigation, route }: Props) {
             onDiscard={(card) => {
               if (handOwnerId) void apply(discard(table, handOwnerId, card, names, target));
             }}
+            onMeldDrop={(card, meldIndex) => {
+              if (!handOwnerId) return;
+              const cards = selected.has(card) ? [...selected] : [card];
+              void apply(addToMeld(table, handOwnerId, meldIndex, cards, names, target));
+            }}
             onArrange={arrange}
             onDragChange={setDragging}
           />
@@ -319,8 +324,8 @@ export function CanastaScreen({ navigation, route }: Props) {
         ) : null}
 
         <Text style={styles.hint}>
-          Tap cards in your hand, then Meld. Drag cards around to arrange your hand, or use Sort hand to put them in rank order. Drag one onto the pack to discard it. Tap one of your melds to add the
-          selected cards. Undo takes back the last draw, meld, or discard. A wild card in the pack freezes it, and a black three on top blocks it.
+          Tap cards in your hand, then Meld. Drag cards around to arrange your hand, or use Sort hand to put them in rank order. Drag one onto the pack to discard it, or onto one of your melds to add it.
+          Undo takes back the last draw, meld, or discard. A wild card in the pack freezes it, and a black three on top blocks it.
         </Text>
 
         <PlaySpark sparks={sparks} />

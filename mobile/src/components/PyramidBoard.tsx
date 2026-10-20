@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { CardDrag, boxContains, emptyBox, type WindowBox } from './CardDrag';
 import {
   cardFace,
   isFree,
@@ -17,6 +18,7 @@ type Props = {
   disabled?: boolean;
   onSpot: (spot: Spot) => void;
   onStock: () => void;
+  onDrop: (from: Spot, onto: Spot | null) => void;
 };
 
 const GAP = 6;
@@ -38,7 +40,14 @@ export function PyramidBoard(props: Props) {
   );
 }
 
-function Layout({ width, state, selection, disabled, onSpot, onStock }: Props & { width: number }) {
+function Layout({ width, state, selection, disabled, onSpot, onStock, onDrop }: Props & { width: number }) {
+  const layoutRef = useRef<View>(null);
+  const origin = useRef<WindowBox>(emptyBox);
+  const zoneNodes = useRef<Map<string, View>>(new Map());
+  const zoneBoxes = useRef<Map<string, WindowBox>>(new Map());
+  const [drag, setDrag] = useState<{ spot: Spot; left: number; top: number; hover: Spot | null } | null>(null);
+  const drop = useRef(onDrop);
+  drop.current = onDrop;
   const cardWidth = Math.max(36, Math.min(72, Math.floor((width - GAP * 6) / 7)));
   const cardHeight = Math.round(cardWidth * 1.42);
   const overlap = Math.round(cardHeight * ROW_SHARE);
@@ -53,8 +62,47 @@ function Layout({ width, state, selection, disabled, onSpot, onStock }: Props & 
   const fresh = useFreshFaces(faceIds);
   const wasteCode = state.waste[state.waste.length - 1] ?? null;
 
+  const remember = (key: string, node: View | null) => {
+    if (node) zoneNodes.current.set(key, node);
+    else zoneNodes.current.delete(key);
+  };
+
+  const measure = () => {
+    layoutRef.current?.measureInWindow((x, y, width, height) => {
+      origin.current = { x, y, width, height };
+    });
+    zoneNodes.current.forEach((node, key) => {
+      node.measureInWindow((x, y, boxWidth, boxHeight) => {
+        zoneBoxes.current.set(key, { x, y, width: boxWidth, height: boxHeight });
+      });
+    });
+  };
+
+  const spotKey = (spot: Spot) => (spot.pile === 'waste' ? 'waste' : `${spot.row}:${spot.index}`);
+
+  const spotAt = (pageX: number, pageY: number, from: Spot): Spot | null => {
+    let found: Spot | null = null;
+    zoneBoxes.current.forEach((box, key) => {
+      if (!boxContains(pageX, pageY, box, 8)) return;
+      const spot = key === 'waste' ? ({ pile: 'waste' } as Spot) : spotFromKey(key);
+      if (!spot || sameSpot(spot, from) || !isFree(state, spot)) return;
+      found = spot;
+    });
+    return found;
+  };
+
+  const place = (spot: Spot, pageX: number, pageY: number) => {
+    const box = origin.current;
+    setDrag({
+      spot,
+      left: pageX - box.x - cardWidth / 2,
+      top: pageY - box.y - cardHeight / 2,
+      hover: spotAt(pageX, pageY, spot),
+    });
+  };
+
   return (
-    <View style={{ width, height: pyramidHeight + 16 + cardHeight }}>
+    <View ref={layoutRef} onLayout={measure} style={{ width, height: pyramidHeight + 16 + cardHeight }}>
       {state.rows.map((row, rowIndex) =>
         row.map((code, index) => {
           if (!code) return null;
@@ -62,28 +110,55 @@ function Layout({ width, state, selection, disabled, onSpot, onStock }: Props & 
           const free = isFree(state, spot);
           const selected = selection != null && sameSpot(selection, spot);
           const partner = partners.some((item) => sameSpot(item, spot));
+          const hover = drag?.hover != null && sameSpot(drag.hover, spot);
           const offset = ((7 - row.length) * stride) / 2;
+          const key = spotKey(spot);
+          const card = (
+            <PlayingCard
+              code={code}
+              width={cardWidth}
+              height={cardHeight}
+              selected={selected || hover}
+              partner={partner && !selected && !hover}
+              disabled={disabled || !free}
+              passive={free && !disabled}
+              onPress={() => onSpot(spot)}
+            />
+          );
           return (
             <View
               key={`${rowIndex}-${index}`}
+              ref={(node) => remember(key, node)}
+              onLayout={measure}
               style={[
                 styles.slot,
                 {
                   left: offset + index * stride,
                   top: rowIndex * overlap,
-                  zIndex: rowIndex + 1,
+                  zIndex: drag && sameSpot(drag.spot, spot) ? 40 : rowIndex + 1,
                 },
               ]}
             >
-              <PlayingCard
-                code={code}
-                width={cardWidth}
-                height={cardHeight}
-                selected={selected}
-                partner={partner && !selected}
-                disabled={disabled || !free}
-                onPress={() => onSpot(spot)}
-              />
+              {free && !disabled ? (
+                <CardDrag
+                  value={spot}
+                  label={cardFace(code)?.name ?? 'Card'}
+                  hint="Drag onto a card that adds to 13, or tap to select"
+                  style={drag && sameSpot(drag.spot, spot) ? styles.hidden : undefined}
+                  onTap={() => onSpot(spot)}
+                  onLift={() => measure()}
+                  onMove={(_spot, pageX, pageY) => place(spot, pageX, pageY)}
+                  onRelease={(_spot, pageX, pageY, moved) => {
+                    const onto = moved ? spotAt(pageX, pageY, spot) : null;
+                    setDrag(null);
+                    if (moved) drop.current(spot, onto);
+                  }}
+                >
+                  {card}
+                </CardDrag>
+              ) : (
+                card
+              )}
             </View>
           );
         }),
@@ -98,20 +173,74 @@ function Layout({ width, state, selection, disabled, onSpot, onStock }: Props & 
           disabled={disabled || (state.stock.length === 0 && state.waste.length < 2)}
           onPress={onStock}
         />
-        <Waste
-          code={wasteCode}
-          play={wasteCode != null && fresh.has(wasteCode.toUpperCase())}
-          buried={Math.max(0, state.waste.length - 1)}
-          width={cardWidth}
-          height={cardHeight}
-          selected={selection?.pile === 'waste'}
-          partner={partners.some((item) => item.pile === 'waste') && selection?.pile !== 'waste'}
-          disabled={disabled || state.waste.length === 0}
-          onPress={() => onSpot({ pile: 'waste' })}
-        />
+        <View ref={(node) => remember('waste', node)} onLayout={measure}>
+          {wasteCode && !disabled ? (
+            <CardDrag
+              value={{ pile: 'waste' }}
+              label={cardFace(wasteCode)?.name ?? 'Waste'}
+              hint="Drag onto a card that adds to 13, or tap to select"
+              style={drag?.spot.pile === 'waste' ? styles.hidden : undefined}
+              onTap={() => onSpot({ pile: 'waste' })}
+              onLift={() => measure()}
+              onMove={(_spot, pageX, pageY) => place({ pile: 'waste' }, pageX, pageY)}
+              onRelease={(_spot, pageX, pageY, moved) => {
+                const onto = moved ? spotAt(pageX, pageY, { pile: 'waste' }) : null;
+                setDrag(null);
+                if (moved) drop.current({ pile: 'waste' }, onto);
+              }}
+            >
+              <Waste
+                code={wasteCode}
+                play={fresh.has(wasteCode.toUpperCase())}
+                buried={Math.max(0, state.waste.length - 1)}
+                width={cardWidth}
+                height={cardHeight}
+                selected={selection?.pile === 'waste' || drag?.hover?.pile === 'waste'}
+                partner={partners.some((item) => item.pile === 'waste') && selection?.pile !== 'waste'}
+                disabled={false}
+                passive
+                onPress={() => onSpot({ pile: 'waste' })}
+              />
+            </CardDrag>
+          ) : (
+            <Waste
+              code={wasteCode}
+              play={wasteCode != null && fresh.has(wasteCode.toUpperCase())}
+              buried={Math.max(0, state.waste.length - 1)}
+              width={cardWidth}
+              height={cardHeight}
+              selected={selection?.pile === 'waste' || drag?.hover?.pile === 'waste'}
+              partner={partners.some((item) => item.pile === 'waste') && selection?.pile !== 'waste'}
+              disabled={disabled || state.waste.length === 0}
+              onPress={() => onSpot({ pile: 'waste' })}
+            />
+          )}
+        </View>
       </View>
+      {drag ? (
+        <View pointerEvents="none" style={[styles.ghost, { left: drag.left, top: drag.top, width: cardWidth, height: cardHeight }]}>
+          <PlayingCard
+            code={faceOf(state, drag.spot) ?? ''}
+            width={cardWidth}
+            height={cardHeight}
+            passive
+            onPress={() => {}}
+          />
+        </View>
+      ) : null}
     </View>
   );
+}
+
+function spotFromKey(key: string): Spot | null {
+  const [row, index] = key.split(':').map((part) => Number(part));
+  if (!Number.isInteger(row) || !Number.isInteger(index)) return null;
+  return { pile: 'pyramid', row, index };
+}
+
+function faceOf(state: PyramidState, spot: Spot): string | null {
+  if (spot.pile === 'waste') return state.waste[state.waste.length - 1] ?? null;
+  return state.rows[spot.row]?.[spot.index] ?? null;
 }
 
 function PlayingCard({
@@ -121,6 +250,7 @@ function PlayingCard({
   selected,
   partner,
   disabled,
+  passive,
   onPress,
 }: {
   code: string;
@@ -129,18 +259,14 @@ function PlayingCard({
   selected?: boolean;
   partner?: boolean;
   disabled?: boolean;
+  passive?: boolean;
   onPress: () => void;
 }) {
   const face = cardFace(code);
   if (!face) return null;
   const ink = face.red ? '#c23b3b' : '#1c1612';
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={face.name}
-      accessibilityState={{ disabled: Boolean(disabled), selected: Boolean(selected) }}
-      disabled={disabled}
-      onPress={onPress}
+  const body = (
+    <View
       style={[
         styles.face,
         { width, height },
@@ -154,6 +280,19 @@ function PlayingCard({
         {face.symbol}
       </Text>
       <Text style={[styles.pip, { color: ink, fontSize: Math.max(16, width * 0.42) }]}>{face.symbol}</Text>
+    </View>
+  );
+  if (passive) return body;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={face.name}
+      accessibilityState={{ disabled: Boolean(disabled), selected: Boolean(selected) }}
+      disabled={disabled}
+      onPress={onPress}
+      style={{ width, height }}
+    >
+      {body}
     </Pressable>
   );
 }
@@ -203,6 +342,7 @@ function Waste({
   selected,
   partner,
   disabled,
+  passive,
   onPress,
 }: {
   code: string | null;
@@ -213,6 +353,7 @@ function Waste({
   selected?: boolean;
   partner?: boolean;
   disabled?: boolean;
+  passive?: boolean;
   onPress: () => void;
 }) {
   if (!code) {
@@ -231,7 +372,7 @@ function Waste({
         accessibilityRole="button"
         accessibilityLabel={face.name}
         accessibilityState={{ disabled: Boolean(disabled), selected: Boolean(selected) }}
-        disabled={disabled}
+        disabled={disabled || passive}
         onPress={onPress}
         style={{ width, height }}
       >
@@ -321,6 +462,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  ghost: { position: 'absolute', zIndex: 40 },
+  hidden: { opacity: 0 },
   emptyLabel: {
     color: 'rgba(212, 168, 75, 0.7)',
     fontFamily: fonts.display,

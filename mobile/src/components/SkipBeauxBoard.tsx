@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { AccessibilityInfo, Animated, Easing, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { CardDrag, boxContains, emptyBox, hitIndex, readBox, type WindowBox } from './CardDrag';
 import { CardFlip, flipDelay } from './CardFlip';
 import {
   PILE_SLOTS,
@@ -16,6 +17,8 @@ import { colors, radii } from '../theme';
 
 type Named = { id: string; name: string };
 type Selection = CardSource | null;
+type Held = CardSource;
+type Hover = { kind: 'building' | 'discard'; index: number } | null;
 
 type Props = {
   state: SkipBeauxState;
@@ -80,14 +83,75 @@ export function SkipBeauxBoard({ state, players, handOwnerId, canAct, onPlay, on
   const chosen = owner ? selectedCard(state, owner, selected) : null;
   const hand = owner ? [...(state.hands[owner] ?? [])].sort(compareCodes) : [];
   const arrivals = useArrivals(hand);
+  const tableRef = useRef<View>(null);
+  const origin = useRef<WindowBox>(emptyBox);
+  const buildingNodes = useRef<(View | null)[]>([]);
+  const discardNodes = useRef<(View | null)[]>([]);
+  const buildingBoxes = useRef<WindowBox[]>([]);
+  const discardBoxes = useRef<WindowBox[]>([]);
+  const [drag, setDrag] = useState<{ held: Held; left: number; top: number; hover: Hover } | null>(null);
+  const actions = useRef({ onPlay, onDiscard });
+  actions.current = { onPlay, onDiscard };
+
+  const measure = () => {
+    tableRef.current?.measureInWindow((x, y, width, height) => {
+      origin.current = { x, y, width, height };
+    });
+    buildingNodes.current.forEach((node, index) => readBox(node, buildingBoxes.current, index));
+    discardNodes.current.forEach((node, index) => readBox(node, discardBoxes.current, index));
+  };
+
+  const heldCode = (held: Held): string | null => {
+    if (!owner) return null;
+    if (held.zone === 'hand') return held.card;
+    if (held.zone === 'stock') return topOf(state.stocks[owner] ?? []);
+    return topOf(state.discards[owner]?.[held.index]?.cards ?? []);
+  };
+
+  const hoverAt = (held: Held, pageX: number, pageY: number): Hover => {
+    const code = heldCode(held);
+    const building = hitIndex(pageX, pageY, buildingBoxes.current, 14);
+    if (building != null && code && canBuild(code, state.buildings[building])) return { kind: 'building', index: building };
+    if (held.zone === 'hand') {
+      const pile = hitIndex(pageX, pageY, discardBoxes.current, 14);
+      if (pile != null) return { kind: 'discard', index: pile };
+    }
+    return null;
+  };
+
+  const place = (held: Held, pageX: number, pageY: number) => {
+    const box = origin.current;
+    setDrag({
+      held,
+      left: pageX - box.x - 26,
+      top: pageY - box.y - 36,
+      hover: hoverAt(held, pageX, pageY),
+    });
+  };
+
+  const release = (held: Held, pageX: number, pageY: number, moved: boolean) => {
+    const hover = moved ? hoverAt(held, pageX, pageY) : null;
+    setDrag(null);
+    if (!hover) return;
+    if (hover.kind === 'building') actions.current.onPlay(held, hover.index);
+    else if (held.zone === 'hand') actions.current.onDiscard(held.card, hover.index);
+  };
 
   const choose = (next: Selection) => {
     if (!canAct || !owner) return;
     setSelected((current) => (sameSelection(current, next) ? null : next));
   };
 
+  const dragging = (held: Held) => {
+    if (!drag) return false;
+    if (held.zone !== drag.held.zone) return false;
+    if (held.zone === 'hand' && drag.held.zone === 'hand') return held.card === drag.held.card;
+    if (held.zone === 'discard' && drag.held.zone === 'discard') return held.index === drag.held.index;
+    return held.zone === 'stock';
+  };
+
   return (
-    <View style={styles.table}>
+    <View ref={tableRef} style={styles.table} onLayout={measure}>
       <View style={styles.buildings}>
         {state.buildings.map((pile, index) => {
           const needed = neededRank(pile);
@@ -96,13 +160,17 @@ export function SkipBeauxBoard({ state, players, handOwnerId, canAct, onPlay, on
           return (
             <Pressable
               key={index}
+              ref={(node) => {
+                buildingNodes.current[index] = node;
+              }}
               accessibilityRole="button"
               accessibilityLabel={needed === 1 ? 'Empty building pile, needs 1' : `Building pile, needs ${needed}`}
               disabled={!canAct || !legal}
               onPress={() => {
                 if (selected) onPlay(selected, index);
               }}
-              style={[styles.slot, legal && styles.slotLegal]}
+              onLayout={measure}
+              style={[styles.slot, legal && styles.slotLegal, drag?.hover?.kind === 'building' && drag.hover.index === index && styles.slotHover]}
             >
               <Land id={top}>
                 {top ? (
@@ -137,40 +205,84 @@ export function SkipBeauxBoard({ state, players, handOwnerId, canAct, onPlay, on
               {state.hands[id]?.length ?? 0} in hand
             </Text>
             <View style={styles.row}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Stock, ${stockCount} cards`}
-                disabled={!canAct || !mine || !stock}
-                onPress={() => choose({ zone: 'stock' })}
-                style={[styles.slot, mine && selected?.zone === 'stock' && styles.slotSelected]}
-              >
+              <View style={[styles.slot, mine && selected?.zone === 'stock' && styles.slotSelected]}>
                 <Dip count={stockCount}>
                   <Land id={stock}>
-                    {stock ? <Face code={stock} marked={stockCount === 1} /> : <View style={[styles.card, styles.empty]} />}
+                    {stock && mine ? (
+                      <CardDrag
+                        value={{ zone: 'stock' } satisfies Held}
+                        enabled={canAct}
+                        label={`Stock ${stock}, ${stockCount} cards`}
+                        hint="Drag onto a building pile, or tap to select"
+                        style={dragging({ zone: 'stock' }) ? styles.hidden : undefined}
+                        onTap={() => choose({ zone: 'stock' })}
+                        onLift={() => measure()}
+                        onMove={(_held, pageX, pageY) => place({ zone: 'stock' }, pageX, pageY)}
+                        onRelease={release}
+                      >
+                        <Face code={stock} marked={stockCount === 1} />
+                      </CardDrag>
+                    ) : stock ? (
+                      <Face code={stock} marked={stockCount === 1} />
+                    ) : (
+                      <View style={[styles.card, styles.empty]} />
+                    )}
                   </Land>
                 </Dip>
                 <Text style={styles.slotLabel}>Stock {stockCount}</Text>
-              </Pressable>
+              </View>
               {(state.discards[id] ?? []).slice(0, PILE_SLOTS).map((pile, index) => {
                 const top = topOf(pile.cards);
                 const picked = mine && selected?.zone === 'discard' && selected.index === index;
                 return (
-                  <Pressable
+                  <View
                     key={index}
-                    accessibilityRole="button"
-                    accessibilityLabel={top ? `Discard ${cardLabel(top)}` : 'Empty discard pile'}
-                    disabled={!canAct || !mine}
-                    onPress={() => {
-                      if (selected?.zone === 'hand') onDiscard(selected.card, index);
-                      else if (top) choose({ zone: 'discard', index });
+                    ref={(node) => {
+                      if (mine) discardNodes.current[index] = node;
                     }}
-                    style={[styles.slot, (picked || (selected?.zone === 'hand' && mine)) && styles.slotLegal]}
+                    onLayout={mine ? measure : undefined}
+                    style={[
+                      styles.slot,
+                      (picked || (selected?.zone === 'hand' && mine) || (drag?.hover?.kind === 'discard' && drag.hover.index === index && mine)) &&
+                        styles.slotLegal,
+                      drag?.hover?.kind === 'discard' && drag.hover.index === index && mine && styles.slotHover,
+                    ]}
                   >
                     <Land id={top}>
-                      {top ? <Face code={top} small /> : <View style={[styles.card, styles.cardSmall, styles.empty]} />}
+                      {top && mine ? (
+                        <CardDrag
+                          value={{ zone: 'discard', index }}
+                          enabled={canAct}
+                          label={`Discard ${cardLabel(top)}`}
+                          hint="Drag onto a building pile, or tap to select"
+                          style={dragging({ zone: 'discard', index }) ? styles.hidden : undefined}
+                          onTap={() => {
+                            if (selected?.zone === 'hand') onDiscard(selected.card, index);
+                            else choose({ zone: 'discard', index });
+                          }}
+                          onLift={() => measure()}
+                          onMove={(_held, pageX, pageY) => place({ zone: 'discard', index }, pageX, pageY)}
+                          onRelease={release}
+                        >
+                          <Face code={top} small />
+                        </CardDrag>
+                      ) : top ? (
+                        <Face code={top} small />
+                      ) : (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="Empty discard pile"
+                          disabled={!canAct || !mine}
+                          onPress={() => {
+                            if (selected?.zone === 'hand') onDiscard(selected.card, index);
+                          }}
+                        >
+                          <View style={[styles.card, styles.cardSmall, styles.empty]} />
+                        </Pressable>
+                      )}
                     </Land>
                     <Text style={styles.slotLabel}>{pile.cards.length}</Text>
-                  </Pressable>
+                  </View>
                 );
               })}
             </View>
@@ -186,42 +298,52 @@ export function SkipBeauxBoard({ state, players, handOwnerId, canAct, onPlay, on
         </Text>
         <Text style={styles.hint}>
           {selected?.zone === 'hand'
-            ? 'Tap a building pile, or a discard pile to end the turn.'
+            ? 'Drag it onto a building, or onto a discard pile to end the turn.'
             : chosen
-              ? 'Tap a building pile that can take this card.'
-              : 'Select a card, then a building pile.'}
+              ? 'Drag it onto a building pile that can take it.'
+              : 'Drag a card onto a pile, or select it and tap.'}
         </Text>
         <View style={styles.hand}>
           {hand.map((card) => {
             const picked = selected?.zone === 'hand' && selected.card === card;
             const face = <Face code={card} />;
+            const body = arrivals.has(card) ? (
+              <CardFlip
+                up
+                play
+                delay={flipDelay(card, hand, arrivals)}
+                width={CARD_W}
+                height={CARD_H}
+                front={face}
+                back={<View style={[styles.card, styles.back]} />}
+              />
+            ) : (
+              face
+            );
             return (
-              <Pressable
+              <CardDrag
                 key={card}
-                accessibilityRole="button"
-                accessibilityLabel={cardLabel(card)}
-                disabled={!canAct}
-                onPress={() => choose({ zone: 'hand', card })}
-                style={picked ? styles.lift : undefined}
+                value={{ zone: 'hand', card }}
+                enabled={canAct}
+                label={cardLabel(card)}
+                hint="Drag onto a building or a discard pile, or tap to select"
+                style={[picked ? styles.lift : undefined, dragging({ zone: 'hand', card }) ? styles.hidden : undefined]}
+                onTap={() => choose({ zone: 'hand', card })}
+                onLift={() => measure()}
+                onMove={(_held, pageX, pageY) => place({ zone: 'hand', card }, pageX, pageY)}
+                onRelease={release}
               >
-                {arrivals.has(card) ? (
-                  <CardFlip
-                    up
-                    play
-                    delay={flipDelay(card, hand, arrivals)}
-                    width={CARD_W}
-                    height={CARD_H}
-                    front={face}
-                    back={<View style={[styles.card, styles.back]} />}
-                  />
-                ) : (
-                  face
-                )}
-              </Pressable>
+                {body}
+              </CardDrag>
             );
           })}
         </View>
       </View>
+      {drag ? (
+        <View pointerEvents="none" style={[styles.ghost, { left: drag.left, top: drag.top }]}>
+          {heldCode(drag.held) ? <Face code={heldCode(drag.held) as string} /> : null}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -360,6 +482,9 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   slot: { alignItems: 'center', gap: 4 },
   slotLegal: { transform: [{ translateY: -4 }] },
+  slotHover: { backgroundColor: 'rgba(212, 168, 75, 0.28)', borderRadius: 8 },
+  ghost: { position: 'absolute', zIndex: 30 },
+  hidden: { opacity: 0 },
   slotSelected: { transform: [{ translateY: -4 }] },
   slotLabel: { fontSize: 11, fontWeight: '600', color: '#d7e6df' },
   handBox: { gap: 6 },

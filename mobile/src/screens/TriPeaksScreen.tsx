@@ -177,7 +177,7 @@ export function TriPeaksScreen({ navigation, route }: Props) {
               onStock={onStock}
             />
             <Text style={styles.hint}>
-              Tap an uncovered card one rank above or below the waste. Aces and kings do not meet.
+              Drag an uncovered card onto the waste, or tap it, when it is one rank above or below. Aces and kings do not meet.
               A run scores 1, then 2, then 3. Drawing starts the run over. Clearing a peak adds 15.
             </Text>
           </View>
