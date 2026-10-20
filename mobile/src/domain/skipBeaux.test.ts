@@ -90,7 +90,7 @@ describe('skip-beaux', () => {
   it('builds piles from 1, accepts a Beaux, and clears a finished 12', () => {
     const state = table({ hands: { ada: ['2#1', 'B#1', '1#1'], bea: [] } });
     assert.equal(canBuild('2#1', state.buildings[0]!), false);
-    assert.match(err(playBuilding(state, 'ada', { zone: 'hand', card: '2#1' }, 0, named)), /1 or a Beaux/);
+    assert.match(err(playBuilding(state, 'ada', { zone: 'hand', card: '2#1' }, 0, named)), /1 or a Wild/);
     const started = ok(playBuilding(state, 'ada', { zone: 'hand', card: '1#1' }, 0, named));
     assert.equal(neededRank(started.buildings[0]!), 2);
     const wild = ok(playBuilding(started, 'ada', { zone: 'hand', card: 'B#1' }, 0, named));

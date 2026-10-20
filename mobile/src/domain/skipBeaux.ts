@@ -76,7 +76,7 @@ export function rankOf(code: string): number | null {
 }
 
 export function cardLabel(code: string): string {
-  if (isBeaux(code)) return 'Beaux';
+  if (isBeaux(code)) return 'Wild';
   return String(rankOf(code) ?? '');
 }
 
@@ -136,8 +136,8 @@ export function playBuilding(
   if (typeof peeked !== 'string') return peeked;
   if (!canBuild(peeked, building)) {
     const needed = neededRank(building);
-    if (needed === 1) return fail('Play a 1 or a Beaux to start a pile.');
-    return fail(`That pile needs a ${needed} or a Beaux.`);
+    if (needed === 1) return fail('Play a 1 or a Wild to start a pile.');
+    return fail(`That pile needs a ${needed} or a Wild.`);
   }
   const removed = removeCard(clone(state), playerId, source);
   if ('error' in removed) return removed;

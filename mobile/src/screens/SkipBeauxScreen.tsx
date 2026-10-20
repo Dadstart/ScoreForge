@@ -65,7 +65,7 @@ export function SkipBeauxScreen({ navigation, route }: Props) {
     const finished = table.completed.length > previous.completed.length;
     if (wentOut) spark('Out', 'gold');
     else if (finished) spark('12', 'gold');
-    else if (table.lastAction !== previous.lastAction && table.lastAction?.includes('plays Beaux')) spark('Beaux', 'gold');
+    else if (table.lastAction !== previous.lastAction && table.lastAction?.includes('plays Wild')) spark('Wild', 'gold');
   }, [game?.skipBeaux, spark]);
 
   if (!game || !template || !snapshot || !game.skipBeaux) {
