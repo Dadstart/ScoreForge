@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { PanResponder, Platform, Pressable, StyleSheet, Text, View, type PointerEvent, type ViewStyle } from 'react-native';
+import { hitIndex, readBox, type WindowBox } from './CardDrag';
 import {
   cardFace,
   isWild,
@@ -24,6 +25,7 @@ type Props = {
   onDraw: () => void;
   onTake: () => void;
   onDiscard: (card: string) => void;
+  onMeldDrop: (card: string, meldIndex: number) => void;
   onArrange: (order: readonly string[]) => void;
   onDragChange?: (dragging: boolean) => void;
 };
@@ -47,6 +49,7 @@ export function CanastaBoard({
   onDraw,
   onTake,
   onDiscard,
+  onMeldDrop,
   onArrange,
   onDragChange,
 }: Props) {
@@ -56,6 +59,7 @@ export function CanastaBoard({
   const hand = handOwnerId ? (state.hands[handOwnerId] ?? []) : [];
   const fresh = new Set(state.drawn ?? []);
   const canDiscard = canAct && state.phase === 'play';
+  const canMeld = canDiscard && ownerTeam >= 0;
   const canArrange = handOwnerId != null;
   const originRef = useRef<View>(null);
   const pileRef = useRef<View>(null);
@@ -63,6 +67,9 @@ export function CanastaBoard({
   const originBox = useRef<Box>({ x: 0, y: 0, width: 0, height: 0 });
   const pileBox = useRef<Box>({ x: 0, y: 0, width: 0, height: 0 });
   const handBox = useRef<Box>({ x: 0, y: 0, width: 0, height: 0 });
+  const meldNodes = useRef<(View | null)[]>([]);
+  const meldBoxes = useRef<WindowBox[]>([]);
+  const hoverRef = useRef<number | null>(null);
   const cards = useRef(hand);
   cards.current = hand;
   const grab = useRef<{ card: string; ox: number; oy: number; x: number; y: number } | null>(null);
@@ -70,8 +77,9 @@ export function CanastaBoard({
   const slotRef = useRef<number | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [slot, setSlot] = useState<number | null>(null);
-  const api = useRef({ onDiscard, onArrange, onDragChange, onToggle, canDiscard });
-  api.current = { onDiscard, onArrange, onDragChange, onToggle, canDiscard };
+  const [meldHover, setMeldHover] = useState<number | null>(null);
+  const api = useRef({ onDiscard, onMeldDrop, onArrange, onDragChange, onToggle, canDiscard, canMeld });
+  api.current = { onDiscard, onMeldDrop, onArrange, onDragChange, onToggle, canDiscard, canMeld };
   useEffect(() => () => setDragCursor(false), []);
 
   const measure = () => {
@@ -83,6 +91,10 @@ export function CanastaBoard({
     });
     handRef.current?.measureInWindow((x, y, width, height) => {
       handBox.current = { x, y, width, height };
+    });
+    meldNodes.current.forEach((node, index) => {
+      if (node) readBox(node, meldBoxes.current, index);
+      else meldBoxes.current[index] = { x: 0, y: 0, width: 0, height: 0 };
     });
   };
 
@@ -112,7 +124,12 @@ export function CanastaBoard({
     const distance = Math.hypot(centerX - pileX, centerY - pileY);
     const near = api.current.canDiscard && pile.width > 0 && distance <= (snapped.current ? SNAP_OUT : SNAP_IN);
     snapped.current = near;
-    if (!near) {
+    const meldAt = !near && api.current.canMeld ? hitIndex(pageX, pageY, meldBoxes.current, 16) : null;
+    if (meldAt !== hoverRef.current) {
+      hoverRef.current = meldAt;
+      setMeldHover(meldAt);
+    }
+    if (!near && meldAt == null) {
       const next = slotFor(pageX, pageY, held.ox, held.oy);
       if (next != null && next !== slotRef.current) {
         slotRef.current = next;
@@ -145,8 +162,11 @@ export function CanastaBoard({
     const index = slotRef.current;
     grab.current = null;
     snapped.current = false;
+    const meldAt = hoverRef.current;
     slotRef.current = null;
+    hoverRef.current = null;
     setSlot(null);
+    setMeldHover(null);
     setDrag(null);
     setDragCursor(false);
     api.current.onDragChange?.(false);
@@ -158,6 +178,10 @@ export function CanastaBoard({
     }
     if (locked) {
       api.current.onDiscard(held.card);
+      return;
+    }
+    if (meldAt != null) {
+      api.current.onMeldDrop(held.card, meldAt);
       return;
     }
     if (index == null) return;
@@ -215,11 +239,19 @@ export function CanastaBoard({
                 return (
                   <Pressable
                     key={`${meld.rank}-${meldIndex}`}
+                    ref={(node) => {
+                      if (mine) meldNodes.current[meldIndex] = node;
+                    }}
                     accessibilityRole="button"
                     accessibilityLabel={meldLabel(meld)}
                     disabled={!canAdd}
                     onPress={() => onMeldPress(meldIndex)}
-                    style={[styles.meld, meld.cards.length >= 7 && meld.rank !== 3 && styles.canasta]}
+                    onLayout={mine ? measure : undefined}
+                    style={[
+                      styles.meld,
+                      meld.cards.length >= 7 && meld.rank !== 3 && styles.canasta,
+                      mine && meldHover === meldIndex && styles.meldHover,
+                    ]}
                   >
                     <Text style={styles.meldLabel}>{meldLabel(meld)}</Text>
                     <View style={styles.meldCards}>
@@ -457,6 +489,7 @@ const styles = StyleSheet.create({
   piles: { flexDirection: 'row', gap: 16, justifyContent: 'center' },
   pile: { alignItems: 'center', gap: 6, borderRadius: 10, padding: 4 },
   pileSnap: { backgroundColor: 'rgba(212, 168, 75, 0.28)' },
+  meldHover: { backgroundColor: 'rgba(212, 168, 75, 0.28)' },
   pileLabel: { fontSize: 12, fontWeight: '600', color: '#d7e6df' },
   side: { gap: 6 },
   sideTitle: { fontSize: 14, fontWeight: '700', color: '#f6ead2' },

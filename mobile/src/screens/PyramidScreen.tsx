@@ -103,6 +103,17 @@ export function PyramidScreen({ navigation, route }: Props) {
     await persist(next, true);
   };
 
+  const onDrop = (from: Spot, onto: Spot | null) => {
+    if (pyramid.won || !isFree(pyramid, from)) return;
+    if (onto && !sameSpot(from, onto)) {
+      const paired = play(pyramid, from, onto);
+      if (paired) void apply(paired);
+      return;
+    }
+    const removed = play(pyramid, from);
+    if (removed) void apply(removed);
+  };
+
   const onSpot = (spot: Spot) => {
     if (pyramid.won || !isFree(pyramid, spot)) return;
     const face = faceRank(pyramid, spot);
@@ -187,11 +198,12 @@ export function PyramidScreen({ navigation, route }: Props) {
               selection={selection}
               disabled={pyramid.won}
               onSpot={onSpot}
+              onDrop={onDrop}
               onStock={onStock}
             />
             <Text style={styles.hint}>
-              Tap a king to remove it. Tap two uncovered cards that add to 13. Aces are 1 and jacks are 11.
-              Draw one card from the stock.
+              Drag a card onto one that adds to 13, or tap them. Drag a king off its spot, or tap it, to remove it.
+              Aces are 1 and jacks are 11. Draw one card from the stock.
             </Text>
           </View>
 

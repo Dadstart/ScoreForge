@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { CardDrag, boxContains, emptyBox, type WindowBox } from './CardDrag';
 import { CardFlip, flipDelay } from './CardFlip';
 import {
   UNEAUX_COLORS,
@@ -78,13 +79,40 @@ function useArrivals(ids: readonly string[]): ReadonlySet<string> {
 }
 
 export function UneauxBoard({ state, players, handOwnerId, canAct, onPlay, onDraw, onColor }: Props) {
+  const tableRef = useRef<View>(null);
+  const discardRef = useRef<View>(null);
+  const origin = useRef<WindowBox>(emptyBox);
+  const discardBox = useRef<WindowBox>(emptyBox);
+  const [drag, setDrag] = useState<{ card: string; left: number; top: number; over: boolean } | null>(null);
+  const play = useRef(onPlay);
+  play.current = onPlay;
+
+  const measure = () => {
+    tableRef.current?.measureInWindow((x, y, width, height) => {
+      origin.current = { x, y, width, height };
+    });
+    discardRef.current?.measureInWindow((x, y, width, height) => {
+      discardBox.current = { x, y, width, height };
+    });
+  };
+
   const top = state.discard.at(-1) ?? null;
   const hand = handOwnerId ? [...(state.hands[handOwnerId] ?? [])].sort(compareCards) : [];
   const arrivals = useArrivals(hand);
   const choosing = canAct && state.phase === 'color';
 
+  const place = (card: string, pageX: number, pageY: number) => {
+    const box = origin.current;
+    setDrag({
+      card,
+      left: pageX - box.x - CARD_W / 2,
+      top: pageY - box.y - CARD_H / 2,
+      over: boxContains(pageX, pageY, discardBox.current, 18),
+    });
+  };
+
   return (
-    <View style={styles.table}>
+    <View ref={tableRef} style={styles.table} onLayout={measure}>
       <View style={styles.seats}>
         {state.order.map((id) => {
           const count = state.hands[id]?.length ?? 0;
@@ -114,7 +142,7 @@ export function UneauxBoard({ state, players, handOwnerId, canAct, onPlay, onDra
           <StockCard count={state.stock.length} />
           <Text style={styles.pileLabel}>Stock {state.stock.length}</Text>
         </Pressable>
-        <View style={styles.pile}>
+        <View ref={discardRef} onLayout={measure} style={[styles.pile, drag?.over && styles.pileOver]}>
           {top ? <DiscardCard code={top} wash={state.color} /> : <View style={[styles.card, styles.empty]} />}
           <View style={styles.directionRow}>
             <DirectionMark direction={state.direction} />
@@ -137,33 +165,62 @@ export function UneauxBoard({ state, players, handOwnerId, canAct, onPlay, onDra
             const playable = handOwnerId ? canPlayCard(state, handOwnerId, card) && canAct : false;
             const arriving = arrivals.has(card);
             const face = <PlayingCard code={card} marked={state.drawn === card} />;
+            const body = arriving ? (
+              <CardFlip
+                up
+                play
+                delay={flipDelay(card, hand, arrivals)}
+                width={CARD_W}
+                height={CARD_H}
+                front={face}
+                back={<View style={[styles.card, styles.back]} />}
+              />
+            ) : (
+              face
+            );
+            if (!playable) {
+              return (
+                <Pressable
+                  key={card}
+                  accessibilityRole="button"
+                  accessibilityLabel={cardLabel(card)}
+                  disabled
+                  style={canAct && state.phase === 'play' ? styles.dim : undefined}
+                >
+                  {body}
+                </Pressable>
+              );
+            }
             return (
-              <Pressable
+              <CardDrag
                 key={card}
-                accessibilityRole="button"
-                accessibilityLabel={cardLabel(card)}
-                disabled={!playable}
-                onPress={() => onPlay(card)}
-                style={[!playable && canAct && state.phase === 'play' ? styles.dim : undefined, playable ? styles.playable : undefined]}
+                value={card}
+                label={cardLabel(card)}
+                hint="Drag onto the discard, or tap to play"
+                style={[styles.playable, drag?.card === card && styles.hidden]}
+                onTap={() => play.current(card)}
+                onLift={() => {
+                  measure();
+                  place(card, origin.current.x, origin.current.y);
+                }}
+                onMove={(_card, pageX, pageY) => place(card, pageX, pageY)}
+                onRelease={(_card, pageX, pageY, moved) => {
+                  const over = moved && boxContains(pageX, pageY, discardBox.current, 18);
+                  setDrag(null);
+                  if (over) play.current(card);
+                }}
               >
-                {arriving ? (
-                  <CardFlip
-                    up
-                    play
-                    delay={flipDelay(card, hand, arrivals)}
-                    width={CARD_W}
-                    height={CARD_H}
-                    front={face}
-                    back={<View style={[styles.card, styles.back]} />}
-                  />
-                ) : (
-                  face
-                )}
-              </Pressable>
+                {body}
+              </CardDrag>
             );
           })}
         </View>
       </View>
+      {drag ? (
+        <View pointerEvents="none" style={[styles.ghost, { left: drag.left, top: drag.top }]}>
+          <PlayingCard code={drag.card} marked={state.drawn === drag.card} />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -368,6 +425,9 @@ const styles = StyleSheet.create({
   seatMeta: { fontSize: 12, color: '#d7e6df' },
   piles: { flexDirection: 'row', gap: 16, justifyContent: 'center', alignItems: 'flex-end' },
   pile: { alignItems: 'center', gap: 6 },
+  pileOver: { backgroundColor: 'rgba(212, 168, 75, 0.28)', borderRadius: 10 },
+  ghost: { position: 'absolute', zIndex: 30 },
+  hidden: { opacity: 0 },
   pileLabel: { fontSize: 12, fontWeight: '600', color: '#d7e6df', textTransform: 'capitalize' },
   directionRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   arrow: { fontSize: 16, fontWeight: '800', color: '#f6ead2' },

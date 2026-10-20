@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { CardDrag, boxContains, emptyBox, type WindowBox } from './CardDrag';
 import { cardFace, isFree, playableSpots, wasteCard, type Spot, type TriPeaksState } from '../domain/tripeaks';
 import { colors, fonts, radii } from '../theme';
 import { CardFlip, flipDelay, isFaceUpCode, useFreshFaces } from './CardFlip';
@@ -30,6 +31,13 @@ export function TriPeaksBoard(props: Props) {
 }
 
 function Layout({ width, state, disabled, onCard, onStock }: Props & { width: number }) {
+  const layoutRef = useRef<View>(null);
+  const wasteRef = useRef<View>(null);
+  const origin = useRef<WindowBox>(emptyBox);
+  const wasteBox = useRef<WindowBox>(emptyBox);
+  const [drag, setDrag] = useState<{ spot: Spot; left: number; top: number; over: boolean } | null>(null);
+  const playCard = useRef(onCard);
+  playCard.current = onCard;
   const cardWidth = Math.max(24, Math.min(58, Math.floor((width - GAP * 9) / 10)));
   const cardHeight = Math.round(cardWidth * 1.42);
   const stride = cardWidth + GAP;
@@ -45,8 +53,27 @@ function Layout({ width, state, disabled, onCard, onStock }: Props & { width: nu
   for (const code of state.waste) if (isFaceUpCode(code)) faceIds.push(code.toUpperCase());
   const fresh = useFreshFaces(faceIds);
 
+  const measure = () => {
+    layoutRef.current?.measureInWindow((x, y, width, height) => {
+      origin.current = { x, y, width, height };
+    });
+    wasteRef.current?.measureInWindow((x, y, width, height) => {
+      wasteBox.current = { x, y, width, height };
+    });
+  };
+
+  const place = (spot: Spot, pageX: number, pageY: number) => {
+    const box = origin.current;
+    setDrag({
+      spot,
+      left: pageX - box.x - cardWidth / 2,
+      top: pageY - box.y - cardHeight / 2,
+      over: boxContains(pageX, pageY, wasteBox.current, 16),
+    });
+  };
+
   return (
-    <View style={{ width: tableauWidth, height: tableauHeight + 28 + cardHeight + 22, alignSelf: 'center' }}>
+    <View ref={layoutRef} onLayout={measure} style={{ width: tableauWidth, height: tableauHeight + 28 + cardHeight + 22, alignSelf: 'center' }}>
       {state.rows.map((row, rowIndex) =>
         row.map((code, index) => {
           if (!code) return null;
@@ -66,16 +93,45 @@ function Layout({ width, state, disabled, onCard, onStock }: Props & { width: nu
                 },
               ]}
             >
-              <PlayingCard
-                code={code}
-                width={cardWidth}
-                height={cardHeight}
-                playable={canPlay}
-                play={fresh.has(id)}
-                delay={flipDelay(id, faceIds, fresh)}
-                disabled={disabled || !free}
-                onPress={() => onCard(spot)}
-              />
+              {free && !disabled ? (
+                <CardDrag
+                  value={spot}
+                  label={cardFace(code)?.name ?? 'Card'}
+                  hint="Drag onto the waste, or tap to play"
+                  style={drag && drag.spot.row === rowIndex && drag.spot.index === index ? styles.hidden : undefined}
+                  onTap={() => playCard.current(spot)}
+                  onLift={() => measure()}
+                  onMove={(_spot, pageX, pageY) => place(spot, pageX, pageY)}
+                  onRelease={(_spot, pageX, pageY, moved) => {
+                    const over = moved && boxContains(pageX, pageY, wasteBox.current, 16);
+                    setDrag(null);
+                    if (over) playCard.current(spot);
+                  }}
+                >
+                  <PlayingCard
+                    code={code}
+                    width={cardWidth}
+                    height={cardHeight}
+                    playable={canPlay}
+                    play={fresh.has(id)}
+                    delay={flipDelay(id, faceIds, fresh)}
+                    disabled={false}
+                    passive
+                    onPress={() => onCard(spot)}
+                  />
+                </CardDrag>
+              ) : (
+                <PlayingCard
+                  code={code}
+                  width={cardWidth}
+                  height={cardHeight}
+                  playable={canPlay}
+                  play={fresh.has(id)}
+                  delay={flipDelay(id, faceIds, fresh)}
+                  disabled={disabled || !free}
+                  onPress={() => onCard(spot)}
+                />
+              )}
             </View>
           );
         }),
@@ -89,7 +145,7 @@ function Layout({ width, state, disabled, onCard, onStock }: Props & { width: nu
           disabled={disabled || state.stock.length === 0}
           onPress={onStock}
         />
-        <View style={{ width: cardWidth, gap: 4 }}>
+        <View ref={wasteRef} onLayout={measure} style={[{ width: cardWidth, gap: 4 }, drag?.over && styles.wasteOver]}>
           <Waste
             code={current?.code ?? null}
             play={current ? fresh.has(current.code.toUpperCase()) : false}
@@ -99,6 +155,17 @@ function Layout({ width, state, disabled, onCard, onStock }: Props & { width: nu
           <Text style={styles.streak}>Streak {state.streak}</Text>
         </View>
       </View>
+      {drag ? (
+        <View pointerEvents="none" style={[styles.ghost, { left: drag.left, top: drag.top }]}>
+          <PlayingCard
+            code={state.rows[drag.spot.row]?.[drag.spot.index] ?? ''}
+            width={cardWidth}
+            height={cardHeight}
+            passive
+            onPress={() => {}}
+          />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -125,6 +192,7 @@ function PlayingCard({
   play = false,
   delay = 0,
   disabled,
+  passive,
   onPress,
 }: {
   code: string;
@@ -134,6 +202,7 @@ function PlayingCard({
   play?: boolean;
   delay?: number;
   disabled?: boolean;
+  passive?: boolean;
   onPress: () => void;
 }) {
   const face = cardFace(code);
@@ -169,6 +238,7 @@ function PlayingCard({
       </View>
     );
   }
+  if (passive) return <View style={{ width, height }}>{flip}</View>;
   return (
     <Pressable
       accessibilityRole="button"
@@ -264,6 +334,9 @@ const styles = StyleSheet.create({
   },
   pending: { height: 360 },
   slot: { position: 'absolute' },
+  ghost: { position: 'absolute', zIndex: 40 },
+  hidden: { opacity: 0 },
+  wasteOver: { backgroundColor: 'rgba(212, 168, 75, 0.28)', borderRadius: 8 },
   piles: {
     position: 'absolute',
     left: 0,
