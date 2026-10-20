@@ -452,8 +452,8 @@ function Face({ code, small, marked }: { code: string; small?: boolean; marked?:
   const palette = facePalette(rank);
   return (
     <View style={[styles.card, small && styles.cardSmall, { backgroundColor: palette.bg }, wild && styles.wild, marked && styles.marked]}>
-      <Text style={[styles.corner, { color: palette.fg }]}>{wild ? 'B' : rank}</Text>
-      <Text style={[styles.pip, small && styles.pipSmall, { color: palette.fg }]}>{wild ? 'Beaux' : rank}</Text>
+      <Text style={[styles.corner, { color: palette.fg }]}>{wild ? 'W' : rank}</Text>
+      <Text style={[styles.pip, small && styles.pipSmall, { color: palette.fg }]}>{wild ? 'Wild' : rank}</Text>
     </View>
   );
 }
