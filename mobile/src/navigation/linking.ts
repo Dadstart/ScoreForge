@@ -27,6 +27,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
       Chess: 'chess/:gameId',
       Canasta: 'canasta/:gameId',
       Uneaux: 'uneaux/:gameId',
+      SkipBeaux: 'skip-beaux/:gameId',
       Reversi: 'reversi/:gameId',
       ChineseCheckers: 'chinese-checkers/:gameId',
       Klondike: 'klondike/:gameId',

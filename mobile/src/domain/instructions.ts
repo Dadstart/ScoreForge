@@ -109,6 +109,17 @@ const INSTRUCTIONS: Record<string, GameInstructions> = {
       'A pawn that reaches the far rank promotes. Checkmate wins. Stalemate, repetition, the fifty-move rule, and insufficient material are draws.',
     ],
   },
+  'skip-beaux': {
+    title: 'Skip-Beaux',
+    lines: [
+      'One to six players. Two to four get a stock pile of 30 cards. Five or six get 20. Only the top stock card is face up. Playing alone uses a stock of 30.',
+      'Draw until you have five cards. Build shared piles from 1 to 12. A Beaux card can be any number, including the 1 that starts a pile.',
+      'Play from your hand, the top of your stock, or the top of one of your four discard piles. A finished pile of 12 is cleared, and those cards refill the draw pile when it runs out.',
+      'If you play every card in your hand, draw five more and keep going. Discarding does not count. End the turn by discarding one hand card onto one of your discard piles.',
+      'Playing the last stock card scores 25, plus 5 for each card left in the other stock piles. The first player to 500 wins. A tie at 500 deals another hand. Alone, clearing the stock wins.',
+      'On separate devices, share the code and deal once everyone has joined. Pass and play deals as soon as the seats are filled.',
+    ],
+  },
   uneaux: {
     title: 'Uneaux',
     lines: [

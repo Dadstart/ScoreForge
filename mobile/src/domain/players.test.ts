@@ -111,6 +111,7 @@ describe('navigation and sync', () => {
     assert.equal(gameScreenForTemplate('chess'), 'Chess');
     assert.equal(gameScreenForTemplate('canasta'), 'Canasta');
     assert.equal(gameScreenForTemplate('uneaux'), 'Uneaux');
+    assert.equal(gameScreenForTemplate('skip-beaux'), 'SkipBeaux');
     assert.equal(gameScreenForTemplate('reversi'), 'Reversi');
     assert.equal(gameScreenForTemplate('chinese-checkers'), 'ChineseCheckers');
     assert.equal(gameScreenForTemplate('free-play'), 'Board');
