@@ -2,9 +2,10 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   addToMeld,
+  arrangeHand,
+  sortPlayerHand,
   canTakeDiscard,
   cardPoints,
-  compareCards,
   createCanastaState,
   dealCount,
   discard,
@@ -130,7 +131,7 @@ describe('canasta', () => {
   it('draws two cards for two players and one card for a larger table', () => {
     const pair = playState({ ada: ['4S#1'], bea: ['QS#1'] }, { phase: 'draw', stock: ['KS#1', '3H#2', 'QH#1', '8C#1'] });
     const both = ok(drawStock(pair, 'ada', named));
-    assert.deepEqual(both.hands.ada, ['KS#1', 'QH#1', '4S#1'].sort(compareCards));
+    assert.deepEqual(both.hands.ada, ['4S#1', 'KS#1', 'QH#1']);
     assert.deepEqual(both.redThrees.ada, ['3H#2']);
     assert.deepEqual(both.stock, ['8C#1']);
     assert.deepEqual(both.drawn, ['KS#1', '3H#2', 'QH#1']);
@@ -486,6 +487,32 @@ describe('canasta', () => {
     assert.equal(playing.turn, 'ada');
     assert.equal(playing.teams[0]?.total, 4400);
     assert.equal(playing.lastScores, null);
+  });
+
+  it('keeps a dragged hand order through a draw and a meld', () => {
+    const state = playState({
+      ada: ['4S#1', '4H#1', '4D#1', 'AS#1', 'KH#1'],
+      bea: ['QS#1'],
+    }, {
+      phase: 'draw',
+      stock: ['JS#1', 'QH#1'],
+      teams: [team('ada', { opened: true }), team('bea')],
+    });
+    const arranged = ok(arrangeHand(state, 'ada', ['KH#1', 'AS#1', '4S#1', '4H#1', '4D#1']));
+    assert.deepEqual(arranged.hands.ada, ['KH#1', 'AS#1', '4S#1', '4H#1', '4D#1']);
+    assert.equal(arranged.history, undefined);
+    const same = arrangeHand(arranged, 'ada', arranged.hands.ada ?? []);
+    assert.ok('state' in same && same.state === arranged);
+    assert.match(err(arrangeHand(arranged, 'ada', ['KH#1', 'AS#1'])), /hand/);
+    const drawn = ok(drawStock(arranged, 'ada', named));
+    assert.deepEqual(drawn.hands.ada, ['KH#1', 'AS#1', '4S#1', '4H#1', '4D#1', 'JS#1', 'QH#1']);
+    const melded = ok(meldNew(drawn, 'ada', ['4S#1', '4H#1', '4D#1'], named));
+    assert.deepEqual(melded.hands.ada, ['KH#1', 'AS#1', 'JS#1', 'QH#1']);
+    const sorted = ok(sortPlayerHand(melded, 'ada'));
+    assert.deepEqual(sorted.hands.ada, ['AS#1', 'KH#1', 'QH#1', 'JS#1']);
+    assert.equal(sorted.history, melded.history);
+    const again = sortPlayerHand(sorted, 'ada');
+    assert.ok('state' in again && again.state === sorted);
   });
 
   it('repairs a broken deal and leaves a healthy game alone', () => {

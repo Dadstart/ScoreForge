@@ -16,6 +16,8 @@ import {
   canTakeDiscard,
   createCanastaState,
   dealNext,
+  arrangeHand,
+  sortPlayerHand,
   discard,
   drawStock,
   ensureCanastaState,
@@ -133,6 +135,34 @@ export function CanastaScreen({ navigation, route }: Props) {
     <Button label="Undo" disabled={saving.current} onPress={() => void apply(undoMove(table))} />
   ) : null;
 
+  const saveLayout = (result: CanastaResult) => {
+    if ('error' in result) {
+      setError(result.error);
+      return;
+    }
+    if (result.state === table) return;
+    setError(null);
+    const next: Game = {
+      ...game,
+      canasta: result.state,
+      status: game.status,
+      updatedAt: new Date().toISOString(),
+    };
+    void persist(next, false);
+  };
+
+  const arrange = (order: readonly string[]) => {
+    if (!handOwnerId) return;
+    saveLayout(arrangeHand(table, handOwnerId, order));
+  };
+
+  const sortVisibleHand = () => {
+    if (!handOwnerId) return;
+    saveLayout(sortPlayerHand(table, handOwnerId));
+  };
+
+  const canSort = handOwnerId != null && (table.hands[handOwnerId]?.length ?? 0) > 1;
+
   const toggle = (card: string) => {
     setSelected((current) => {
       const next = new Set(current);
@@ -210,6 +240,7 @@ export function CanastaScreen({ navigation, route }: Props) {
             onDiscard={(card) => {
               if (handOwnerId) void apply(discard(table, handOwnerId, card, names, target));
             }}
+            onArrange={arrange}
             onDragChange={setDragging}
           />
         )}
@@ -236,6 +267,9 @@ export function CanastaScreen({ navigation, route }: Props) {
               }}
             />
             {undoButton}
+            {canSort ? (
+              <Button label="Sort hand" disabled={saving.current} onPress={sortVisibleHand} />
+            ) : null}
           </View>
         ) : null}
 
@@ -256,7 +290,12 @@ export function CanastaScreen({ navigation, route }: Props) {
               }}
             />
             {undoButton}
+            {canSort ? <Button label="Sort hand" disabled={saving.current} onPress={sortVisibleHand} /> : null}
           </View>
+        ) : null}
+
+        {canSort && !(canAct && (table.phase === 'draw' || (table.phase === 'play' && handOwnerId))) ? (
+          <Button label="Sort hand" disabled={saving.current} onPress={sortVisibleHand} />
         ) : null}
 
         {canUndo && !(canAct && (table.phase === 'draw' || table.phase === 'play')) ? undoButton : null}
@@ -280,8 +319,8 @@ export function CanastaScreen({ navigation, route }: Props) {
         ) : null}
 
         <Text style={styles.hint}>
-          Tap cards in your hand, then Meld. Drag a card onto the pack to discard it. Tap one of your melds to add the selected cards. Undo takes back the last
-          draw, meld, or discard. A wild card in the pack freezes it, and a black three on top blocks it.
+          Tap cards in your hand, then Meld. Drag cards around to arrange your hand, or use Sort hand to put them in rank order. Drag one onto the pack to discard it. Tap one of your melds to add the
+          selected cards. Undo takes back the last draw, meld, or discard. A wild card in the pack freezes it, and a black three on top blocks it.
         </Text>
 
         <PlaySpark sparks={sparks} />

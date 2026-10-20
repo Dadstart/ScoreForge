@@ -118,7 +118,7 @@ const INSTRUCTIONS: Record<string, GameInstructions> = {
       'You need 50 points to open, 90 from 1,500, 120 from 3,000, and 15 when your score is below zero. A canasta is seven cards of one rank.',
       'Red threes are laid down for 100 each, or 800 for all four. They count against you if your side never opens. A black three on top blocks the pack. A wild card in the pack freezes it.',
       'You need a canasta to go out. The first side to 5,000 wins. A tie at the target deals another hand.',
-      'Undo takes back the last draw, meld, or discard.',
+      'Undo takes back the last draw, meld, or discard. Drag cards in your hand to arrange them, or use Sort hand to put them in rank order.',
     ],
   },
   checkers: {

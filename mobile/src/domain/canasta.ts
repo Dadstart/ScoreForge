@@ -276,7 +276,7 @@ export function drawStock(state: CanastaState, playerId: string, players: readon
       drawn.push(card);
       continue;
     }
-    next.hands = { ...next.hands, [playerId]: sortHand([...(next.hands[playerId] ?? []), card]) };
+    next.hands = { ...next.hands, [playerId]: [...(next.hands[playerId] ?? []), card] };
     drawn.push(card);
     kept += 1;
   } while (kept < want && next.stock.length > 0);
@@ -299,7 +299,7 @@ export function takeDiscard(state: CanastaState, playerId: string, players: read
   let next = clone(state);
   const taken = next.discard;
   next.discard = [];
-  next.hands = { ...next.hands, [playerId]: sortHand([...(next.hands[playerId] ?? []), ...taken]) };
+  next.hands = { ...next.hands, [playerId]: [...(next.hands[playerId] ?? []), ...taken] };
   next = layRedThrees(next, playerId);
   next = enterPlay(next, true, top);
   const arrived = [
@@ -336,7 +336,7 @@ export function meldNew(state: CanastaState, playerId: string, cards: readonly s
   const blocked = goingOutBlock(state, remaining, teamAfter);
   if (blocked) return fail(blocked);
   let next = clone(state);
-  next.hands = { ...next.hands, [playerId]: sortHand(without(hand, unique)) };
+  next.hands = { ...next.hands, [playerId]: without(hand, unique) };
   next.teams = next.teams.map((entry, index) =>
     index === teamAt ? { ...entry, melds: [...entry.melds, meld] } : entry,
   );
@@ -382,7 +382,7 @@ export function addToMeld(
   const blocked = goingOutBlock(state, remaining, { ...team, opened: openedAfter, melds: meldsAfter });
   if (blocked) return fail(blocked);
   let next = clone(state);
-  next.hands = { ...next.hands, [playerId]: sortHand(without(hand, unique)) };
+  next.hands = { ...next.hands, [playerId]: without(hand, unique) };
   next.teams = next.teams.map((entry, index) => {
     if (index !== teamAt) return entry;
     const melds = entry.melds.map((item, itemIndex) => (itemIndex === meldIndex ? { ...item, cards: combined } : item));
@@ -394,6 +394,17 @@ export function addToMeld(
   const grown = next.teams[teamAt]?.melds[meldIndex];
   next.lastAction = `${nameOf(players, playerId)} adds to ${grown ? meldLabel(grown) : 'a meld'}.`;
   return { state: remember(state, finishIfEmpty(next, playerId, players, target)) };
+}
+
+export function arrangeHand(state: CanastaState, playerId: string, order: readonly string[]): CanastaResult {
+  const hand = state.hands[playerId] ?? [];
+  if (order.length !== hand.length || !containsAll(hand, order)) return fail('Those cards do not match your hand.');
+  if (order.every((card, index) => card === hand[index])) return { state };
+  return { state: { ...state, hands: { ...state.hands, [playerId]: [...order] } } };
+}
+
+export function sortPlayerHand(state: CanastaState, playerId: string): CanastaResult {
+  return arrangeHand(state, playerId, sortHand(state.hands[playerId] ?? []));
 }
 
 export function undoMove(state: CanastaState): CanastaResult {
@@ -680,7 +691,7 @@ function layRedThrees(state: CanastaState, playerId: string): CanastaState {
     };
     guard += 1;
   }
-  return { ...next, hands: { ...next.hands, [playerId]: sortHand(next.hands[playerId] ?? []) } };
+  return next;
 }
 
 function addOpening(state: CanastaState, teamAt: number, points: number): CanastaState {

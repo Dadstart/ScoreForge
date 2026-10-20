@@ -24,12 +24,14 @@ type Props = {
   onDraw: () => void;
   onTake: () => void;
   onDiscard: (card: string) => void;
+  onArrange: (order: readonly string[]) => void;
   onDragChange?: (dragging: boolean) => void;
 };
 
 const CARD_W = 54;
 const CARD_H = 76;
 const TAP_SLOP = 12;
+const HAND_GAP = 6;
 /** Distance between card centers that pulls the dragged card onto the pack. */
 const SNAP_IN = 120;
 const SNAP_OUT = 168;
@@ -45,6 +47,7 @@ export function CanastaBoard({
   onDraw,
   onTake,
   onDiscard,
+  onArrange,
   onDragChange,
 }: Props) {
   const frozen = state.discard.some(isWild);
@@ -52,16 +55,23 @@ export function CanastaBoard({
   const ownerTeam = handOwnerId ? teamIndex(state, handOwnerId) : -1;
   const hand = handOwnerId ? (state.hands[handOwnerId] ?? []) : [];
   const fresh = new Set(state.drawn ?? []);
-  const canDrag = canAct && state.phase === 'play';
+  const canDiscard = canAct && state.phase === 'play';
+  const canArrange = handOwnerId != null;
   const originRef = useRef<View>(null);
   const pileRef = useRef<View>(null);
+  const handRef = useRef<View>(null);
   const originBox = useRef<Box>({ x: 0, y: 0, width: 0, height: 0 });
   const pileBox = useRef<Box>({ x: 0, y: 0, width: 0, height: 0 });
+  const handBox = useRef<Box>({ x: 0, y: 0, width: 0, height: 0 });
+  const cards = useRef(hand);
+  cards.current = hand;
   const grab = useRef<{ card: string; ox: number; oy: number; x: number; y: number } | null>(null);
   const snapped = useRef(false);
+  const slotRef = useRef<number | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
-  const api = useRef({ onDiscard, onDragChange, onToggle });
-  api.current = { onDiscard, onDragChange, onToggle };
+  const [slot, setSlot] = useState<number | null>(null);
+  const api = useRef({ onDiscard, onArrange, onDragChange, onToggle, canDiscard });
+  api.current = { onDiscard, onArrange, onDragChange, onToggle, canDiscard };
   useEffect(() => () => setDragCursor(false), []);
 
   const measure = () => {
@@ -71,6 +81,23 @@ export function CanastaBoard({
     pileRef.current?.measureInWindow((x, y, width, height) => {
       pileBox.current = { x, y, width, height };
     });
+    handRef.current?.measureInWindow((x, y, width, height) => {
+      handBox.current = { x, y, width, height };
+    });
+  };
+
+  const slotFor = (pageX: number, pageY: number, ox: number, oy: number) => {
+    const box = handBox.current;
+    const count = cards.current.length;
+    if (box.width <= 0 || count === 0) return null;
+    const strideX = CARD_W + HAND_GAP;
+    const strideY = CARD_H + HAND_GAP;
+    const cols = Math.max(1, Math.floor((box.width + HAND_GAP) / strideX));
+    const centerX = pageX - ox + CARD_W / 2 - box.x;
+    const centerY = pageY - oy + CARD_H / 2 - box.y;
+    const col = Math.min(cols - 1, Math.max(0, Math.floor(centerX / strideX)));
+    const row = Math.max(0, Math.floor(centerY / strideY));
+    return Math.min(count - 1, row * cols + col);
   };
 
   const place = (pageX: number, pageY: number) => {
@@ -83,8 +110,15 @@ export function CanastaBoard({
     const pileX = pile.x + pile.width / 2;
     const pileY = pile.y + pile.height / 2;
     const distance = Math.hypot(centerX - pileX, centerY - pileY);
-    const near = pile.width > 0 && distance <= (snapped.current ? SNAP_OUT : SNAP_IN);
+    const near = api.current.canDiscard && pile.width > 0 && distance <= (snapped.current ? SNAP_OUT : SNAP_IN);
     snapped.current = near;
+    if (!near) {
+      const next = slotFor(pageX, pageY, held.ox, held.oy);
+      if (next != null && next !== slotRef.current) {
+        slotRef.current = next;
+        setSlot(next);
+      }
+    }
     setDrag({
       card: held.card,
       left: near ? pile.x - origin.x : pageX - held.ox - origin.x,
@@ -97,6 +131,9 @@ export function CanastaBoard({
     measure();
     grab.current = { card, ox, oy, x: pageX, y: pageY };
     snapped.current = false;
+    const index = cards.current.indexOf(card);
+    slotRef.current = index >= 0 ? index : null;
+    setSlot(slotRef.current);
     setDragCursor(true);
     api.current.onDragChange?.(true);
     place(pageX, pageY);
@@ -105,8 +142,11 @@ export function CanastaBoard({
   const end = (pageX: number, pageY: number, cancel = false) => {
     const held = grab.current;
     const locked = snapped.current;
+    const index = slotRef.current;
     grab.current = null;
     snapped.current = false;
+    slotRef.current = null;
+    setSlot(null);
     setDrag(null);
     setDragCursor(false);
     api.current.onDragChange?.(false);
@@ -116,7 +156,13 @@ export function CanastaBoard({
       api.current.onToggle(held.card);
       return;
     }
-    if (locked) api.current.onDiscard(held.card);
+    if (locked) {
+      api.current.onDiscard(held.card);
+      return;
+    }
+    if (index == null) return;
+    const order = moveCard(cards.current, held.card, index);
+    if (order.some((card, at) => card !== cards.current[at])) api.current.onArrange(order);
   };
 
   return (
@@ -198,14 +244,14 @@ export function CanastaBoard({
             ? `${players.find((player) => player.id === handOwnerId)?.name ?? 'Hand'} · ${hand.length}`
             : 'Hand hidden'}
         </Text>
-        <View style={styles.hand}>
-          {hand.map((card) => (
+        <View ref={handRef} onLayout={measure} style={styles.hand}>
+          {(drag && slot != null ? moveCard(hand, drag.card, slot) : hand).map((card) => (
             <HandCard
               key={card}
               code={card}
               selected={selected.has(card)}
               drawn={fresh.has(card)}
-              enabled={canDrag}
+              enabled={canArrange || canDiscard}
               hidden={drag?.card === card}
               onTap={() => onToggle(card)}
               onBegin={begin}
@@ -223,6 +269,12 @@ export function CanastaBoard({
       ) : null}
     </View>
   );
+}
+
+function moveCard(cards: readonly string[], card: string, index: number): string[] {
+  const next = cards.filter((item) => item !== card);
+  next.splice(Math.max(0, Math.min(index, next.length)), 0, card);
+  return next;
 }
 
 function HandCard({
@@ -421,7 +473,7 @@ const styles = StyleSheet.create({
   overlap: { marginLeft: -18 },
   emptySide: { fontSize: 12, color: '#d7e6df' },
   handBox: { gap: 8 },
-  hand: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  hand: { flexDirection: 'row', flexWrap: 'wrap', gap: HAND_GAP },
   hidden: { opacity: 0 },
   ghost: { position: 'absolute', zIndex: 30, elevation: 8 },
   card: {
