@@ -39,6 +39,7 @@ import {
 } from '../domain/models';
 import { nextSavedRevision } from '../domain/revisions';
 import { createSorryState } from '../domain/sorry';
+import { createParcheesiState } from '../domain/parcheesi';
 import { auth, db, ensureAnonymousAuth } from '../firebase/app';
 import { forgetShareCode, loadKnownShareCodes, rememberShareCode } from './knownCodesStore';
 import { recallSoloUndo, rememberSoloUndo } from './soloUndoStore';
@@ -60,6 +61,7 @@ type StoredGame = {
   maxRounds?: number | null;
   tokenSpaces?: Record<string, number>;
   sorry?: Game['sorry'];
+  parcheesi?: Game['parcheesi'];
   backgammon?: Game['backgammon'];
   checkers?: Game['checkers'];
   chess?: Game['chess'];
@@ -133,6 +135,7 @@ function toStored(game: Game): Record<string, unknown> {
     maxRounds: game.maxRounds ?? null,
     tokenSpaces: game.tokenSpaces ?? {},
     sorry: game.sorry ?? null,
+    parcheesi: game.parcheesi ?? null,
     backgammon: game.backgammon ?? null,
     checkers: game.checkers ?? null,
     chess: game.chess ?? null,
@@ -173,6 +176,7 @@ function fromStored(shareCode: string, data: StoredGame, events: ScoreEvent[]): 
     maxRounds: typeof data.maxRounds === 'number' ? data.maxRounds : null,
     tokenSpaces: data.tokenSpaces && typeof data.tokenSpaces === 'object' ? data.tokenSpaces : {},
     sorry: data.sorry ?? null,
+    parcheesi: data.parcheesi ?? null,
     backgammon: data.backgammon ?? null,
     checkers: data.checkers ?? null,
     chess: data.chess ?? null,
@@ -384,6 +388,7 @@ export async function createAndSaveGame(partial: {
       updatedAt: now,
     };
     if (partial.templateId === 'sorry') game.sorry = createSorryState(partial.players);
+    if (partial.templateId === 'parcheesi') game.parcheesi = createParcheesiState(partial.players);
     if (partial.templateId === 'backgammon') game.backgammon = createBackgammonState(partial.players);
     if (partial.templateId === 'checkers') {
       game.checkers = createCheckersState(partial.players, {

@@ -15,6 +15,7 @@ export const GAME_DOCUMENT_KEYS = [
   'maxRounds',
   'tokenSpaces',
   'sorry',
+  'parcheesi',
   'backgammon',
   'checkers',
   'chess',

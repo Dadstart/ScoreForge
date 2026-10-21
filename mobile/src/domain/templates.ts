@@ -99,6 +99,16 @@ export const templates: GameTemplate[] = [
     maxPlayers: 4,
   },
   {
+    id: 'parcheesi',
+    name: 'Parcheesi',
+    description:
+      'Race four pawns to the center. A 5 leaves the nest. Doubles roll again. The first player to bring every pawn home wins.',
+    scoringMode: 'Instant',
+    winCondition: 'Outcome',
+    minPlayers: 1,
+    maxPlayers: 4,
+  },
+  {
     id: 'backgammon',
     name: 'Backgammon',
     description:
