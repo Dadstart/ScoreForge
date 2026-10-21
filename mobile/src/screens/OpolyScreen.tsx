@@ -19,8 +19,8 @@ import { HomeButton } from '../components/HomeButton';
 import { ShareCodePanel } from '../components/ShareCodePanel';
 import { Badge, Button, Card, Field, Screen } from '../components/ui';
 import { withoutPlayer } from '../domain/addPlayer';
-import { deviceMayAct, findLocalPlayerId } from '../domain/localPlayer';
-import { useDeviceIdentity } from '../hooks/useLiveGame';
+import { deviceMayAct } from '../domain/localPlayer';
+import { useLiveGame } from '../hooks/useLiveGame';
 import { playModeOf,  type Game, createScoreEvent  } from '../domain/models';
 import {
   BANK_PARTY_ID,
@@ -92,10 +92,8 @@ import {
   type PlayOutcome,
 } from '../domain/opolyPlay';
 import { calculate } from '../domain/scoreCalculator';
-import { getTemplate } from '../domain/templates';
 import { usePlaySpark } from '../hooks/usePlaySpark';
-import { useWinCelebration } from '../hooks/useWinCelebration';
-import { addPlayerToGame, preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
+import { addPlayerToGame, preferNewerGame } from '../storage/gameStore';
 import { colors, radii, space, typography } from '../theme';
 import type { RootStackParamList } from '../navigation/types';
 
@@ -152,9 +150,21 @@ function cardKey(card: { deck: string; id: string; space: number }) {
 export function OpolyScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { gameId } = route.params;
-  const [game, setGame] = useState<Game | null>(null);
-  const { displayName, uid } = useDeviceIdentity();
-  const [error, setError] = useState<string | null>(null);
+  const {
+    game,
+    setGame,
+    template,
+    snapshot,
+    localPlayerId,
+    error,
+    setError,
+    commit,
+    showCelebration,
+    dismissCelebration,
+    beginSuppress,
+    endSuppress,
+    noteLocalResult,
+  } = useLiveGame(gameId);
   const [amount, setAmount] = useState('');
   const [auctionBid, setAuctionBid] = useState('');
   const [tradePartnerId, setTradePartnerId] = useState<string | null>(null);
@@ -205,14 +215,6 @@ export function OpolyScreen({ navigation, route }: Props) {
   const [cashDraft, setCashDraft] = useState('');
   const [tokenDraft, setTokenDraft] = useState(INITIAL_TOKEN);
   const [emojiDraft, setEmojiDraft] = useState('');
-  const {
-    showCelebration,
-    onSnapshot,
-    dismissCelebration,
-    beginSuppress,
-    endSuppress,
-    noteLocalResult,
-  } = useWinCelebration();
   const { sparks, spark } = usePlaySpark();
   const seenTokens = useRef<Record<string, number> | null>(null);
   const rollRef = useRef<(rolled: DiceRoll, doubles: number) => void>(() => {});
@@ -227,21 +229,6 @@ export function OpolyScreen({ navigation, route }: Props) {
       if (rollTimer.current) clearTimeout(rollTimer.current);
     };
   }, []);
-
-  useEffect(() => {
-    const unsub = subscribeGame(
-      gameId,
-      (found) => {
-        setGame((current) => (found ? preferNewerGame(current, found) : null));
-        if (found) {
-          const tmpl = getTemplate(found.templateId);
-          if (tmpl) onSnapshot(calculate(found, tmpl));
-        }
-      },
-      (err) => setError(err.message),
-    );
-    return unsub;
-  }, [gameId, onSnapshot]);
 
   useEffect(() => {
     if (!tokenPreview || !game) return;
@@ -263,11 +250,6 @@ export function OpolyScreen({ navigation, route }: Props) {
     if (reachedGo) spark('Go!', 'gold');
   }, [game, spark, tokenPreview]);
 
-  const template = game ? getTemplate(game.templateId) : undefined;
-  const snapshot = useMemo(
-    () => (game && template ? calculate(game, template) : null),
-    [game, template],
-  );
   const play = useMemo(() => {
     if (!game) return null;
     return game.monopoly ?? createOpolyPlay(game.players.map((player) => player.id));
@@ -281,10 +263,6 @@ export function OpolyScreen({ navigation, route }: Props) {
     const pending = play?.pending?.kind === 'card' ? cardKey(play.pending) : null;
     if (pending !== closedCard) setClosedCard(null);
   }, [play, closedCard]);
-  const localPlayerId = useMemo(
-    () => (game ? findLocalPlayerId(game, displayName, uid) : null),
-    [game, displayName, uid],
-  );
   const knownParty = (id: string | null) =>
     id === BANK_PARTY_ID || (game?.players.some((player) => player.id === id) ?? false);
   const resolvedPayer =
@@ -294,11 +272,6 @@ export function OpolyScreen({ navigation, route }: Props) {
   const resolvedReceiver = knownParty(receiverId) ? receiverId : BANK_PARTY_ID;
   const property = getProperty(propertyId) ?? properties[0];
   const diceTotal = parseDice(dice);
-
-  const persist = async (next: Game) => {
-    const saved = await saveGame(next);
-    setGame((current) => preferNewerGame(current, saved));
-  };
 
   const rollForPlayerRef = useRef<() => void>(() => {});
   const canActRef = useRef(false);
@@ -387,40 +360,28 @@ export function OpolyScreen({ navigation, route }: Props) {
   const canBank = !complete;
   const sameParty = resolvedPayer === resolvedReceiver;
 
-  const applyGame = async (mutator: (g: Game) => Game, opts?: { suppressWin?: boolean }): Promise<boolean> => {
-    const next = mutator({
-      ...game,
-      players: [...game.players],
-      events: [...game.events],
-    });
-    const snap = calculate(next, template);
-    if (snap.isComplete) next.status = 'Completed';
-    else if (next.status === 'Completed' && !snap.isComplete) next.status = 'InProgress';
-
-    const newlyComplete = snap.isComplete && game.status !== 'Completed';
-    if ((opts?.suppressWin && !newlyComplete) || !snap.isComplete) {
-      beginSuppress();
-      try {
-        noteLocalResult(snap);
-        await persist(next);
-        setError(null);
-        return true;
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Autosave failed');
-        return false;
-      } finally {
-        endSuppress(snap.isComplete);
-      }
-    }
-
-    noteLocalResult(snap);
+  const applyGame = (mutator: (g: Game) => Game, opts?: { suppressWin?: boolean }): Promise<boolean> => {
+    let finished = false;
+    const suppress = Boolean(opts?.suppressWin);
+    if (suppress) beginSuppress();
     try {
-      await persist(next);
-      setError(null);
-      return true;
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Autosave failed');
-      return false;
+      const saved = commit((current) => {
+        const next = mutator({
+          ...current,
+          players: [...current.players],
+          events: [...current.events],
+        });
+        const snap = calculate(next, template);
+        if (snap.isComplete) next.status = 'Completed';
+        else if (next.status === 'Completed' && !snap.isComplete) next.status = 'InProgress';
+        finished = snap.isComplete;
+        noteLocalResult(snap);
+        setError(null);
+        return next;
+      }, false);
+      return Promise.resolve(saved);
+    } finally {
+      if (suppress) endSuppress(finished);
     }
   };
   applyGameRef.current = applyGame;

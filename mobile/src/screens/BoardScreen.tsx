@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -10,17 +10,13 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { FireworksOverlay } from '../components/FireworksOverlay';
 import { AddPlayerModal } from '../components/AddPlayerModal';
-import { GameHelp } from '../components/GameHelp';
-import { HomeButton } from '../components/HomeButton';
-import { ShareCodePanel } from '../components/ShareCodePanel';
+import { GameBanner, GameHeader } from '../components/GameChrome';
 import { Badge, Button, Field, Screen } from '../components/ui';
-import { findLocalPlayerId, nextRoundForPlayer } from '../domain/localPlayer';
-import { useDeviceIdentity } from '../hooks/useLiveGame';
-import { playModeOf,  createScoreEvent, type Game  } from '../domain/models';
+import { nextRoundForPlayer } from '../domain/localPlayer';
+import { useLiveGame } from '../hooks/useLiveGame';
+import { playModeOf, createScoreEvent, type Game } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
-import { getTemplate } from '../domain/templates';
-import { useWinCelebration } from '../hooks/useWinCelebration';
-import { addPlayerToGame, preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
+import { addPlayerToGame, preferNewerGame } from '../storage/gameStore';
 import { colors, radii, space, typography } from '../theme';
 import type { RootStackParamList } from '../navigation/types';
 
@@ -28,56 +24,25 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Board'>;
 
 export function BoardScreen({ navigation, route }: Props) {
   const { gameId } = route.params;
-  const [game, setGame] = useState<Game | null>(null);
-  const { displayName, uid } = useDeviceIdentity();
-  const [error, setError] = useState<string | null>(null);
-  const [enteringScore, setEnteringScore] = useState(false);
-  const [myRoundScore, setMyRoundScore] = useState('0');
-  const [addingPlayer, setAddingPlayer] = useState(false);
   const {
+    game,
+    setGame,
+    template,
+    snapshot,
+    localPlayerId,
+    error,
+    setError,
+    commit,
     showCelebration,
-    onSnapshot,
     dismissCelebration,
     beginSuppress,
     endSuppress,
     noteLocalResult,
-  } = useWinCelebration();
-
-  useEffect(() => {
-    const unsub = subscribeGame(
-      gameId,
-      (next) => {
-        setGame((current) => (next ? preferNewerGame(current, next) : null));
-        if (next) {
-          const tmpl = getTemplate(next.templateId);
-          if (tmpl) onSnapshot(calculate(next, tmpl));
-        }
-      },
-      (err) => setError(err.message),
-    );
-    return unsub;
-  }, [gameId, onSnapshot]);
-
-  const template = game ? getTemplate(game.templateId) : undefined;
-  const snapshot = useMemo(
-    () => (game && template ? calculate(game, template) : null),
-    [game, template],
-  );
-  const localPlayerId = useMemo(
-    () => (game ? findLocalPlayerId(game, displayName, uid) : null),
-    [game, displayName, uid],
-  );
+  } = useLiveGame(gameId);
+  const [enteringScore, setEnteringScore] = useState(false);
+  const [myRoundScore, setMyRoundScore] = useState('0');
+  const [addingPlayer, setAddingPlayer] = useState(false);
   const localPlayer = game?.players.find((p) => p.id === localPlayerId) ?? null;
-
-  const persist = async (next: Game) => {
-    try {
-      const saved = await saveGame(next);
-      setGame((current) => preferNewerGame(current, saved));
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Autosave failed');
-    }
-  };
 
   if (!game || !template || !snapshot) {
     return (
@@ -93,29 +58,27 @@ export function BoardScreen({ navigation, route }: Props) {
   const isRounds = template.scoringMode === 'Rounds';
   const complete = snapshot.isComplete;
 
-  const applyGame = async (mutator: (g: Game) => Game, opts?: { suppressWin?: boolean }) => {
-    const next = mutator({
-      ...game,
-      players: [...game.players],
-      events: [...game.events],
-    });
-    const snap = calculate(next, template);
-    if (snap.isComplete) next.status = 'Completed';
-    else if (next.status === 'Completed' && !snap.isComplete) next.status = 'InProgress';
-
-    if (opts?.suppressWin || !snap.isComplete) {
-      beginSuppress();
-      try {
+  const applyGame = (mutator: (g: Game) => Game, opts?: { suppressWin?: boolean }) => {
+    let finished = false;
+    const suppress = Boolean(opts?.suppressWin);
+    if (suppress) beginSuppress();
+    try {
+      commit((current) => {
+        const next = mutator({
+          ...current,
+          players: [...current.players],
+          events: [...current.events],
+        });
+        const snap = calculate(next, template);
+        if (snap.isComplete) next.status = 'Completed';
+        else if (next.status === 'Completed' && !snap.isComplete) next.status = 'InProgress';
+        finished = snap.isComplete;
         noteLocalResult(snap);
-        await persist(next);
-      } finally {
-        endSuppress(snap.isComplete);
-      }
-      return;
+        return next;
+      }, false);
+    } finally {
+      if (suppress) endSuppress(finished);
     }
-
-    noteLocalResult(snap);
-    await persist(next);
   };
 
   const adjust = async (playerId: string, delta: number) => {
@@ -186,19 +149,16 @@ export function BoardScreen({ navigation, route }: Props) {
     <Screen>
       <View>
         <View style={styles.content}>
-          <View style={styles.header}>
-            <View style={{ flex: 1, gap: 4 }}>
-              <Text style={typography.title}>{game.name}</Text>
-              <Badge label={template.name} tone="accent" />
-            </View>
-            <GameHelp templateId={template.id} />
-            <ShareCodePanel shareCode={game.shareCode} passAndPlay={playModeOf(game) === 'pass-and-play'} />
-            <HomeButton onPress={() => navigation.navigate('Home')} />
-          </View>
+          <GameHeader
+            name={game.name}
+            badge={template.name}
+            templateId={template.id}
+            shareCode={game.shareCode}
+            passAndPlay={playModeOf(game) === 'pass-and-play'}
+            onHome={() => navigation.navigate('Home')}
+          />
 
-          <View style={styles.banner}>
-            <Text style={styles.bannerText}>{banner}</Text>
-          </View>
+          <GameBanner title={banner} />
 
           <View style={styles.row}>
             <Button label="Undo" onPress={() => void undo()} disabled={!localPlayerId} />

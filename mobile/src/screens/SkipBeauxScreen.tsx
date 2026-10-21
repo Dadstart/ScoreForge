@@ -4,12 +4,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AddPlayerModal } from '../components/AddPlayerModal';
 import { FireworksOverlay } from '../components/FireworksOverlay';
-import { GameHelp } from '../components/GameHelp';
-import { HomeButton } from '../components/HomeButton';
+import { GameHeader } from '../components/GameChrome';
 import { PlaySpark } from '../components/PlaySpark';
-import { ShareCodePanel } from '../components/ShareCodePanel';
 import { SkipBeauxBoard } from '../components/SkipBeauxBoard';
-import { Badge, Button, Screen } from '../components/ui';
+import { Button, Screen } from '../components/ui';
 import { deviceMayAct } from '../domain/localPlayer';
 import { playModeOf, type Game } from '../domain/models';
 import {
@@ -27,7 +25,7 @@ import { useLiveGame } from '../hooks/useLiveGame';
 import { usePlaySpark } from '../hooks/usePlaySpark';
 import type { RootStackParamList } from '../navigation/types';
 import { addPlayerToGame, preferNewerGame } from '../storage/gameStore';
-import { colors, radii, space, typography } from '../theme';
+import { colors, radii, space } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SkipBeaux'>;
 
@@ -42,7 +40,7 @@ export function SkipBeauxScreen({ navigation, route }: Props) {
     error,
     setError,
     saving,
-    persist,
+    commit,
     showCelebration,
     dismissCelebration,
   } = useLiveGame(route.params.gameId, {
@@ -89,19 +87,23 @@ export function SkipBeauxScreen({ navigation, route }: Props) {
   const canDeal = (table.phase === 'waiting' || table.phase === 'handOver') && (passAndPlay || seated);
   const handEmpty = table.turn != null && (table.hands[table.turn]?.length ?? 0) === 0;
 
-  const apply = async (result: SkipBeauxResult) => {
-    if ('error' in result) {
-      setError(result.error);
-      return;
-    }
-    setError(null);
-    const next: Game = {
-      ...game,
-      skipBeaux: result.state,
-      status: result.state.phase === 'gameOver' ? 'Completed' : 'InProgress',
-      updatedAt: new Date().toISOString(),
-    };
-    await persist(next, result.state.phase === 'gameOver');
+  const apply = (build: (current: NonNullable<Game['skipBeaux']>) => SkipBeauxResult) => {
+    commit((current) => {
+      const board = current.skipBeaux;
+      if (!board) return null;
+      const result = build(board);
+      if ('error' in result) {
+        setError(result.error);
+        return null;
+      }
+      setError(null);
+      return {
+        ...current,
+        skipBeaux: result.state,
+        status: result.state.phase === 'gameOver' ? 'Completed' : 'InProgress',
+        updatedAt: new Date().toISOString(),
+      };
+    }, (next) => next.skipBeaux?.phase === 'gameOver');
   };
 
   const banner =
@@ -120,15 +122,14 @@ export function SkipBeauxScreen({ navigation, route }: Props) {
   return (
     <Screen>
       <View style={[styles.screen, { paddingTop: 8, paddingBottom: Math.max(insets.bottom, 12) }]}>
-        <View style={styles.header}>
-          <View style={{ flex: 1, gap: 4 }}>
-            <Text style={typography.title}>{game.name}</Text>
-            <Badge label="Skip-Beaux" tone="accent" />
-          </View>
-          <GameHelp templateId="skip-beaux" />
-          <ShareCodePanel shareCode={game.shareCode} passAndPlay={passAndPlay} />
-          <HomeButton onPress={() => navigation.navigate('Home')} />
-        </View>
+        <GameHeader
+          name={game.name}
+          badge="Skip-Beaux"
+          templateId="skip-beaux"
+          shareCode={game.shareCode}
+          passAndPlay={passAndPlay}
+          onHome={() => navigation.navigate('Home')}
+        />
 
         <View style={styles.banner}>
           <Text style={styles.bannerText}>{banner}</Text>
@@ -146,10 +147,16 @@ export function SkipBeauxScreen({ navigation, route }: Props) {
             handOwnerId={handOwnerId}
             canAct={canAct}
             onPlay={(source: CardSource, building) => {
-              if (table.turn) void apply(playBuilding(table, table.turn, source, building, names));
+              apply((board) =>
+                board.turn
+                  ? playBuilding(board, board.turn, source, building, names)
+                  : { error: 'Wait for your turn.' },
+              );
             }}
             onDiscard={(card, pile) => {
-              if (table.turn) void apply(discardCard(table, table.turn, card, pile, names));
+              apply((board) =>
+                board.turn ? discardCard(board, board.turn, card, pile, names) : { error: 'Wait for your turn.' },
+              );
             }}
           />
         )}
@@ -163,14 +170,14 @@ export function SkipBeauxScreen({ navigation, route }: Props) {
               label="End turn"
               variant="secondary"
               disabled={saving.current}
-              onPress={() => void apply(endTurn(table, table.turn as string, names))}
+              onPress={() => apply((board) => endTurn(board, board.turn as string, names))}
             />
           ) : null}
           {table.phase === 'waiting' && canDeal ? (
-            <Button label="Deal the cards" variant="primary" disabled={saving.current} onPress={() => void apply(dealGame(names))} />
+            <Button label="Deal the cards" variant="primary" disabled={saving.current} onPress={() => apply(() => dealGame(names))} />
           ) : null}
           {table.phase === 'handOver' && canDeal ? (
-            <Button label="Deal the next hand" variant="primary" disabled={saving.current} onPress={() => void apply(dealNext(table, names))} />
+            <Button label="Deal the next hand" variant="primary" disabled={saving.current} onPress={() => apply((board) => dealNext(board, names))} />
           ) : null}
           {table.phase === 'gameOver' && (passAndPlay || seated) ? (
             <Button
@@ -178,8 +185,7 @@ export function SkipBeauxScreen({ navigation, route }: Props) {
               variant="primary"
               disabled={saving.current}
               onPress={() => {
-                const fresh = createSkipBeauxState(names);
-                void apply({ state: { ...fresh, totals: Object.fromEntries(names.map((player) => [player.id, 0])) } });
+                apply(() => ({ state: createSkipBeauxState(names) }));
               }}
             />
           ) : null}

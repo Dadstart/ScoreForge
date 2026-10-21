@@ -26,7 +26,7 @@ import {
   type KlondikeState,
   type Source,
 } from '../domain/klondike';
-import { playModeOf, type Game } from '../domain/models';
+import { playModeOf } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import { useLiveGame } from '../hooks/useLiveGame';
 import { usePlaySpark } from '../hooks/usePlaySpark';
@@ -44,7 +44,7 @@ export function KlondikeScreen({ navigation, route }: Props) {
     template,
     snapshot,
     error,
-    persist,
+    commit,
     showCelebration,
     dismissCelebration,
     beginSuppress,
@@ -97,38 +97,34 @@ export function KlondikeScreen({ navigation, route }: Props) {
       ? 'No moves left'
       : `${home} of 52 · ${klondike.moves} ${klondike.moves === 1 ? 'move' : 'moves'}`;
 
-  const apply = async (nextKlondike: KlondikeState) => {
-    const next: Game = {
-      ...game,
-      klondike: nextKlondike,
-      status: nextKlondike.won ? 'Completed' : 'InProgress',
-      updatedAt: new Date().toISOString(),
-    };
-    await persist(next, true);
-  };
+  const apply = (change: (board: KlondikeState) => KlondikeState | null) =>
+    commit((current) => {
+      const board = current.klondike;
+      if (!board) return null;
+      const next = change(board);
+      if (!next) return null;
+      return {
+        ...current,
+        klondike: next,
+        status: next.won ? 'Completed' : 'InProgress',
+        updatedAt: new Date().toISOString(),
+      };
+    }, (next) => Boolean(next.klondike?.won));
 
   const tryMove = (source: Source | null, dest: Dest | null) => {
-    if (!source || !dest || klondike.won) return false;
-    const next = play(klondike, source, dest);
-    if (!next) return false;
-    void apply(next);
-    return true;
+    if (!source || !dest) return false;
+    return apply((board) => (board.won ? null : play(board, source, dest)));
   };
 
   const onStock = () => {
-    if (klondike.won) return;
-    const next = drawStock(klondike);
-    if (next) void apply(next);
+    apply((board) => (board.won ? null : drawStock(board)));
   };
 
   const onWaste = () => {
     const source: Source = { pile: 'waste' };
     if (selection?.pile === 'waste') {
-      const built = buildFoundation(klondike, source);
-      if (built) {
-        void apply(built);
-        return;
-      }
+      const built = apply((board) => buildFoundation(board, source));
+      if (built) return;
     }
     setSelection(klondike.waste.length > 0 ? source : null);
   };
@@ -144,11 +140,7 @@ export function KlondikeScreen({ navigation, route }: Props) {
     const dest: Dest = { pile: 'tableau', index };
     if (tryMove(selection, dest)) return;
     if (selection?.pile === 'tableau' && selection.index === index && selection.at === at) {
-      const built = buildFoundation(klondike, selection);
-      if (built) {
-        void apply(built);
-        return;
-      }
+      if (apply((board) => buildFoundation(board, selection))) return;
     }
     if (at < 0) {
       setSelection(null);
@@ -159,31 +151,31 @@ export function KlondikeScreen({ navigation, route }: Props) {
   };
 
   const onUndo = () => {
-    const next = undo(klondike);
-    if (next) void apply(next);
+    apply((board) => undo(board));
   };
 
   const onFinish = () => {
-    const next = finish(klondike);
-    if (next) void apply(next);
+    apply((board) => finish(board));
   };
 
-  const onDeal = async () => {
+  const onDeal = () => {
     if (!klondike.won && klondike.moves > 0 && !confirmDeal) {
       setConfirmDeal(true);
       return;
     }
-    const next: Game = {
-      ...game,
-      klondike: createKlondikeState(klondike.drawCount),
-      status: 'InProgress',
-      updatedAt: new Date().toISOString(),
-    };
     beginSuppress();
     setConfirmDeal(false);
     try {
-      noteLocalResult(calculate(next, template));
-      await persist(next, false);
+      commit((current) => {
+        const next = {
+          ...current,
+          klondike: createKlondikeState(current.klondike?.drawCount === 3 ? 3 : 1),
+          status: 'InProgress' as const,
+          updatedAt: new Date().toISOString(),
+        };
+        noteLocalResult(calculate(next, template));
+        return next;
+      }, false);
     } finally {
       endSuppress(false);
     }
