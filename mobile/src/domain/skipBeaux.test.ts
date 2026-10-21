@@ -44,9 +44,7 @@ function table(extra?: Partial<SkipBeauxState>): SkipBeauxState {
     turn: extra?.turn === undefined ? 'ada' : extra.turn,
     phase: extra?.phase ?? 'play',
     handNumber: extra?.handNumber ?? 1,
-    totals: extra?.totals ?? { ada: 0, bea: 0 },
     lastAction: extra?.lastAction ?? null,
-    lastScores: extra?.lastScores ?? null,
     wentOut: extra?.wentOut ?? null,
   };
 }
@@ -122,7 +120,6 @@ describe('skip-beaux', () => {
     const won = ok(playBuilding(out, 'ada', { zone: 'stock' }, 0, named));
     assert.equal(won.phase, 'gameOver');
     assert.equal(won.wentOut, 'ada');
-    assert.equal(won.totals.ada, 0);
     assert.deepEqual(winnerIds(won), ['ada']);
   });
 
@@ -186,7 +183,6 @@ describe('skip-beaux', () => {
           hands: { ada: [] },
           stocks: { ada: ['1#1'] },
           discards: { ada: slots() },
-          totals: { ada: 0 },
         }),
         'ada',
         { zone: 'stock' },

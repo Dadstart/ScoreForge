@@ -48,7 +48,7 @@ export function UneauxScreen({ navigation, route }: Props) {
     error,
     setError,
     saving,
-    persist,
+    commit,
     showCelebration,
     dismissCelebration,
   } = useLiveGame(route.params.gameId, {
@@ -121,19 +121,23 @@ export function UneauxScreen({ navigation, route }: Props) {
   const canPlayDrawn =
     canAct && table.phase === 'play' && drawnCard != null && table.turn != null && canPlayCard(table, table.turn, drawnCard);
 
-  const apply = async (result: UneauxResult) => {
-    if ('error' in result) {
-      setError(result.error);
-      return;
-    }
-    setError(null);
-    const next: Game = {
-      ...game,
-      uneaux: result.state,
-      status: result.state.phase === 'gameOver' ? 'Completed' : 'InProgress',
-      updatedAt: new Date().toISOString(),
-    };
-    await persist(next, result.state.phase === 'gameOver');
+  const apply = (build: (board: NonNullable<Game['uneaux']>) => UneauxResult) => {
+    commit((current) => {
+      const board = current.uneaux;
+      if (!board) return null;
+      const result = build(board);
+      if ('error' in result) {
+        setError(result.error);
+        return null;
+      }
+      setError(null);
+      return {
+        ...current,
+        uneaux: result.state,
+        status: result.state.phase === 'gameOver' ? 'Completed' : 'InProgress',
+        updatedAt: new Date().toISOString(),
+      };
+    }, (next) => next.uneaux?.phase === 'gameOver');
   };
 
   const banner =
@@ -193,13 +197,17 @@ export function UneauxScreen({ navigation, route }: Props) {
             handOwnerId={handOwnerId}
             canAct={canAct}
             onPlay={(card) => {
-              if (table.turn) void apply(playCard(table, table.turn, card, names));
+              apply((board) =>
+                board.turn ? playCard(board, board.turn, card, names) : { error: 'Wait for your turn.' },
+              );
             }}
             onDraw={() => {
-              if (table.turn) void apply(drawCard(table, table.turn, names));
+              apply((board) => (board.turn ? drawCard(board, board.turn, names) : { error: 'Wait for your turn.' }));
             }}
             onColor={(color: UneauxColor) => {
-              if (table.turn) void apply(chooseColor(table, table.turn, color, names));
+              apply((board) =>
+                board.turn ? chooseColor(board, board.turn, color, names) : { error: 'Wait for your turn.' },
+              );
             }}
           />
         )}
@@ -213,7 +221,7 @@ export function UneauxScreen({ navigation, route }: Props) {
               label="Call Uneaux"
               variant="primary"
               disabled={saving.current}
-              onPress={() => void apply(callUneaux(table, caller, names))}
+              onPress={() => apply((board) => callUneaux(board, caller, names))}
             />
           ) : null}
           {canCatch && table.turn ? (
@@ -221,7 +229,7 @@ export function UneauxScreen({ navigation, route }: Props) {
               label="Catch"
               variant="secondary"
               disabled={saving.current}
-              onPress={() => void apply(catchUneaux(table, table.turn as string, names))}
+              onPress={() => apply((board) => catchUneaux(board, board.turn as string, names))}
             />
           ) : null}
           {canAct && table.phase === 'play' && table.drawn == null && table.turn ? (
@@ -229,7 +237,7 @@ export function UneauxScreen({ navigation, route }: Props) {
               label="Draw"
               variant="secondary"
               disabled={saving.current}
-              onPress={() => void apply(drawCard(table, table.turn as string, names))}
+              onPress={() => apply((board) => drawCard(board, board.turn as string, names))}
             />
           ) : null}
           {canPlayDrawn && drawnCard && table.turn ? (
@@ -237,7 +245,7 @@ export function UneauxScreen({ navigation, route }: Props) {
               label={`Play ${cardLabel(drawnCard)}`}
               variant="primary"
               disabled={saving.current}
-              onPress={() => void apply(playCard(table, table.turn as string, drawnCard, names))}
+              onPress={() => apply((board) => playCard(board, board.turn as string, drawnCard, names))}
             />
           ) : null}
           {canAct && table.phase === 'play' && table.drawn != null && table.turn ? (
@@ -245,11 +253,11 @@ export function UneauxScreen({ navigation, route }: Props) {
               label="Pass"
               variant="secondary"
               disabled={saving.current}
-              onPress={() => void apply(passTurn(table, table.turn as string, names))}
+              onPress={() => apply((board) => passTurn(board, board.turn as string, names))}
             />
           ) : null}
           {canDeal ? (
-            <Button label="Deal the next hand" variant="primary" disabled={saving.current} onPress={() => void apply(dealNext(table, names))} />
+            <Button label="Deal the next hand" variant="primary" disabled={saving.current} onPress={() => apply((board) => dealNext(board, names))} />
           ) : null}
           {table.phase === 'gameOver' && (passAndPlay || seated) ? (
             <Button
@@ -257,8 +265,10 @@ export function UneauxScreen({ navigation, route }: Props) {
               variant="primary"
               disabled={saving.current}
               onPress={() => {
-                const fresh = createUneauxState(names);
-                void apply({ state: { ...fresh, totals: Object.fromEntries(names.map((player) => [player.id, 0])) } });
+                apply(() => {
+                  const fresh = createUneauxState(names);
+                  return { state: { ...fresh, totals: Object.fromEntries(names.map((player) => [player.id, 0])) } };
+                });
               }}
             />
           ) : null}

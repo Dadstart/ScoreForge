@@ -12,18 +12,13 @@ import { AddPlayerModal } from '../components/AddPlayerModal';
 import { CribbageBoard, type CribbagePegPlayer } from '../components/CribbageBoard';
 import { FireworksOverlay } from '../components/FireworksOverlay';
 import { PlaySpark } from '../components/PlaySpark';
-import { GameHelp } from '../components/GameHelp';
-import { HomeButton } from '../components/HomeButton';
-import { ShareCodePanel } from '../components/ShareCodePanel';
-import { Badge, Button, Screen } from '../components/ui';
-import { findLocalPlayerId } from '../domain/localPlayer';
-import { useDeviceIdentity } from '../hooks/useLiveGame';
-import { playModeOf,  createScoreEvent, type Game  } from '../domain/models';
+import { GameBanner, GameError, GameHeader } from '../components/GameChrome';
+import { Button, Screen } from '../components/ui';
+import { useLiveGame } from '../hooks/useLiveGame';
+import { playModeOf, createScoreEvent, type Game } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
-import { getTemplate } from '../domain/templates';
 import { usePlaySpark } from '../hooks/usePlaySpark';
-import { useWinCelebration } from '../hooks/useWinCelebration';
-import { addPlayerToGame, preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
+import { addPlayerToGame, preferNewerGame } from '../storage/gameStore';
 import { colors, radii, space, typography } from '../theme';
 import type { RootStackParamList } from '../navigation/types';
 
@@ -35,41 +30,24 @@ const QUICK = [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 15, 16];
 export function CribbageScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { gameId } = route.params;
-  const [game, setGame] = useState<Game | null>(null);
-  const { displayName, uid } = useDeviceIdentity();
-  const [error, setError] = useState<string | null>(null);
-  const [addingPlayer, setAddingPlayer] = useState(false);
   const {
+    game,
+    setGame,
+    template,
+    snapshot,
+    localPlayerId,
+    error,
+    setError,
+    commit,
     showCelebration,
-    onSnapshot,
     dismissCelebration,
     beginSuppress,
     endSuppress,
     noteLocalResult,
-  } = useWinCelebration();
+  } = useLiveGame(gameId);
+  const [addingPlayer, setAddingPlayer] = useState(false);
   const { sparks, spark } = usePlaySpark();
-
-  useEffect(() => {
-    const unsub = subscribeGame(
-      gameId,
-      (found) => {
-        setGame((current) => (found ? preferNewerGame(current, found) : null));
-        if (found) {
-          const tmpl = getTemplate(found.templateId);
-          if (tmpl) onSnapshot(calculate(found, tmpl));
-        }
-      },
-      (err) => setError(err.message),
-    );
-    return unsub;
-  }, [gameId, onSnapshot]);
-
-  const template = game ? getTemplate(game.templateId) : undefined;
   const target = game?.targetScore ?? template?.defaultTargetScore ?? 121;
-  const snapshot = useMemo(
-    () => (game && template ? calculate(game, template) : null),
-    [game, template],
-  );
   const seenPegs = useRef<number | null>(null);
   useEffect(() => {
     if (!game) return;
@@ -82,11 +60,6 @@ export function CribbageScreen({ navigation, route }: Props) {
     if (count > seenPegs.current && last && last.points > 0) spark(`+${last.points}`, 'gold');
     seenPegs.current = count;
   }, [game, spark]);
-
-  const localPlayerId = useMemo(
-    () => (game ? findLocalPlayerId(game, displayName, uid) : null),
-    [game, displayName, uid],
-  );
 
   const pegPlayers: CribbagePegPlayer[] = useMemo(() => {
     if (!game || !snapshot) return [];
@@ -112,66 +85,56 @@ export function CribbageScreen({ navigation, route }: Props) {
 
   const localPlayer = pegPlayers.find((p) => p.id === localPlayerId) ?? null;
 
-  const persist = async (next: Game) => {
-    const saved = await saveGame(next);
-    setGame((current) => preferNewerGame(current, saved));
-  };
-
-  const peg = async (points: number) => {
-    if (!game || !template || !localPlayerId || !localPlayer || snapshot?.isComplete) return;
-
+  const peg = (points: number) => {
+    if (!template || !localPlayerId || !localPlayer || snapshot?.isComplete) return;
     let delta = points;
     if (localPlayer.total + delta < 0) delta = -localPlayer.total;
     if (delta === 0) return;
-
-    const next: Game = {
-      ...game,
-      events: [...game.events, createScoreEvent(localPlayerId, delta)],
-    };
-    const snap = calculate(next, template);
-    if (snap.isComplete) next.status = 'Completed';
-    noteLocalResult(snap);
-
-    try {
-      await persist(next);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Autosave failed');
-    }
-  };
-
-  const undo = async () => {
-    if (!game || !template || !localPlayerId || game.events.length === 0) return;
-    const last = game.events[game.events.length - 1];
-    if (last.playerId !== localPlayerId) {
-      setError('You can only undo your own last peg.');
-      return;
-    }
-    const next: Game = { ...game, events: game.events.slice(0, -1) };
-    const snap = calculate(next, template);
-    next.status = snap.isComplete ? 'Completed' : 'InProgress';
-    beginSuppress();
     setError(null);
-    try {
+    commit((current) => {
+      const next: Game = {
+        ...current,
+        events: [...current.events, createScoreEvent(localPlayerId, delta)],
+      };
+      const snap = calculate(next, template);
+      if (snap.isComplete) next.status = 'Completed';
       noteLocalResult(snap);
-      await persist(next);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Autosave failed');
+      return next;
+    }, false);
+  };
+
+  const undo = () => {
+    if (!template || !localPlayerId) return;
+    beginSuppress();
+    setError(null);
+    let finished = false;
+    try {
+      const moved = commit((current) => {
+        const last = current.events[current.events.length - 1];
+        if (!last || last.playerId !== localPlayerId) return null;
+        const next: Game = { ...current, events: current.events.slice(0, -1) };
+        const snap = calculate(next, template);
+        next.status = snap.isComplete ? 'Completed' : 'InProgress';
+        finished = snap.isComplete;
+        noteLocalResult(snap);
+        return next;
+      }, false);
+      if (!moved) setError('You can only undo your own last peg.');
     } finally {
-      endSuppress(snap.isComplete);
+      endSuppress(finished);
     }
   };
 
-  const reset = async () => {
-    if (!game || !template) return;
-    const next: Game = { ...game, events: [], status: 'InProgress' };
+  const reset = () => {
+    if (!template) return;
     beginSuppress();
     setError(null);
     try {
-      noteLocalResult(calculate(next, template));
-      await persist(next);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Autosave failed');
+      commit((current) => {
+        const next: Game = { ...current, events: [], status: 'InProgress' };
+        noteLocalResult(calculate(next, template));
+        return next;
+      }, false);
     } finally {
       endSuppress(false);
     }
@@ -207,19 +170,16 @@ export function CribbageScreen({ navigation, route }: Props) {
           },
         ]}
       >
-        <View style={styles.header}>
-          <View style={{ flex: 1, gap: 4 }}>
-            <Text style={typography.title}>{game.name}</Text>
-            <Badge label="Cribbage" tone="accent" />
-          </View>
-          <GameHelp templateId="cribbage" />
-          <ShareCodePanel shareCode={game.shareCode} passAndPlay={playModeOf(game) === 'pass-and-play'} />
-          <HomeButton onPress={() => navigation.navigate('Home')} />
-        </View>
+        <GameHeader
+          name={game.name}
+          badge="Cribbage"
+          templateId="cribbage"
+          shareCode={game.shareCode}
+          passAndPlay={playModeOf(game) === 'pass-and-play'}
+          onHome={() => navigation.navigate('Home')}
+        />
 
-        <View style={styles.banner}>
-          <Text style={styles.bannerText}>{banner}</Text>
-        </View>
+        <GameBanner title={banner} />
 
         <View style={styles.row}>
           <Button label="Undo peg" onPress={() => void undo()} disabled={!localPlayerId} />
@@ -229,7 +189,7 @@ export function CribbageScreen({ navigation, route }: Props) {
           ) : null}
         </View>
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        <GameError message={error} />
 
         <View style={styles.boardWrap}>
           <CribbageBoard players={pegPlayers} targetScore={target} />

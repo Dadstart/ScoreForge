@@ -21,8 +21,6 @@ export type CardSource =
   | { zone: 'stock' }
   | { zone: 'discard'; index: number };
 
-export type SkipBeauxScore = { playerId: string; points: number };
-
 export type SkipBeauxState = {
   order: string[];
   hands: Record<string, string[]>;
@@ -39,11 +37,19 @@ export type SkipBeauxState = {
   turn: string | null;
   phase: SkipBeauxPhase;
   handNumber: number;
-  totals: Record<string, number>;
   lastAction: string | null;
-  lastScores: SkipBeauxScore[] | null;
   wentOut: string | null;
 };
+
+/** Drop score fields left on games that used to race to a target. */
+export function storedSkipBeaux(state: SkipBeauxState | null | undefined): SkipBeauxState | null {
+  if (!state) return null;
+  const { totals: _totals, lastScores: _lastScores, ...rest } = state as SkipBeauxState & {
+    totals?: unknown;
+    lastScores?: unknown;
+  };
+  return rest;
+}
 
 type Named = { id: string; name: string };
 export type SkipBeauxResult = { state: SkipBeauxState } | { error: string };
@@ -112,8 +118,7 @@ export function createSkipBeauxState(
 ): SkipBeauxState {
   const ids = players.slice(0, 6).map((player) => player.id);
   if (ids.length < 1 || options?.waiting) return waitingState();
-  const totals = Object.fromEntries(ids.map((id) => [id, 0]));
-  return deal(ids, totals, Math.max(0, ids.length - 1), 1, options?.deck ? [...options.deck] : shuffle(freshDeck()));
+  return deal(ids, Math.max(0, ids.length - 1), 1, options?.deck ? [...options.deck] : shuffle(freshDeck()));
 }
 
 export function dealGame(players: readonly { id: string }[]): SkipBeauxResult {
@@ -189,10 +194,8 @@ export function dealNext(state: SkipBeauxState, players: readonly { id: string }
   if (state.phase !== 'handOver') return fail('The hand is still going.');
   const ids = players.slice(0, 6).map((player) => player.id);
   if (ids.length < 1) return fail('Add a player before dealing.');
-  const totals: Record<string, number> = {};
-  for (const id of ids) totals[id] = state.totals[id] ?? 0;
   const dealer = (state.dealer + 1) % ids.length;
-  return { state: deal(ids, totals, dealer, state.handNumber + 1, shuffle(freshDeck())) };
+  return { state: deal(ids, dealer, state.handNumber + 1, shuffle(freshDeck())) };
 }
 
 export function ensureSkipBeauxState(game: Game): Game {
@@ -214,14 +217,12 @@ function closeHand(state: SkipBeauxState, winnerId: string, players: readonly Na
     phase: 'gameOver',
     turn: null,
     wentOut: winnerId,
-    lastScores: null,
     lastAction: `${who} empties the stock and wins.`,
   };
 }
 
 function deal(
   ids: string[],
-  totals: Record<string, number>,
   dealer: number,
   handNumber: number,
   deck: string[],
@@ -230,14 +231,12 @@ function deal(
   const hands: Record<string, string[]> = {};
   const stocks: Record<string, string[]> = {};
   const discards: Record<string, Pile[]> = {};
-  const scored: Record<string, number> = {};
   let cursor = 0;
   for (const id of ids) {
     stocks[id] = deck.slice(cursor, cursor + size);
     cursor += size;
     hands[id] = [];
     discards[id] = emptyPiles(PILE_SLOTS);
-    scored[id] = totals[id] ?? 0;
   }
   const first = ids[(dealer + 1) % ids.length] ?? ids[0] ?? '';
   const state: SkipBeauxState = {
@@ -252,9 +251,7 @@ function deal(
     turn: first,
     phase: 'play',
     handNumber,
-    totals: scored,
     lastAction: handNumber === 1 ? 'The stock piles are dealt. Build from 1 to 12.' : 'A new hand is dealt.',
-    lastScores: null,
     wentOut: null,
   };
   return first ? fillHand(state, first) : state;
@@ -333,9 +330,7 @@ function repair(game: Game): SkipBeauxState {
   const ids = game.players.slice(0, 6).map((player) => player.id);
   const previous = game.skipBeaux;
   if (ids.length < 1 || previous?.phase === 'waiting') return waitingState();
-  const totals: Record<string, number> = {};
-  for (const id of ids) totals[id] = previous?.totals[id] ?? 0;
-  return deal(ids, totals, Math.max(0, ids.length - 1), Math.max(1, previous?.handNumber || 1), shuffle(freshDeck()));
+  return deal(ids, Math.max(0, ids.length - 1), Math.max(1, previous?.handNumber || 1), shuffle(freshDeck()));
 }
 
 function validState(state: SkipBeauxState, players: Player[]): boolean {
@@ -385,9 +380,7 @@ function waitingState(): SkipBeauxState {
     turn: null,
     phase: 'waiting',
     handNumber: 0,
-    totals: {},
     lastAction: 'Waiting to deal.',
-    lastScores: null,
     wentOut: null,
   };
 }

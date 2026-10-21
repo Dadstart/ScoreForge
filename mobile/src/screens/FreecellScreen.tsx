@@ -26,7 +26,7 @@ import {
   type Source,
 } from '../domain/freecell';
 import { cardFace } from '../domain/klondike';
-import { playModeOf, type Game } from '../domain/models';
+import { playModeOf } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
 import { useLiveGame } from '../hooks/useLiveGame';
 import { usePlaySpark } from '../hooks/usePlaySpark';
@@ -44,7 +44,7 @@ export function FreecellScreen({ navigation, route }: Props) {
     template,
     snapshot,
     error,
-    persist,
+    commit,
     showCelebration,
     dismissCelebration,
     beginSuppress,
@@ -97,22 +97,23 @@ export function FreecellScreen({ navigation, route }: Props) {
       ? 'No moves left'
       : `${home} of 52 · ${freecell.moves} ${freecell.moves === 1 ? 'move' : 'moves'}`;
 
-  const apply = async (nextFreecell: FreecellState) => {
-    const next: Game = {
-      ...game,
-      freecell: nextFreecell,
-      status: nextFreecell.won ? 'Completed' : 'InProgress',
-      updatedAt: new Date().toISOString(),
-    };
-    await persist(next, true);
-  };
+  const apply = (change: (board: FreecellState) => FreecellState | null) =>
+    commit((current) => {
+      const board = current.freecell;
+      if (!board) return null;
+      const next = change(board);
+      if (!next) return null;
+      return {
+        ...current,
+        freecell: next,
+        status: next.won ? 'Completed' : 'InProgress',
+        updatedAt: new Date().toISOString(),
+      };
+    }, (next) => Boolean(next.freecell?.won));
 
   const tryMove = (source: Source | null, dest: Dest | null) => {
-    if (!source || !dest || freecell.won) return false;
-    const next = play(freecell, source, dest);
-    if (!next) return false;
-    void apply(next);
-    return true;
+    if (!source || !dest) return false;
+    return apply((board) => (board.won ? null : play(board, source, dest)));
   };
 
   const onCell = (index: number) => {
@@ -120,11 +121,7 @@ export function FreecellScreen({ navigation, route }: Props) {
     if (tryMove(selection, dest)) return;
     const source: Source = { pile: 'cell', index };
     if (selection && sameSource(selection, source)) {
-      const built = buildFoundation(freecell, source);
-      if (built) {
-        void apply(built);
-        return;
-      }
+      if (apply((board) => buildFoundation(board, source))) return;
     }
     setSelection(freecell.cells[index] && destinations(freecell, source).length > 0 ? source : null);
   };
@@ -134,8 +131,7 @@ export function FreecellScreen({ navigation, route }: Props) {
     if (tryMove(selection, dest)) return;
     const source: Source = { pile: 'foundation', index };
     if (selection && sameSource(selection, source)) {
-      const built = buildFoundation(freecell, source);
-      if (built) void apply(built);
+      if (apply((board) => buildFoundation(board, source))) return;
       return;
     }
     const pile = freecell.foundations[index] ?? [];
@@ -151,41 +147,37 @@ export function FreecellScreen({ navigation, route }: Props) {
     }
     const source: Source = { pile: 'cascade', index, at };
     if (selection && sameSource(selection, source)) {
-      const built = buildFoundation(freecell, source);
-      if (built) {
-        void apply(built);
-        return;
-      }
+      if (apply((board) => buildFoundation(board, source))) return;
     }
     setSelection(destinations(freecell, source).length > 0 ? source : null);
   };
 
   const onUndo = () => {
-    const next = undo(freecell);
-    if (next) void apply(next);
+    apply((board) => undo(board));
   };
 
   const onFinish = () => {
-    const next = finish(freecell);
-    if (next) void apply(next);
+    apply((board) => finish(board));
   };
 
-  const onDeal = async () => {
+  const onDeal = () => {
     if (!freecell.won && freecell.moves > 0 && !confirmDeal) {
       setConfirmDeal(true);
       return;
     }
-    const next: Game = {
-      ...game,
-      freecell: createFreecellState(),
-      status: 'InProgress',
-      updatedAt: new Date().toISOString(),
-    };
     beginSuppress();
     setConfirmDeal(false);
     try {
-      noteLocalResult(calculate(next, template));
-      await persist(next, false);
+      commit((current) => {
+        const next = {
+          ...current,
+          freecell: createFreecellState(),
+          status: 'InProgress' as const,
+          updatedAt: new Date().toISOString(),
+        };
+        noteLocalResult(calculate(next, template));
+        return next;
+      }, false);
     } finally {
       endSuppress(false);
     }

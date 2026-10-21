@@ -214,6 +214,19 @@ service cloud.firestore {
         && isIsoTime(data.updatedAt);
     }
 
+    // Pass-and-play seats have no uid, so the share code is still enough to delete.
+    // A separate-devices game stores the host uid on the first seat.
+    function hostMayDelete() {
+      return resource.data.players is list
+        && resource.data.players.size() >= 1
+        && resource.data.players[0] is map
+        && (
+          !('uid' in resource.data.players[0])
+          || resource.data.players[0].uid == null
+          || resource.data.players[0].uid == request.auth.uid
+        );
+    }
+
     function revisionAdvances() {
       return !('revision' in resource.data) || !(resource.data.revision is int)
         ? request.resource.data.revision == 1
@@ -254,7 +267,7 @@ service cloud.firestore {
         && revisionAdvances()
         && createdAtStable()
         && identityStable(shareCode);
-      allow delete: if isSignedIn() && isShareCode(shareCode);
+      allow delete: if isSignedIn() && isShareCode(shareCode) && hostMayDelete();
 
       match /events/{eventId} {
         allow get, list: if isSignedIn() && isShareCode(shareCode) && eventsStillExternal(shareCode);

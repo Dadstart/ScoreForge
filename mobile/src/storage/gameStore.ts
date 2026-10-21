@@ -17,7 +17,8 @@ import { createBackgammonState } from '../domain/backgammon';
 import { createCheckersState } from '../domain/checkers';
 import { createCanastaState } from '../domain/canasta';
 import { createUneauxState } from '../domain/uneaux';
-import { createSkipBeauxState } from '../domain/skipBeaux';
+import { createSkipBeauxState, storedSkipBeaux } from '../domain/skipBeaux';
+import { GAME_DOCUMENT_KEYS, withoutSoloUndo } from '../domain/gameDocument';
 import { createChessState } from '../domain/chess';
 import { createReversiState } from '../domain/reversi';
 import { createChineseState, type ChineseSetup } from '../domain/chineseCheckers';
@@ -40,6 +41,7 @@ import { nextSavedRevision } from '../domain/revisions';
 import { createSorryState } from '../domain/sorry';
 import { auth, db, ensureAnonymousAuth } from '../firebase/app';
 import { forgetShareCode, loadKnownShareCodes, rememberShareCode } from './knownCodesStore';
+import { recallSoloUndo, rememberSoloUndo } from './soloUndoStore';
 
 export { preferNewerGame, StaleGameError } from '../domain/revisions';
 
@@ -118,7 +120,7 @@ function cleanEvent(event: ScoreEvent): ScoreEvent {
 }
 
 function toStored(game: Game): Record<string, unknown> {
-  return {
+  const stored = withoutSoloUndo({
     id: game.shareCode,
     shareCode: game.shareCode,
     name: game.name,
@@ -136,7 +138,7 @@ function toStored(game: Game): Record<string, unknown> {
     chess: game.chess ?? null,
     canasta: game.canasta ?? null,
     uneaux: game.uneaux ?? null,
-    skipBeaux: game.skipBeaux ?? null,
+    skipBeaux: storedSkipBeaux(game.skipBeaux),
     reversi: game.reversi ?? null,
     chinese: game.chinese ?? null,
     klondike: game.klondike ? packKlondike(game.klondike) : null,
@@ -149,7 +151,12 @@ function toStored(game: Game): Record<string, unknown> {
     revision: game.revision,
     createdAt: game.createdAt,
     updatedAt: game.updatedAt,
-  };
+  });
+  const keys = Object.keys(stored);
+  if (keys.length !== GAME_DOCUMENT_KEYS.length || GAME_DOCUMENT_KEYS.some((key) => !(key in stored))) {
+    throw new Error('The saved game fields do not match the Firestore rules.');
+  }
+  return stored;
 }
 
 function fromStored(shareCode: string, data: StoredGame, events: ScoreEvent[]): Game {
@@ -309,12 +316,14 @@ export async function findGameByShareCode(code: string): Promise<Game | null> {
  */
 export async function saveGame(game: Game): Promise<Game> {
   await ensureAnonymousAuth();
+  rememberSoloUndo(game);
   const code = requireShareCode(game.shareCode);
-  return runTransaction(db, async (transaction) => {
+  const saved = await runTransaction(db, async (transaction) => {
     const current = await readForWrite(transaction, code);
     const revision = nextSavedRevision(game.revision, current.revision);
     return writeGame(transaction, code, { ...game, revision });
   });
+  return recallSoloUndo(saved);
 }
 
 /** Apply a change to the latest server game. Used for joins, which must not replace the board. */
@@ -517,7 +526,7 @@ export function subscribeGame(
                 onChange(fromStored(code, fresh, Array.isArray(fresh.events) ? fresh.events : []));
                 return;
               }
-              if (!cancelled && gen === generation) onChange(fromStored(code, data, data.events));
+              if (!cancelled && gen === generation) onChange(recallSoloUndo(fromStored(code, data, data.events)));
             } catch (err) {
               if (!cancelled && gen === generation) {
                 onError?.(err instanceof Error ? err : new Error(String(err)));

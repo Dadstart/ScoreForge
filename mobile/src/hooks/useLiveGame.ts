@@ -3,10 +3,12 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { findLocalPlayerId } from '../domain/localPlayer';
 import type { Game } from '../domain/models';
 import { calculate } from '../domain/scoreCalculator';
+import { SaveQueue } from '../domain/saveQueue';
 import { getTemplate, type GameTemplate } from '../domain/templates';
 import { auth } from '../firebase/app';
 import { loadDisplayName } from '../storage/displayNameStore';
 import { preferNewerGame, saveGame, subscribeGame } from '../storage/gameStore';
+import { loadSoloUndo, recallSoloUndo } from '../storage/soloUndoStore';
 import { useWinCelebration } from './useWinCelebration';
 import type { GameSnapshot } from '../domain/scoreCalculator';
 
@@ -15,8 +17,8 @@ type LiveGameOptions = {
   repair?: (game: Game) => Game;
   repairError?: string;
   /**
-   * Show the next position before the save returns.
-   * While that save is in flight, an older snapshot cannot roll the board back.
+   * Kept for existing callers. Saves always show the next position immediately
+   * and queue a move that arrives before the write finishes.
    */
   optimistic?: boolean;
 };
@@ -34,17 +36,20 @@ export function useDeviceIdentity(): { displayName: string; uid: string | null }
 
 /**
  * Shared live-game shell: subscribe, identify this device's seat, repair, and save.
- * Solitaire passes `optimistic` so a drag stays on screen until the write lands.
+ * A move made while a save is in flight is queued and written from the latest board.
  */
 export function useLiveGame(gameId: string, options?: LiveGameOptions) {
   const repair = options?.repair;
   const repairError = options?.repairError ?? 'Could not set up the game';
-  const optimistic = options?.optimistic ?? false;
   const [game, setGame] = useState<Game | null>(null);
   const { displayName, uid } = useDeviceIdentity();
   const [error, setError] = useState<string | null>(null);
-  const saving = useRef(false);
+  const queue = useRef(new SaveQueue<Game>());
+  const latest = useRef<Game | null>(null);
   const serverGame = useRef<Game | null>(null);
+  const heldRemote = useRef<Game | null>(null);
+  const draining = useRef(false);
+  const saving = useRef(false);
   const {
     showCelebration,
     onSnapshot,
@@ -54,24 +59,103 @@ export function useLiveGame(gameId: string, options?: LiveGameOptions) {
     noteLocalResult,
   } = useWinCelebration();
 
+  const publish = (value: Game | null | ((current: Game | null) => Game | null)) => {
+    const next = typeof value === 'function' ? value(latest.current) : value;
+    latest.current = next;
+    setGame(next);
+  };
+
+  const drain = async () => {
+    if (draining.current) return;
+    draining.current = true;
+    saving.current = true;
+    try {
+      let job = queue.current.take();
+      while (job) {
+        try {
+          const saved = await saveGame(job);
+          serverGame.current = saved;
+          queue.current.committed(saved.revision);
+          if (!queue.current.hasPending) {
+            const remote = heldRemote.current;
+            heldRemote.current = null;
+            publish(remote && remote.revision > saved.revision ? remote : saved);
+          }
+          setError(null);
+        } catch (err) {
+          queue.current.failed();
+          heldRemote.current = null;
+          if (serverGame.current) publish(serverGame.current);
+          setError(err instanceof Error ? err.message : 'Autosave failed');
+          break;
+        }
+        job = queue.current.take();
+      }
+    } finally {
+      draining.current = false;
+      saving.current = queue.current.saving || queue.current.hasPending;
+      if (queue.current.hasPending) void drain();
+    }
+  };
+
+  const commit = (
+    recipe: (current: Game) => Game | null,
+    celebrate: boolean | ((next: Game) => boolean) = false,
+  ): boolean => {
+    const base = latest.current;
+    if (!base) return false;
+    const next = recipe(base);
+    if (!next) return false;
+    latest.current = next;
+    setGame(next);
+    const tmpl = getTemplate(next.templateId);
+    const shouldCelebrate = typeof celebrate === 'function' ? celebrate(next) : celebrate;
+    if (shouldCelebrate && tmpl) noteLocalResult(calculate(next, tmpl));
+    queue.current.enqueue(next);
+    saving.current = true;
+    void drain();
+    return true;
+  };
+
+  const persist = async (next: Game, celebrate = false) => {
+    commit(() => next, celebrate);
+  };
+
   useEffect(() => {
-    return subscribeGame(
+    queue.current = new SaveQueue();
+    latest.current = null;
+    serverGame.current = null;
+    heldRemote.current = null;
+    saving.current = false;
+    let cancel = false;
+    void loadSoloUndo(gameId).then(() => {
+      if (cancel || queue.current.saving || queue.current.hasPending) return;
+      publish((current) => (current ? recallSoloUndo(current) : current));
+    });
+    const stop = subscribeGame(
       gameId,
       (found) => {
-        setGame((current) => {
-          if (!found) return null;
-          if (optimistic && saving.current && current && found.revision <= current.revision) return current;
-          serverGame.current = found;
-          return preferNewerGame(current, found);
-        });
-        if (found) {
-          const tmpl = getTemplate(found.templateId);
-          if (tmpl) onSnapshot(calculate(found, tmpl));
+        if (cancel) return;
+        if (!found) {
+          if (!queue.current.saving && !queue.current.hasPending) publish(null);
+          return;
         }
+        if (queue.current.saving || queue.current.hasPending) {
+          heldRemote.current = found;
+          return;
+        }
+        serverGame.current = found;
+        publish((current) => preferNewerGame(current, found));
+        const tmpl = getTemplate(found.templateId);
+        if (tmpl) onSnapshot(calculate(found, tmpl));
       },
       (err) => setError(err.message),
     );
-  }, [gameId, onSnapshot, optimistic]);
+    return () => {
+      cancel = true;
+      stop();
+    };
+  }, [gameId, onSnapshot]);
 
   const template = game ? getTemplate(game.templateId) : undefined;
   const snapshot = useMemo(
@@ -84,38 +168,21 @@ export function useLiveGame(gameId: string, options?: LiveGameOptions) {
   );
 
   useEffect(() => {
-    if (!game || !repair) return;
-    const next = repair(game);
-    if (next === game) return;
-    void saveGame(next)
-      .then((saved) => setGame((current) => preferNewerGame(current, saved)))
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : repairError);
-      });
+    const current = latest.current;
+    if (!current || !repair) return;
+    const next = repair(current);
+    if (next === current) return;
+    commit((base) => {
+      const repaired = repair(base);
+      return repaired === base ? null : repaired;
+    });
+    // commit is recreated each render and closes over the latest repair.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game, repair, repairError]);
-
-  const persist = async (next: Game, celebrate = false) => {
-    if (!template || saving.current) return;
-    saving.current = true;
-    if (optimistic) setGame(next);
-    const snap = calculate(next, template);
-    if (celebrate) noteLocalResult(snap);
-    try {
-      const saved = await saveGame(next);
-      serverGame.current = saved;
-      setGame((current) => preferNewerGame(current, saved));
-      setError(null);
-    } catch (err) {
-      if (optimistic && serverGame.current) setGame(serverGame.current);
-      setError(err instanceof Error ? err.message : 'Autosave failed');
-    } finally {
-      saving.current = false;
-    }
-  };
 
   return {
     game,
-    setGame,
+    setGame: publish,
     template,
     snapshot,
     localPlayerId,
@@ -123,6 +190,7 @@ export function useLiveGame(gameId: string, options?: LiveGameOptions) {
     setError,
     saving,
     persist,
+    commit,
     showCelebration,
     dismissCelebration,
     beginSuppress,

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, Easing, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import { motionDriver, reducedMotion, useArrivals } from './cardMotion';
 import { CardDrag, boxContains, emptyBox, type WindowBox } from './CardDrag';
 import { CardFlip, flipDelay } from './CardFlip';
 import {
@@ -37,46 +38,6 @@ const FACE: Record<UneauxColor, string> = {
   green: '#2f9e6b',
   blue: '#3b6fd8',
 };
-
-let nativeReduced = false;
-if (Platform.OS !== 'web') {
-  void AccessibilityInfo.isReduceMotionEnabled().then((value) => {
-    nativeReduced = value;
-  });
-  AccessibilityInfo.addEventListener('reduceMotionChanged', (value) => {
-    nativeReduced = value;
-  });
-}
-
-function reducedMotion(): boolean {
-  if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
-    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  }
-  return nativeReduced;
-}
-
-function motionDriver(): boolean {
-  return Platform.OS !== 'web';
-}
-
-/** Cards that arrived in a hand that was already on screen. Revealing a hidden hand does not count. */
-function useArrivals(ids: readonly string[]): ReadonlySet<string> {
-  const seen = useRef<Set<string> | null>(null);
-  const key = ids.join('\0');
-  const cached = useRef<{ key: string; faces: ReadonlySet<string> } | null>(null);
-  if (!cached.current || cached.current.key !== key) {
-    const faces = new Set<string>();
-    const prior = seen.current;
-    if (prior && prior.size > 0) {
-      for (const id of ids) if (!prior.has(id)) faces.add(id);
-    }
-    cached.current = { key, faces };
-  }
-  useEffect(() => {
-    seen.current = new Set(key.length === 0 ? [] : key.split('\0'));
-  }, [key]);
-  return cached.current.faces;
-}
 
 export function UneauxBoard({ state, players, handOwnerId, canAct, onPlay, onDraw, onColor }: Props) {
   const tableRef = useRef<View>(null);

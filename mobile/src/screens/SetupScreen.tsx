@@ -239,7 +239,9 @@ export function SetupScreen({ navigation }: Props) {
   return (
     <Screen>
       <View style={styles.content}>
-        <Text style={[typography.section, styles.sectionFirst]}>New Scorekeeping</Text>
+        <Text accessibilityRole="header" style={[typography.section, styles.sectionFirst]}>
+          New Scorekeeping
+        </Text>
         <View style={styles.wrap}>
           {templatesInGroup(true).map((t) => (
             <Choice
@@ -251,7 +253,9 @@ export function SetupScreen({ navigation }: Props) {
           ))}
         </View>
 
-        <Text style={[typography.section, styles.section]}>New Games</Text>
+        <Text accessibilityRole="header" style={[typography.section, styles.section]}>
+          New Games
+        </Text>
         <View style={styles.wrap}>
           {templatesInGroup(false).map((t) => (
             <Choice

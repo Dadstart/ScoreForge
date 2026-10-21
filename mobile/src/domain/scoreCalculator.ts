@@ -1,20 +1,6 @@
 import type { Game, Player } from './models';
+import { boardOutcomes } from './outcomes';
 import type { GameTemplate, WinCondition } from './templates';
-import { borneOff, playerIdForSide as backgammonPlayerId } from './backgammon';
-import { capturedCount, playerIdForSide } from './checkers';
-import { scoreForPlayer as canastaScore, winnerIds as canastaWinners } from './canasta';
-import { scoreForPlayer as uneauxScore, winnerIds as uneauxWinners } from './uneaux';
-import { scoreForPlayer as skipBeauxScore, winnerIds as skipBeauxWinners } from './skipBeaux';
-import { capturedValue, playerIdForSide as chessPlayerId } from './chess';
-import { discCount, playerIdForSide as reversiPlayerId } from './reversi';
-import { piecesHomeForPlayer, winnerPlayerIds } from './chineseCheckers';
-import { homeCount as freecellHome } from './freecell';
-import { foundationCount } from './klondike';
-import { clearedCount } from './pyramid';
-import { completedCount } from './spider';
-import { homeCount } from './sorry';
-import { cashFromDelta, soleSolventPlayer } from './opoly';
-import { grandTotal, isScorecardComplete } from './yaht';
 
 export interface PlayerStanding {
   playerId: string;
@@ -83,6 +69,7 @@ function orderPlayers(
   winCondition: WinCondition,
 ): Player[] {
   const list = [...players];
+  if (winCondition === 'Outcome') return list;
   if (winCondition === 'LowestTotal') {
     return list.sort(
       (a, b) =>
@@ -98,21 +85,8 @@ function orderPlayers(
 }
 
 function pointsForPlayer(game: Game, playerId: string, template: GameTemplate): number {
-  if (template.id === 'yaht') return grandTotal(game.events, playerId);
-  if (template.id === 'sorry' && game.sorry) return homeCount(game.sorry, playerId);
-  if (template.id === 'backgammon' && game.backgammon) return borneOff(game.backgammon, playerId);
-  if (template.id === 'checkers' && game.checkers) return capturedCount(game.checkers, playerId);
-  if (template.id === 'chess' && game.chess) return capturedValue(game.chess, playerId);
-  if (template.id === 'canasta' && game.canasta) return canastaScore(game.canasta, playerId);
-  if (template.id === 'uneaux' && game.uneaux) return uneauxScore(game.uneaux, playerId);
-  if (template.id === 'skip-beaux' && game.skipBeaux) return skipBeauxScore(game.skipBeaux, playerId);
-  if (template.id === 'reversi' && game.reversi) return discCount(game.reversi, playerId);
-  if (template.id === 'chinese-checkers' && game.chinese) return piecesHomeForPlayer(game.chinese, playerId);
-  if (template.id === 'klondike') return foundationCount(game.klondike);
-  if (template.id === 'freecell') return freecellHome(game.freecell);
-  if (template.id === 'pyramid') return clearedCount(game.pyramid);
-  if (template.id === 'spider') return completedCount(game.spider);
-  if (template.id === 'tripeaks') return game.tripeaks?.score ?? 0;
+  const scored = boardOutcomes[template.id === 'yahtzee' ? 'yaht' : template.id]?.points?.(game, playerId);
+  if (scored != null) return scored;
   return game.events
     .filter((e) => e.playerId === playerId)
     .reduce((sum, e) => sum + e.points, 0);
@@ -134,27 +108,9 @@ function roundsEveryoneReached(game: Game): number {
   return least;
 }
 
-function opolySoleSurvivor(game: Game, totals: Map<string, number>): string | null {
-  if (game.templateId !== 'monopoly') return null;
-  return soleSolventPlayer(game.players, (playerId) => cashFromDelta(totals.get(playerId) ?? 0));
-}
-
 function detectCompletion(game: Game, template: GameTemplate, totals: Map<string, number>): boolean {
-  if (opolySoleSurvivor(game, totals)) return true;
-  if (template.id === 'yaht') return isScorecardComplete(game);
-  if (template.id === 'backgammon') return Boolean(game.backgammon?.winnerSide);
-  if (template.id === 'checkers') return Boolean(game.checkers?.winnerSide || game.checkers?.draw);
-  if (template.id === 'chess') return Boolean(game.chess?.winnerSide || game.chess?.draw);
-  if (template.id === 'canasta') return game.canasta?.phase === 'gameOver';
-  if (template.id === 'uneaux') return game.uneaux?.phase === 'gameOver';
-  if (template.id === 'skip-beaux') return game.skipBeaux?.phase === 'gameOver';
-  if (template.id === 'reversi') return Boolean(game.reversi?.winnerSide || game.reversi?.draw);
-  if (template.id === 'chinese-checkers') return Boolean(game.chinese?.over);
-  if (template.id === 'klondike') return Boolean(game.klondike?.won);
-  if (template.id === 'freecell') return Boolean(game.freecell?.won);
-  if (template.id === 'pyramid') return Boolean(game.pyramid?.won);
-  if (template.id === 'spider') return Boolean(game.spider?.won);
-  if (template.id === 'tripeaks') return Boolean(game.tripeaks?.won);
+  const complete = boardOutcomes[template.id === 'yahtzee' ? 'yaht' : template.id]?.complete;
+  if (complete) return complete(game, totals);
 
   if (template.winCondition === 'FirstToTarget') {
     const target = game.targetScore ?? template.defaultTargetScore;
@@ -188,84 +144,8 @@ function getWinnerIds(
 ): Set<string> {
   if (ordered.length === 0) return new Set();
 
-  const soleSurvivor = opolySoleSurvivor(game, totals);
-  if (soleSurvivor) return new Set([soleSurvivor]);
-
-  if (template.id === 'backgammon') {
-    if (!game.backgammon?.winnerSide) return new Set();
-    const winnerId = backgammonPlayerId(game.backgammon, game.backgammon.winnerSide);
-    return winnerId ? new Set([winnerId]) : new Set();
-  }
-
-  if (template.id === 'checkers') {
-    if (!game.checkers || game.checkers.draw || !game.checkers.winnerSide) return new Set();
-    const winnerId = playerIdForSide(game.checkers, game.checkers.winnerSide);
-    return winnerId ? new Set([winnerId]) : new Set();
-  }
-
-  if (template.id === 'chess') {
-    if (!game.chess || game.chess.draw || !game.chess.winnerSide) return new Set();
-    const winnerId = chessPlayerId(game.chess, game.chess.winnerSide);
-    return winnerId ? new Set([winnerId]) : new Set();
-  }
-
-  if (template.id === 'canasta') {
-    return new Set(game.canasta ? canastaWinners(game.canasta) : []);
-  }
-
-  if (template.id === 'uneaux') {
-    return new Set(game.uneaux ? uneauxWinners(game.uneaux) : []);
-  }
-
-  if (template.id === 'skip-beaux') {
-    return new Set(game.skipBeaux ? skipBeauxWinners(game.skipBeaux) : []);
-  }
-
-  if (template.id === 'reversi') {
-    if (!game.reversi || game.reversi.draw || !game.reversi.winnerSide) return new Set();
-    const winnerId = reversiPlayerId(game.reversi, game.reversi.winnerSide);
-    return winnerId ? new Set([winnerId]) : new Set();
-  }
-
-  if (template.id === 'chinese-checkers') {
-    if (!game.chinese?.over) return new Set();
-    return new Set(winnerPlayerIds(game.chinese));
-  }
-
-  if (template.id === 'sorry') {
-    const winnerId = game.sorry?.winnerId;
-    return winnerId ? new Set([winnerId]) : new Set();
-  }
-
-  if (template.id === 'klondike') {
-    if (!game.klondike?.won) return new Set();
-    const winnerId = game.players[0]?.id;
-    return winnerId ? new Set([winnerId]) : new Set();
-  }
-
-  if (template.id === 'freecell') {
-    if (!game.freecell?.won) return new Set();
-    const winnerId = game.players[0]?.id;
-    return winnerId ? new Set([winnerId]) : new Set();
-  }
-
-  if (template.id === 'pyramid') {
-    if (!game.pyramid?.won) return new Set();
-    const winnerId = game.players[0]?.id;
-    return winnerId ? new Set([winnerId]) : new Set();
-  }
-
-  if (template.id === 'spider') {
-    if (!game.spider?.won) return new Set();
-    const winnerId = game.players[0]?.id;
-    return winnerId ? new Set([winnerId]) : new Set();
-  }
-
-  if (template.id === 'tripeaks') {
-    if (!game.tripeaks?.won) return new Set();
-    const winnerId = game.players[0]?.id;
-    return winnerId ? new Set([winnerId]) : new Set();
-  }
+  const named = boardOutcomes[template.id === 'yahtzee' ? 'yaht' : template.id]?.winners?.(game, totals);
+  if (named) return new Set(named);
 
   if (template.winCondition === 'FirstToTarget') {
     const target = game.targetScore ?? template.defaultTargetScore ?? 0;
