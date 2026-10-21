@@ -22,6 +22,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
       Opoly: 'monopoly/:gameId',
       Yaht: 'yaht/:gameId',
       Sorry: 'sorry/:gameId',
+      Parcheesi: 'parcheesi/:gameId',
       Backgammon: 'backgammon/:gameId',
       Checkers: 'checkers/:gameId',
       Chess: 'chess/:gameId',

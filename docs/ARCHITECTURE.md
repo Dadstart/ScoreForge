@@ -17,8 +17,8 @@ mobile/
 │   ├── storage/               # Firestore game store + known codes + displayName
 │   ├── linking/               # share URL create/parse for QR + deep links
 │   ├── navigation/            # types + React Navigation linking config
-│   ├── screens/               # Home, Setup, Join, Board, Cribbage, Opoly, Yaht, Sorry, Backgammon, Checkers, Chess, Canasta, Uneaux, Skip-Beaux, Reversi, Chinese Checkers, Klondike, FreeCell, Pyramid, TriPeaks, Spider
-│   └── components/            # CribbageBoard, OpolyBoard, YahtScoreboard, SorryBoard, BackgammonBoard, CheckersBoard, ChessBoard, CanastaBoard, UneauxBoard, SkipBeauxBoard, ReversiBoard, ChineseCheckersBoard, solitaire boards, FireworksOverlay, ShareCodePanel
+│   ├── screens/               # Home, Setup, Join, Board, Cribbage, Opoly, Yaht, Sorry, Parcheesi, Backgammon, Checkers, Chess, Canasta, Uneaux, Skip-Beaux, Reversi, Chinese Checkers, Klondike, FreeCell, Pyramid, TriPeaks, Spider
+│   └── components/            # CribbageBoard, OpolyBoard, YahtScoreboard, SorryBoard, ParcheesiBoard, BackgammonBoard, CheckersBoard, ChessBoard, CanastaBoard, UneauxBoard, SkipBeauxBoard, ReversiBoard, ChineseCheckersBoard, solitaire boards, FireworksOverlay, ShareCodePanel
 ```
 
 ### Startup / navigation
@@ -35,6 +35,7 @@ React Navigation native stack with `expo-linking` prefixes (`scoreforge://` and 
 | **Opoly** | Live subscribe; own cash, optional board |
 | **Yaht** | Live subscribe; score any column |
 | **Sorry** | Live subscribe; shared board, deck, and turn |
+| **Parcheesi** | Live subscribe; shared board, dice, and turn |
 | **Backgammon** | Live subscribe; shared board, dice, and cube |
 | **Checkers** | Live subscribe; shared board and turn |
 | **Chess** | Live subscribe; shared board and turn |
@@ -98,6 +99,7 @@ All templates start with `minPlayers: 1`; others join via code.
 | Opoly | Instant cash | Highest |
 | Yaht | Score-card boxes | Highest |
 | Sorry | Board pawns home | First to 4 |
+| Parcheesi | Shared board and two dice | First player to get all 4 pawns to the center |
 | Backgammon | Shared board | Bear off all 15 checkers |
 | Checkers | Shared board; optional computer seat | Capture all pieces, or leave no move |
 | Chess | Shared board | Checkmate. Stalemate and the drawn endings are a draw |

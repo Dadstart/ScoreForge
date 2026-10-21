@@ -12,6 +12,7 @@ import { foundationCount } from './klondike';
 import { clearedCount } from './pyramid';
 import { completedCount } from './spider';
 import { homeCount } from './sorry';
+import { homeCount as parcheesiHome } from './parcheesi';
 import { soleSolventPlayer, cashFromDelta } from './opoly';
 import { grandTotal, isScorecardComplete } from './yaht';
 
@@ -46,6 +47,11 @@ export const boardOutcomes: Record<string, BoardOutcome> = {
   sorry: {
     points: (game, playerId) => (game.sorry ? homeCount(game.sorry, playerId) : null),
     winners: (game) => (game.sorry?.winnerId ? [game.sorry.winnerId] : []),
+  },
+  parcheesi: {
+    points: (game, playerId) => (game.parcheesi ? parcheesiHome(game.parcheesi, playerId) : null),
+    complete: (game) => Boolean(game.parcheesi?.winnerId),
+    winners: (game) => (game.parcheesi?.winnerId ? [game.parcheesi.winnerId] : []),
   },
   backgammon: {
     points: (game, playerId) => (game.backgammon ? borneOff(game.backgammon, playerId) : null),

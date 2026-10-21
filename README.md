@@ -55,6 +55,7 @@ npm run deploy:rules
 | Opoly | Track own cash, optional board | Highest total |
 | Yaht | Fill any score-card column | Highest total |
 | Sorry | Shared board and card deck | First to get 4 pawns home |
+| Parcheesi | Shared board and two dice | First player to get all 4 pawns to the center |
 | Backgammon | Shared board. White moves first. Double before you roll | Bear off all 15 checkers |
 | Checkers | Shared board, Black moves first. Jumps required or optional. Optional computer opponent | Capture every piece, or leave no move |
 | Chess | Shared board, White moves first | Checkmate. Stalemate and the drawn endings are a draw |

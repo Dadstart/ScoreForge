@@ -89,6 +89,21 @@ const INSTRUCTIONS: Record<string, GameInstructions> = {
       }),
     ],
   },
+  parcheesi: {
+    title: 'Parcheesi',
+    lines: [
+      'Tap Roll on the Home circle, then tap one of your pawns and the space it moves to.',
+      'A 5 brings a pawn out of the nest onto your start space. Each die is its own move.',
+      'Two of your pawns on one space are a blockade. Nothing may land on or pass a blockade.',
+      'Landing on a single opponent sends that pawn back to its nest. The capturer then moves 20 if the way is open.',
+      'Start spaces and the space before each home lane are safe. A pawn there cannot be captured.',
+      'After a full lap, a pawn turns into its home lane. The lane is seven spaces, and the center takes an exact count.',
+      'Reaching the center lets another pawn move 10, when one can.',
+      'Doubles let you roll again. Three doubles in a row send your leading pawn back to the nest.',
+      'Use both dice when a way exists. If only one number can be played, play the larger one. A roll that cannot be used passes the turn.',
+      'The first player to get all four pawns to the center wins.',
+    ],
+  },
   backgammon: {
     title: 'Backgammon',
     lines: [

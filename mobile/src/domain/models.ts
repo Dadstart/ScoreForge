@@ -12,6 +12,7 @@ import type { PyramidState } from './pyramid';
 import type { SpiderState } from './spider';
 import type { TriPeaksState } from './tripeaks';
 import type { SorryState } from './sorry';
+import type { ParcheesiState } from './parcheesi';
 import type { OpolyPlay } from './opolyPlay';
 import type { YahtState } from './yaht';
 import { fillRandom, randomId } from './secureRandom';
@@ -57,6 +58,8 @@ export interface Game {
   tokenSpaces?: Record<string, number>;
   /** Shared Sorry board, deck, and turn. */
   sorry?: SorryState | null;
+  /** Shared Parcheesi board, dice, and turn. */
+  parcheesi?: ParcheesiState | null;
   /** Shared backgammon board, dice, and cube. */
   backgammon?: BackgammonState | null;
   /** Shared checkers board and turn. */
