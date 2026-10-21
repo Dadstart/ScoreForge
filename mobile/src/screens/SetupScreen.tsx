@@ -26,8 +26,14 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Setup'>;
 type Seat = { id: string; name: string; token: string; emojiText: string };
 type HowToPlay = PlayMode | 'vs-computer';
 
+const SCOREKEEPING_IDS = new Set(['free-play', 'rounds', 'rummy', 'golf']);
+
 function asksPlayMode(template: GameTemplate): boolean {
   return template.maxPlayers > 1;
+}
+
+function templatesInGroup(scorekeeping: boolean): GameTemplate[] {
+  return templates.filter((template) => SCOREKEEPING_IDS.has(template.id) === scorekeeping);
 }
 
 function playersFromNameSeats(seats: Seat[]): { players: Player[] } | { error: string } {
@@ -233,23 +239,28 @@ export function SetupScreen({ navigation }: Props) {
   return (
     <Screen>
       <View style={styles.content}>
-        <Text style={[typography.section, styles.sectionFirst]}>Template</Text>
+        <Text style={[typography.section, styles.sectionFirst]}>New Scorekeeping</Text>
         <View style={styles.wrap}>
-          {templates.map((t) => {
-            const active = templateId === t.id;
-            return (
-              <Pressable
-                key={t.id}
-                accessibilityRole="button"
-                accessibilityLabel={t.name}
-                accessibilityState={{ selected: active }}
-                onPress={() => selectTemplate(t.id)}
-                style={[styles.chip, active && styles.chipActive]}
-              >
-                <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>{t.name}</Text>
-              </Pressable>
-            );
-          })}
+          {templatesInGroup(true).map((t) => (
+            <Choice
+              key={t.id}
+              label={t.name}
+              selected={templateId === t.id}
+              onPress={() => selectTemplate(t.id)}
+            />
+          ))}
+        </View>
+
+        <Text style={[typography.section, styles.section]}>New Games</Text>
+        <View style={styles.wrap}>
+          {templatesInGroup(false).map((t) => (
+            <Choice
+              key={t.id}
+              label={t.name}
+              selected={templateId === t.id}
+              onPress={() => selectTemplate(t.id)}
+            />
+          ))}
         </View>
         <Text style={styles.hint}>{template.description}</Text>
 
