@@ -109,6 +109,16 @@ export const templates: GameTemplate[] = [
     maxPlayers: 4,
   },
   {
+    id: 'danger',
+    name: 'Danger',
+    description:
+      'Race four pegs around the board. A 6 leaves home and lets you roll again. The first player to finish every peg wins.',
+    scoringMode: 'Instant',
+    winCondition: 'Outcome',
+    minPlayers: 1,
+    maxPlayers: 4,
+  },
+  {
     id: 'backgammon',
     name: 'Backgammon',
     description:

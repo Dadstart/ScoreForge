@@ -12,6 +12,7 @@ export type RootStackParamList = {
   Yaht: { gameId: string };
   Sorry: { gameId: string };
   Parcheesi: { gameId: string };
+  Danger: { gameId: string };
   Backgammon: { gameId: string };
   Checkers: { gameId: string };
   Chess: { gameId: string };
@@ -29,12 +30,13 @@ export type RootStackParamList = {
 
 export function gameScreenForTemplate(
   templateId: string,
-): 'Board' | 'Cribbage' | 'Opoly' | 'Yaht' | 'Sorry' | 'Parcheesi' | 'Backgammon' | 'Checkers' | 'Chess' | 'Canasta' | 'Uneaux' | 'SkipBeaux' | 'Reversi' | 'ChineseCheckers' | 'Klondike' | 'Freecell' | 'Pyramid' | 'TriPeaks' | 'Spider' {
+): 'Board' | 'Cribbage' | 'Opoly' | 'Yaht' | 'Sorry' | 'Parcheesi' | 'Danger' | 'Backgammon' | 'Checkers' | 'Chess' | 'Canasta' | 'Uneaux' | 'SkipBeaux' | 'Reversi' | 'ChineseCheckers' | 'Klondike' | 'Freecell' | 'Pyramid' | 'TriPeaks' | 'Spider' {
   if (templateId === 'cribbage') return 'Cribbage';
   if (templateId === 'monopoly') return 'Opoly';
   if (templateId === 'yaht' || templateId === 'yahtzee') return 'Yaht';
   if (templateId === 'sorry') return 'Sorry';
   if (templateId === 'parcheesi') return 'Parcheesi';
+  if (templateId === 'danger') return 'Danger';
   if (templateId === 'backgammon') return 'Backgammon';
   if (templateId === 'checkers') return 'Checkers';
   if (templateId === 'chess') return 'Chess';

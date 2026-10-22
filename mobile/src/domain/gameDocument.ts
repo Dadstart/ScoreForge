@@ -16,6 +16,7 @@ export const GAME_DOCUMENT_KEYS = [
   'tokenSpaces',
   'sorry',
   'parcheesi',
+  'danger',
   'backgammon',
   'checkers',
   'chess',

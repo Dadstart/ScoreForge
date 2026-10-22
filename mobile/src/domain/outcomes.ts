@@ -13,6 +13,7 @@ import { clearedCount } from './pyramid';
 import { completedCount } from './spider';
 import { homeCount } from './sorry';
 import { homeCount as parcheesiHome } from './parcheesi';
+import { homeCount as dangerHome } from './danger';
 import { soleSolventPlayer, cashFromDelta } from './opoly';
 import { grandTotal, isScorecardComplete } from './yaht';
 
@@ -52,6 +53,11 @@ export const boardOutcomes: Record<string, BoardOutcome> = {
     points: (game, playerId) => (game.parcheesi ? parcheesiHome(game.parcheesi, playerId) : null),
     complete: (game) => Boolean(game.parcheesi?.winnerId),
     winners: (game) => (game.parcheesi?.winnerId ? [game.parcheesi.winnerId] : []),
+  },
+  danger: {
+    points: (game, playerId) => (game.danger ? dangerHome(game.danger, playerId) : null),
+    complete: (game) => Boolean(game.danger?.winnerId),
+    winners: (game) => (game.danger?.winnerId ? [game.danger.winnerId] : []),
   },
   backgammon: {
     points: (game, playerId) => (game.backgammon ? borneOff(game.backgammon, playerId) : null),
