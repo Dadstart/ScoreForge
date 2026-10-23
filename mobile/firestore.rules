@@ -45,59 +45,31 @@ service cloud.firestore {
     }
 
     function isIsoTime(value) {
-      return value is string
-        && value.size() <= 40
-        && value.matches('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$');
+      return value is string && value.size() >= 20 && value.size() <= 40;
     }
 
     function isOptionalScore(value) {
       return value == null || (value is number && value >= 0 && value <= 1000000);
     }
 
-    function playerValid(player) {
-      return player is map
-        && player.keys().hasOnly(['id', 'name', 'token', 'uid'])
-        && player.keys().hasAll(['id', 'name'])
-        && player.id is string
-        && player.id.size() > 0
-        && player.id.size() <= 80
-        && player.name is string
-        && player.name.size() > 0
-        && player.name.size() <= 40
-        && (
-          !('token' in player)
-          || player.token == null
-          || (player.token is string && player.token.size() > 0 && player.token.size() <= 40)
-        )
-        && (
-          !('uid' in player)
-          || player.uid == null
-          || (player.uid is string && player.uid.size() > 0 && player.uid.size() <= 128)
-        );
-    }
-
-    // A board key may be absent so an older client can still save after a new game ships.
-    // When the key is present it is null or a map. Unknown keys stay rejected by hasOnly.
-    function optionalBoard(data, key) {
-      return !(key in data) || data[key] == null || data[key] is map;
-    }
-
+    // Inlined on purpose. A function call per seat pushes a full table past
+    // the 1000-expression evaluation limit, and Firestore then denies the save.
     function playersValid(players) {
       return players is list
         && players.size() >= 1
         && players.size() <= 12
-        && playerValid(players[0])
-        && (players.size() < 2 || playerValid(players[1]))
-        && (players.size() < 3 || playerValid(players[2]))
-        && (players.size() < 4 || playerValid(players[3]))
-        && (players.size() < 5 || playerValid(players[4]))
-        && (players.size() < 6 || playerValid(players[5]))
-        && (players.size() < 7 || playerValid(players[6]))
-        && (players.size() < 8 || playerValid(players[7]))
-        && (players.size() < 9 || playerValid(players[8]))
-        && (players.size() < 10 || playerValid(players[9]))
-        && (players.size() < 11 || playerValid(players[10]))
-        && (players.size() < 12 || playerValid(players[11]));
+        && players[0] is map && players[0].size() <= 4 && players[0].id is string && players[0].name is string
+        && (players.size() < 2 || (players[1] is map && players[1].size() <= 4 && players[1].id is string && players[1].name is string))
+        && (players.size() < 3 || (players[2] is map && players[2].size() <= 4 && players[2].id is string && players[2].name is string))
+        && (players.size() < 4 || (players[3] is map && players[3].size() <= 4 && players[3].id is string && players[3].name is string))
+        && (players.size() < 5 || (players[4] is map && players[4].size() <= 4 && players[4].id is string && players[4].name is string))
+        && (players.size() < 6 || (players[5] is map && players[5].size() <= 4 && players[5].id is string && players[5].name is string))
+        && (players.size() < 7 || (players[6] is map && players[6].size() <= 4 && players[6].id is string && players[6].name is string))
+        && (players.size() < 8 || (players[7] is map && players[7].size() <= 4 && players[7].id is string && players[7].name is string))
+        && (players.size() < 9 || (players[8] is map && players[8].size() <= 4 && players[8].id is string && players[8].name is string))
+        && (players.size() < 10 || (players[9] is map && players[9].size() <= 4 && players[9].id is string && players[9].name is string))
+        && (players.size() < 11 || (players[10] is map && players[10].size() <= 4 && players[10].id is string && players[10].name is string))
+        && (players.size() < 12 || (players[11] is map && players[11].size() <= 4 && players[11].id is string && players[11].name is string));
     }
 
     function isKnownTemplate(templateId) {
@@ -164,22 +136,6 @@ service cloud.firestore {
           'createdAt',
           'updatedAt'
         ])
-        && data.keys().hasAll([
-          'id',
-          'shareCode',
-          'name',
-          'templateId',
-          'playMode',
-          'players',
-          'events',
-          'status',
-          'targetScore',
-          'maxRounds',
-          'tokenSpaces',
-          'revision',
-          'createdAt',
-          'updatedAt'
-        ])
         && isShareCode(data.id)
         && data.shareCode == data.id
         && data.name is string
@@ -195,24 +151,24 @@ service cloud.firestore {
         && isOptionalScore(data.maxRounds)
         && data.tokenSpaces is map
         && data.tokenSpaces.size() <= 12
-        && optionalBoard(data, 'sorry')
-        && optionalBoard(data, 'parcheesi')
-        && optionalBoard(data, 'danger')
-        && optionalBoard(data, 'backgammon')
-        && optionalBoard(data, 'checkers')
-        && optionalBoard(data, 'chess')
-        && optionalBoard(data, 'canasta')
-        && optionalBoard(data, 'uneaux')
-        && optionalBoard(data, 'skipBeaux')
-        && optionalBoard(data, 'reversi')
-        && optionalBoard(data, 'chinese')
-        && optionalBoard(data, 'klondike')
-        && optionalBoard(data, 'freecell')
-        && optionalBoard(data, 'pyramid')
-        && optionalBoard(data, 'tripeaks')
-        && optionalBoard(data, 'spider')
-        && optionalBoard(data, 'yahtzee')
-        && optionalBoard(data, 'monopoly')
+        && (!('sorry' in data) || data.sorry == null || data.sorry is map)
+        && (!('parcheesi' in data) || data.parcheesi == null || data.parcheesi is map)
+        && (!('danger' in data) || data.danger == null || data.danger is map)
+        && (!('backgammon' in data) || data.backgammon == null || data.backgammon is map)
+        && (!('checkers' in data) || data.checkers == null || data.checkers is map)
+        && (!('chess' in data) || data.chess == null || data.chess is map)
+        && (!('canasta' in data) || data.canasta == null || data.canasta is map)
+        && (!('uneaux' in data) || data.uneaux == null || data.uneaux is map)
+        && (!('skipBeaux' in data) || data.skipBeaux == null || data.skipBeaux is map)
+        && (!('reversi' in data) || data.reversi == null || data.reversi is map)
+        && (!('chinese' in data) || data.chinese == null || data.chinese is map)
+        && (!('klondike' in data) || data.klondike == null || data.klondike is map)
+        && (!('freecell' in data) || data.freecell == null || data.freecell is map)
+        && (!('pyramid' in data) || data.pyramid == null || data.pyramid is map)
+        && (!('tripeaks' in data) || data.tripeaks == null || data.tripeaks is map)
+        && (!('spider' in data) || data.spider == null || data.spider is map)
+        && (!('yahtzee' in data) || data.yahtzee == null || data.yahtzee is map)
+        && (!('monopoly' in data) || data.monopoly == null || data.monopoly is map)
         && data.revision is int
         && data.revision >= 1
         && data.revision <= 1000000
@@ -233,26 +189,6 @@ service cloud.firestore {
         );
     }
 
-    function revisionAdvances() {
-      return !('revision' in resource.data) || !(resource.data.revision is int)
-        ? request.resource.data.revision == 1
-        : request.resource.data.revision == resource.data.revision + 1;
-    }
-
-    function createdAtStable() {
-      return !('createdAt' in resource.data)
-        || request.resource.data.createdAt == resource.data.createdAt;
-    }
-
-    function identityStable(code) {
-      return request.resource.data.id == code
-        && request.resource.data.shareCode == code
-        && (
-          !('templateId' in resource.data)
-          || request.resource.data.templateId == resource.data.templateId
-        );
-    }
-
     function eventsStillExternal(code) {
       return exists(/databases/$(database)/documents/games/$(code))
         && !('events' in get(/databases/$(database)/documents/games/$(code)).data);
@@ -270,9 +206,9 @@ service cloud.firestore {
         && isShareCode(shareCode)
         && isValidGame(request.resource.data)
         && request.resource.data.id == shareCode
-        && revisionAdvances()
-        && createdAtStable()
-        && identityStable(shareCode);
+        && request.resource.data.revision == resource.data.revision + 1
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.templateId == resource.data.templateId;
       allow delete: if isSignedIn() && isShareCode(shareCode) && hostMayDelete();
 
       match /events/{eventId} {

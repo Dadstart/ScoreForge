@@ -64,12 +64,13 @@ type Props = {
   selected: number | null;
   canAct: boolean;
   canRoll: boolean;
+  heldFace: number | null;
   onRoll: () => void;
   onSelect: (peg: number | null) => void;
   onMove: (move: DangerMove) => void;
 };
 
-export function DangerBoard({ state, moves, selected, canAct, canRoll, onRoll, onSelect, onMove }: Props) {
+export function DangerBoard({ state, moves, selected, canAct, canRoll, heldFace, onRoll, onSelect, onMove }: Props) {
   const { width } = useWindowDimensions();
   const frame = Math.min(Math.max(width - 28, 280), 440);
   const scale = frame / BOARD;
@@ -118,9 +119,9 @@ export function DangerBoard({ state, moves, selected, canAct, canRoll, onRoll, o
       })}
       <Popper
         die={state.die}
+        heldFace={heldFace}
         again={state.again}
         canRoll={canRoll}
-        rollKey={`${state.currentPlayerId}:${state.die ?? ''}:${state.lastAction ?? ''}`}
         scale={scale}
         onRoll={onRoll}
       />
@@ -355,26 +356,27 @@ function PegBody({ size, fill, selected }: { size: number; fill: string; selecte
 
 function Popper({
   die,
+  heldFace,
   again,
   canRoll,
-  rollKey,
   scale,
   onRoll,
 }: {
   die: number | null;
+  heldFace: number | null;
   again: boolean;
   canRoll: boolean;
-  rollKey: string;
   scale: number;
   onRoll: () => void;
 }) {
   const press = useRef(new Animated.Value(1)).current;
   const spin = useRef(new Animated.Value(1)).current;
-  const [visible, setVisible] = useState<number | null>(die);
+  const face = die ?? heldFace;
+  const [visible, setVisible] = useState<number | null>(face);
 
   useEffect(() => {
     if (die == null) {
-      setVisible(null);
+      setVisible(heldFace);
       spin.setValue(1);
       return;
     }
@@ -402,7 +404,7 @@ function Popper({
       clearInterval(timer);
       animation.stop();
     };
-  }, [rollKey, die, spin]);
+  }, [die, heldFace, spin]);
 
   const idle = useRef(new Animated.Value(1)).current;
   useEffect(() => {
@@ -440,7 +442,7 @@ function Popper({
     >
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={canRoll ? 'Roll' : die ? `Die showing ${die}` : 'Die'}
+        accessibilityLabel={face != null && !canRoll ? `Die showing ${face}` : 'Roll'}
         disabled={!canRoll}
         onPress={() => {
           press.setValue(0.9);
@@ -449,12 +451,12 @@ function Popper({
         }}
         style={styles.pegHit}
       >
-        {canRoll || visible == null ? (
-          <Text style={[styles.rollLabel, { fontSize: Math.max(16, 20 * scale) }]}>{again ? 'Again' : 'Roll'}</Text>
-        ) : (
+        {face != null && !canRoll ? (
           <Animated.View style={{ transform: [{ rotate }, { scale: tumble }] }}>
-            <DieFace face={visible} size={Math.max(28, 36 * scale)} />
+            <DieFace face={visible ?? face} size={Math.max(28, 36 * scale)} />
           </Animated.View>
+        ) : (
+          <Text style={[styles.rollLabel, { fontSize: Math.max(16, 20 * scale) }]}>{again ? 'Again' : 'Roll'}</Text>
         )}
       </Pressable>
     </Animated.View>

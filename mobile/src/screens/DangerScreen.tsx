@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -32,6 +32,8 @@ import { getSettings } from '../storage/settingsStore';
 import { colors, space } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Danger'>;
+
+const FACE_HOLD_MS = 2500;
 
 export function DangerScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
@@ -71,6 +73,24 @@ export function DangerScreen({ navigation, route }: Props) {
     [board, game],
   );
   const deadRoll = board?.die != null && !board.winnerId ? `${board.currentPlayerId}:${board.die}` : '';
+  const dieNow = board?.die ?? null;
+  const seenFace = useRef<number | null>(dieNow);
+  const [heldFace, setHeldFace] = useState<number | null>(null);
+  if (dieNow != null) {
+    seenFace.current = dieNow;
+    if (heldFace != null) setHeldFace(null);
+  } else if (seenFace.current != null && heldFace !== seenFace.current) {
+    setHeldFace(seenFace.current);
+  }
+
+  useEffect(() => {
+    if (heldFace == null || board?.winnerId || board?.die != null) return;
+    const timer = setTimeout(() => {
+      seenFace.current = null;
+      setHeldFace(null);
+    }, FACE_HOLD_MS);
+    return () => clearTimeout(timer);
+  }, [heldFace, board?.die, board?.winnerId]);
 
   useEffect(() => {
     if (!deadRoll || !game || board?.die == null || board.winnerId || moves.length > 0) return;
@@ -144,7 +164,7 @@ export function DangerScreen({ navigation, route }: Props) {
         </GameBanner>
         <GameError message={error} />
 
-        {canRoll ? (
+        {canRoll && heldFace == null ? (
           <Button label={board.again ? 'Roll again' : 'Roll'} variant="primary" onPress={onRoll} />
         ) : null}
         {canAct && board.die != null && moves.length === 0 ? (
@@ -156,7 +176,8 @@ export function DangerScreen({ navigation, route }: Props) {
           moves={moves}
           selected={selected != null && selectable.has(selected) ? selected : null}
           canAct={canAct}
-          canRoll={canRoll}
+          canRoll={canRoll && heldFace == null}
+          heldFace={heldFace}
           onRoll={onRoll}
           onSelect={(peg) => setSelected(peg != null && selectable.has(peg) ? peg : null)}
           onMove={onMove}
