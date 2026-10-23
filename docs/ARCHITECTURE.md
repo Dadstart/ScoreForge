@@ -17,7 +17,7 @@ mobile/
 │   ├── storage/               # Firestore game store + known codes + displayName
 │   ├── linking/               # share URL create/parse for QR + deep links
 │   ├── navigation/            # types + React Navigation linking config
-│   ├── screens/               # Home, Setup, Join, Board, Cribbage, Opoly, Yaht, Sorry, Parcheesi, Danger, Backgammon, Checkers, Chess, Canasta, Uneaux, Skip-Beaux, Reversi, Chinese Checkers, Klondike, FreeCell, Pyramid, TriPeaks, Spider
+│   ├── screens/               # Home, Setup, Join, Board, Cribbage, Opoly, Yaht, Apology, Parcheesi, Danger, Backgammon, Checkers, Chess, Canasta, Uneaux, Skip-Beaux, Reversi, Chinese Checkers, Klondike, FreeCell, Pyramid, TriPeaks, Spider
 │   └── components/            # CribbageBoard, OpolyBoard, YahtScoreboard, SorryBoard, ParcheesiBoard, DangerBoard, BackgammonBoard, CheckersBoard, ChessBoard, CanastaBoard, UneauxBoard, SkipBeauxBoard, ReversiBoard, ChineseCheckersBoard, solitaire boards, FireworksOverlay, ShareCodePanel
 ```
 
@@ -34,7 +34,7 @@ React Navigation native stack with `expo-linking` prefixes (`scoreforge://` and 
 | **Cribbage** | Live subscribe; own-peg scoring + fireworks |
 | **Opoly** | Live subscribe; own cash, optional board |
 | **Yaht** | Live subscribe; score any column |
-| **Sorry** | Live subscribe; shared board, deck, and turn |
+| **Apology** | Live subscribe; shared board, deck, and turn |
 | **Parcheesi** | Live subscribe; shared board, dice, and turn |
 | **Danger** | Live subscribe; shared board, die, and turn |
 | **Backgammon** | Live subscribe; shared board, dice, and cube |
@@ -99,7 +99,7 @@ All templates start with `minPlayers: 1`; others join via code.
 | Cribbage | Instant pegging | First to 121 |
 | Opoly | Instant cash | Highest |
 | Yaht | Score-card boxes | Highest |
-| Sorry | Board pawns home | First to 4 |
+| Apology | Board pawns home | First to 4 |
 | Parcheesi | Shared board and two dice | First player to get all 4 pawns to the center |
 | Danger | Shared board and one die | First player to finish all 4 pegs |
 | Backgammon | Shared board | Bear off all 15 checkers |

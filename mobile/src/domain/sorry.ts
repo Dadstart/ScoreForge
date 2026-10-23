@@ -122,7 +122,7 @@ export function cardInfo(card: CardKind): { title: string; detail: string } {
       return { title: '12', detail: 'Move forward 12.' };
     case 'sorry':
       return {
-        title: 'Sorry',
+        title: 'Apology',
         detail: 'From Start, bump an opponent on the track and take their space.',
       };
   }
@@ -245,7 +245,7 @@ export function describeMove(players: Player[], move: SorryMove): string {
     case 'switch':
       return `Switch ${pawnName(move.pawn)} with ${owner(move.targetPlayerId)}'s ${pawnName(move.targetPawn)}`;
     case 'sorry':
-      return `Sorry — replace ${owner(move.targetPlayerId)}'s ${pawnName(move.targetPawn)}`;
+      return `Apology — replace ${owner(move.targetPlayerId)}'s ${pawnName(move.targetPawn)}`;
     default: {
       const unreachable: never = move;
       return unreachable;

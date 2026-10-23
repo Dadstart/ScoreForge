@@ -276,8 +276,8 @@ export function SorryScreen({ navigation, route }: Props) {
       >
         <View style={styles.header}>
           <View style={{ flex: 1, gap: 4 }}>
-            <Text style={typography.title}>{game.name}</Text>
-            <Badge label="Sorry" tone="accent" />
+            <Text style={typography.title}>{game.name === 'Sorry' ? 'Apology' : game.name}</Text>
+            <Badge label="Apology" tone="accent" />
           </View>
           <GameHelp templateId="sorry" />
           <ShareCodePanel shareCode={game.shareCode} passAndPlay={playModeOf(game) === 'pass-and-play'} />
@@ -354,7 +354,7 @@ export function SorryScreen({ navigation, route }: Props) {
         {showCelebration ? (
           <FireworksOverlay
             winnerName={snapshot.winnerName}
-            subtitle="Sorry"
+            subtitle="Apology"
             onDismiss={dismissCelebration}
           />
         ) : null}

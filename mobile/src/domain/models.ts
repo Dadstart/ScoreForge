@@ -57,7 +57,7 @@ export interface Game {
   maxRounds?: number | null;
   /** Board space index (0 is Go) for each player id. */
   tokenSpaces?: Record<string, number>;
-  /** Shared Sorry board, deck, and turn. */
+  /** Shared Apology board, deck, and turn. */
   sorry?: SorryState | null;
   /** Shared Parcheesi board, dice, and turn. */
   parcheesi?: ParcheesiState | null;

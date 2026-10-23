@@ -22,11 +22,30 @@ export function SorryCard({ card, compact, mini, label = true }: Props) {
   }
 
   const info = cardInfo(card);
-  const sorry = card === 'sorry';
+  const apology = card === 'sorry';
   return (
-    <View style={[styles.face, size, sorry && styles.sorryFace, mini && styles.faceMini]}>
-      <Text style={[styles.corner, sorry && styles.sorryInk, mini && styles.cornerMini]}>{info.title}</Text>
-      <Text style={[styles.rank, sorry && styles.sorryInk, compact && styles.rankCompact, mini && styles.rankMini]}>
+    <View style={[styles.face, size, apology && styles.sorryFace, mini && styles.faceMini]}>
+      <Text
+        style={[
+          styles.corner,
+          apology && styles.sorryInk,
+          mini && styles.cornerMini,
+          apology && (mini ? styles.cornerApologyMini : styles.cornerApology),
+        ]}
+        numberOfLines={1}
+      >
+        {info.title}
+      </Text>
+      <Text
+        style={[
+          styles.rank,
+          apology && styles.sorryInk,
+          !apology && compact && styles.rankCompact,
+          !apology && mini && styles.rankMini,
+          apology && (mini ? styles.rankApologyMini : compact ? styles.rankApologyCompact : styles.rankApology),
+        ]}
+        numberOfLines={1}
+      >
         {info.title}
       </Text>
       <Text style={[styles.detail, compact && styles.detailCompact, mini && styles.detailMini]}>{info.detail}</Text>
@@ -78,6 +97,8 @@ const styles = StyleSheet.create({
     color: '#2a2118',
   },
   cornerMini: { fontSize: 13 },
+  cornerApology: { fontSize: 13 },
+  cornerApologyMini: { fontSize: 11 },
   rank: {
     fontFamily: fonts.display,
     fontSize: 64,
@@ -87,6 +108,9 @@ const styles = StyleSheet.create({
   },
   rankCompact: { fontSize: 42 },
   rankMini: { fontSize: 28 },
+  rankApology: { fontSize: 26 },
+  rankApologyCompact: { fontSize: 20 },
+  rankApologyMini: { fontSize: 16 },
   sorryInk: { color: '#d64545' },
   detail: {
     color: '#5c5144',

@@ -65,7 +65,7 @@ describe('sorry', () => {
     ]);
   });
 
-  it('bumps an opponent with Sorry and sends them back to Start', () => {
+  it('bumps an opponent with Apology and sends them back to Start', () => {
     const state = {
       ...createSorryState(players),
       drawn: 'sorry' as const,

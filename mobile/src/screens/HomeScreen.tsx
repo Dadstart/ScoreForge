@@ -132,7 +132,9 @@ const GameRow = memo(function GameRow({
     <Card style={styles.gameCard}>
       <View style={styles.cardTop}>
         <View style={{ flex: 1, gap: 6 }}>
-          <Text style={styles.cardTitle}>{game.name || 'Untitled game'}</Text>
+          <Text style={styles.cardTitle}>
+            {game.templateId === 'sorry' && game.name === 'Sorry' ? 'Apology' : game.name || 'Untitled game'}
+          </Text>
           <View style={styles.metaRow}>
             <Badge label={templateName} tone="accent" />
             <Badge label={passAndPlay ? 'Pass ’n Play' : 'Shared code'} tone="neutral" />

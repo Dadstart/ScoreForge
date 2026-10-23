@@ -54,7 +54,7 @@ npm run deploy:rules
 | Cribbage | Peg own track only | First to 121 (or 61) |
 | Opoly | Track own cash, optional board | Highest total |
 | Yaht | Fill any score-card column | Highest total |
-| Sorry | Shared board and card deck | First to get 4 pawns home |
+| Apology | Shared board and card deck | First to get 4 pawns home |
 | Parcheesi | Shared board and two dice | First player to get all 4 pawns to the center |
 | Danger | Shared board and one die | First player to finish all 4 pegs |
 | Backgammon | Shared board. White moves first. Double before you roll | Bear off all 15 checkers |

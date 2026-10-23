@@ -131,7 +131,7 @@ export default function App() {
           <Stack.Screen
             name="Sorry"
             component={SorryScreen}
-            options={{ title: 'Sorry', headerShown: false }}
+            options={{ title: 'Apology', headerShown: false }}
           />
           <Stack.Screen
             name="Parcheesi"
