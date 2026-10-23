@@ -12,6 +12,7 @@ import { OpolyScreen } from './src/screens/OpolyScreen';
 import { YahtScreen } from './src/screens/YahtScreen';
 import { SorryScreen } from './src/screens/SorryScreen';
 import { ParcheesiScreen } from './src/screens/ParcheesiScreen';
+import { DangerScreen } from './src/screens/DangerScreen';
 import { BackgammonScreen } from './src/screens/BackgammonScreen';
 import { CheckersScreen } from './src/screens/CheckersScreen';
 import { ChessScreen } from './src/screens/ChessScreen';
@@ -136,6 +137,11 @@ export default function App() {
             name="Parcheesi"
             component={ParcheesiScreen}
             options={{ title: 'Parcheesi', headerShown: false }}
+          />
+          <Stack.Screen
+            name="Danger"
+            component={DangerScreen}
+            options={{ title: 'Danger', headerShown: false }}
           />
           <Stack.Screen
             name="Backgammon"

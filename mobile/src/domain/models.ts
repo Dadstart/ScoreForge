@@ -13,6 +13,7 @@ import type { SpiderState } from './spider';
 import type { TriPeaksState } from './tripeaks';
 import type { SorryState } from './sorry';
 import type { ParcheesiState } from './parcheesi';
+import type { DangerState } from './danger';
 import type { OpolyPlay } from './opolyPlay';
 import type { YahtState } from './yaht';
 import { fillRandom, randomId } from './secureRandom';
@@ -60,6 +61,8 @@ export interface Game {
   sorry?: SorryState | null;
   /** Shared Parcheesi board, dice, and turn. */
   parcheesi?: ParcheesiState | null;
+  /** Shared Danger board, die, and turn. */
+  danger?: DangerState | null;
   /** Shared backgammon board, dice, and cube. */
   backgammon?: BackgammonState | null;
   /** Shared checkers board and turn. */

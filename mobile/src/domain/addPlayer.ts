@@ -11,6 +11,7 @@ import { PLAYER_TOKENS, playerLabel, playerToken, singleEmoji } from './opoly';
 import { withoutOpolyPlayer } from './opolyPlay';
 import { ensureSorryState } from './sorry';
 import { ensureParcheesiState } from './parcheesi';
+import { ensureDangerState } from './danger';
 
 /** Add a named player to a game, enforcing uniqueness and max capacity. */
 export function withAddedPlayer(game: Game, rawName: string, maxPlayers: number, uid?: string | null): Game {
@@ -28,7 +29,8 @@ export function withAddedPlayer(game: Game, rawName: string, maxPlayers: number,
   if (taken) {
     throw new Error('A player with that name is already in the game.');
   }
-  return ensureParcheesiState(
+  return ensureDangerState(
+    ensureParcheesiState(
     ensureSkipBeauxState(
     ensureUneauxState(
     ensureCanastaState(
@@ -46,6 +48,7 @@ export function withAddedPlayer(game: Game, rawName: string, maxPlayers: number,
           ),
         ),
       ),
+    ),
     ),
     ),
     ),
@@ -159,7 +162,8 @@ export function withoutPlayer(game: Game, playerId: string): Game {
   const remaining = game.players.filter((player) => player.id !== playerId);
   const events = game.events.filter((event) => event.playerId !== playerId);
   const monopoly = game.monopoly ? withoutOpolyPlayer(game.monopoly, playerId, game.players, events) : game.monopoly;
-  return ensureParcheesiState(
+  return ensureDangerState(
+    ensureParcheesiState(
     ensureSkipBeauxState(
     ensureUneauxState(
     ensureCanastaState(
@@ -180,6 +184,7 @@ export function withoutPlayer(game: Game, playerId: string): Game {
           ),
         ),
       ),
+    ),
     ),
     ),
     ),

@@ -23,6 +23,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
       Yaht: 'yaht/:gameId',
       Sorry: 'sorry/:gameId',
       Parcheesi: 'parcheesi/:gameId',
+      Danger: 'danger/:gameId',
       Backgammon: 'backgammon/:gameId',
       Checkers: 'checkers/:gameId',
       Chess: 'chess/:gameId',

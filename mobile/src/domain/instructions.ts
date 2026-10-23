@@ -104,6 +104,18 @@ const INSTRUCTIONS: Record<string, GameInstructions> = {
       'The first player to get all four pawns to the center wins.',
     ],
   },
+  danger: {
+    title: 'Danger',
+    lines: [
+      'Press Roll in the center, then tap one of your pegs and the space it moves to.',
+      'Each player has four pegs. A 6 brings a peg out of home onto your start.',
+      'Move clockwise the exact number. You may pass any peg. You cannot land on your own.',
+      'Landing on an opponent sends that peg back home.',
+      'After a full lap, a peg turns into its finish lane. The last space takes an exact count.',
+      'A 6 lets you roll again after you move. A roll that cannot be used passes the turn.',
+      'The first player to get all four pegs to the finish wins.',
+    ],
+  },
   backgammon: {
     title: 'Backgammon',
     lines: [

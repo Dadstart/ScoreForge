@@ -40,6 +40,7 @@ import {
 import { nextSavedRevision } from '../domain/revisions';
 import { createSorryState } from '../domain/sorry';
 import { createParcheesiState } from '../domain/parcheesi';
+import { createDangerState } from '../domain/danger';
 import { auth, db, ensureAnonymousAuth } from '../firebase/app';
 import { forgetShareCode, loadKnownShareCodes, rememberShareCode } from './knownCodesStore';
 import { recallSoloUndo, rememberSoloUndo } from './soloUndoStore';
@@ -62,6 +63,7 @@ type StoredGame = {
   tokenSpaces?: Record<string, number>;
   sorry?: Game['sorry'];
   parcheesi?: Game['parcheesi'];
+  danger?: Game['danger'];
   backgammon?: Game['backgammon'];
   checkers?: Game['checkers'];
   chess?: Game['chess'];
@@ -136,6 +138,7 @@ function toStored(game: Game): Record<string, unknown> {
     tokenSpaces: game.tokenSpaces ?? {},
     sorry: game.sorry ?? null,
     parcheesi: game.parcheesi ?? null,
+    danger: game.danger ?? null,
     backgammon: game.backgammon ?? null,
     checkers: game.checkers ?? null,
     chess: game.chess ?? null,
@@ -177,6 +180,7 @@ function fromStored(shareCode: string, data: StoredGame, events: ScoreEvent[]): 
     tokenSpaces: data.tokenSpaces && typeof data.tokenSpaces === 'object' ? data.tokenSpaces : {},
     sorry: data.sorry ?? null,
     parcheesi: data.parcheesi ?? null,
+    danger: data.danger ?? null,
     backgammon: data.backgammon ?? null,
     checkers: data.checkers ?? null,
     chess: data.chess ?? null,
@@ -389,6 +393,7 @@ export async function createAndSaveGame(partial: {
     };
     if (partial.templateId === 'sorry') game.sorry = createSorryState(partial.players);
     if (partial.templateId === 'parcheesi') game.parcheesi = createParcheesiState(partial.players);
+    if (partial.templateId === 'danger') game.danger = createDangerState(partial.players);
     if (partial.templateId === 'backgammon') game.backgammon = createBackgammonState(partial.players);
     if (partial.templateId === 'checkers') {
       game.checkers = createCheckersState(partial.players, {
