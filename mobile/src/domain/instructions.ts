@@ -1,4 +1,4 @@
-import { cardInfo, type CardKind } from './sorry';
+import { cardInfo, type CardKind } from './apology';
 
 export type GameInstructions = {
   title: string;

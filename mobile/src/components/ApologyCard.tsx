@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { cardInfo, type CardKind } from '../domain/sorry';
+import { cardInfo, type CardKind } from '../domain/apology';
 import { fonts, radii } from '../theme';
 
 type Props = {

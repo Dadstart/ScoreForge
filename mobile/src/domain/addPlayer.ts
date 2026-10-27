@@ -9,7 +9,7 @@ import { ensureChineseState, playerCap } from './chineseCheckers';
 import { createPlayer, type Game, type Player } from './models';
 import { PLAYER_TOKENS, playerLabel, playerToken, singleEmoji } from './opoly';
 import { withoutOpolyPlayer } from './opolyPlay';
-import { ensureSorryState } from './sorry';
+import { ensureSorryState } from './apology';
 import { ensureParcheesiState } from './parcheesi';
 import { ensureDangerState } from './danger';
 

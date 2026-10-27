@@ -15,7 +15,7 @@ import { PlaySpark } from '../components/PlaySpark';
 import { GameHelp } from '../components/GameHelp';
 import { HomeButton } from '../components/HomeButton';
 import { ShareCodePanel } from '../components/ShareCodePanel';
-import { SorryBoard } from '../components/SorryBoard';
+import { SorryBoard } from '../components/ApologyBoard';
 import { Badge, Button, Screen } from '../components/ui';
 import { deviceMayAct } from '../domain/localPlayer';
 import { playModeOf, type Game } from '../domain/models';
@@ -33,7 +33,7 @@ import {
   playMove,
   createSorryState,
   type SorryMove,
-} from '../domain/sorry';
+} from '../domain/apology';
 import { useLiveGame } from '../hooks/useLiveGame';
 import { usePlaySpark } from '../hooks/usePlaySpark';
 import { addPlayerToGame, preferNewerGame } from '../storage/gameStore';

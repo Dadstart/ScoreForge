@@ -11,7 +11,7 @@ import type { KlondikeState } from './klondike';
 import type { PyramidState } from './pyramid';
 import type { SpiderState } from './spider';
 import type { TriPeaksState } from './tripeaks';
-import type { SorryState } from './sorry';
+import type { SorryState } from './apology';
 import type { ParcheesiState } from './parcheesi';
 import type { DangerState } from './danger';
 import type { OpolyPlay } from './opolyPlay';

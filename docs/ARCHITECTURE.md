@@ -18,7 +18,7 @@ mobile/
 │   ├── linking/               # share URL create/parse for QR + deep links
 │   ├── navigation/            # types + React Navigation linking config
 │   ├── screens/               # Home, Setup, Join, Board, Cribbage, Opoly, Yaht, Apology, Parcheesi, Danger, Backgammon, Checkers, Chess, Canasta, Uneaux, Skip-Beaux, Reversi, Chinese Checkers, Klondike, FreeCell, Pyramid, TriPeaks, Spider
-│   └── components/            # CribbageBoard, OpolyBoard, YahtScoreboard, SorryBoard, ParcheesiBoard, DangerBoard, BackgammonBoard, CheckersBoard, ChessBoard, CanastaBoard, UneauxBoard, SkipBeauxBoard, ReversiBoard, ChineseCheckersBoard, solitaire boards, FireworksOverlay, ShareCodePanel
+│   └── components/            # CribbageBoard, OpolyBoard, YahtScoreboard, ApologyBoard, ParcheesiBoard, DangerBoard, BackgammonBoard, CheckersBoard, ChessBoard, CanastaBoard, UneauxBoard, SkipBeauxBoard, ReversiBoard, ChineseCheckersBoard, solitaire boards, FireworksOverlay, ShareCodePanel
 ```
 
 ### Startup / navigation
