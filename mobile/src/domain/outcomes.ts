@@ -11,7 +11,7 @@ import { homeCount as freecellHome } from './freecell';
 import { foundationCount } from './klondike';
 import { clearedCount } from './pyramid';
 import { completedCount } from './spider';
-import { homeCount } from './sorry';
+import { homeCount } from './apology';
 import { homeCount as parcheesiHome } from './parcheesi';
 import { homeCount as dangerHome } from './danger';
 import { soleSolventPlayer, cashFromDelta } from './opoly';

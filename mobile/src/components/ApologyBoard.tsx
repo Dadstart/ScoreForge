@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Circle, G, Polygon, Rect, Text as SvgText } from 'react-native-svg';
-import { SorryCard } from './SorryCard';
+import { SorryCard } from './ApologyCard';
 import { CardFlip, useFreshFaces } from './CardFlip';
 import type { Player } from '../domain/models';
 import {
@@ -15,7 +15,7 @@ import {
   type PawnTravel,
   type SorryState,
   type TravelStop,
-} from '../domain/sorry';
+} from '../domain/apology';
 import {
   gateChevron,
   homePoint,
@@ -30,7 +30,7 @@ import {
   startPoint,
   trackPoint,
   type Point,
-} from '../domain/sorryBoard';
+} from '../domain/apologyBoard';
 
 type Props = {
   players: Player[];

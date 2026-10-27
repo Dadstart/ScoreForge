@@ -10,7 +10,7 @@ import { BoardScreen } from './src/screens/BoardScreen';
 import { CribbageScreen } from './src/screens/CribbageScreen';
 import { OpolyScreen } from './src/screens/OpolyScreen';
 import { YahtScreen } from './src/screens/YahtScreen';
-import { SorryScreen } from './src/screens/SorryScreen';
+import { SorryScreen } from './src/screens/ApologyScreen';
 import { ParcheesiScreen } from './src/screens/ParcheesiScreen';
 import { DangerScreen } from './src/screens/DangerScreen';
 import { BackgammonScreen } from './src/screens/BackgammonScreen';
@@ -131,7 +131,7 @@ export default function App() {
           <Stack.Screen
             name="Sorry"
             component={SorryScreen}
-            options={{ title: 'Sorry', headerShown: false }}
+            options={{ title: 'Apology', headerShown: false }}
           />
           <Stack.Screen
             name="Parcheesi"

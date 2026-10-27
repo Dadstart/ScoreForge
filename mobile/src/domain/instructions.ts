@@ -1,4 +1,4 @@
-import { cardInfo, type CardKind } from './sorry';
+import { cardInfo, type CardKind } from './apology';
 
 export type GameInstructions = {
   title: string;
@@ -76,7 +76,7 @@ const INSTRUCTIONS: Record<string, GameInstructions> = {
     ],
   },
   sorry: {
-    title: 'Sorry',
+    title: 'Apology',
     lines: [
       'Draw a card, then tap one of the moves it offers.',
       'Each player has four pawns. First to get all four home wins.',

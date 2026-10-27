@@ -11,7 +11,7 @@ import type { KlondikeState } from './klondike';
 import type { PyramidState } from './pyramid';
 import type { SpiderState } from './spider';
 import type { TriPeaksState } from './tripeaks';
-import type { SorryState } from './sorry';
+import type { SorryState } from './apology';
 import type { ParcheesiState } from './parcheesi';
 import type { DangerState } from './danger';
 import type { OpolyPlay } from './opolyPlay';
@@ -57,7 +57,7 @@ export interface Game {
   maxRounds?: number | null;
   /** Board space index (0 is Go) for each player id. */
   tokenSpaces?: Record<string, number>;
-  /** Shared Sorry board, deck, and turn. */
+  /** Shared Apology board, deck, and turn. */
   sorry?: SorryState | null;
   /** Shared Parcheesi board, dice, and turn. */
   parcheesi?: ParcheesiState | null;

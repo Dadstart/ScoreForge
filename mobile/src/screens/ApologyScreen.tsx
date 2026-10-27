@@ -15,7 +15,7 @@ import { PlaySpark } from '../components/PlaySpark';
 import { GameHelp } from '../components/GameHelp';
 import { HomeButton } from '../components/HomeButton';
 import { ShareCodePanel } from '../components/ShareCodePanel';
-import { SorryBoard } from '../components/SorryBoard';
+import { SorryBoard } from '../components/ApologyBoard';
 import { Badge, Button, Screen } from '../components/ui';
 import { deviceMayAct } from '../domain/localPlayer';
 import { playModeOf, type Game } from '../domain/models';
@@ -33,7 +33,7 @@ import {
   playMove,
   createSorryState,
   type SorryMove,
-} from '../domain/sorry';
+} from '../domain/apology';
 import { useLiveGame } from '../hooks/useLiveGame';
 import { usePlaySpark } from '../hooks/usePlaySpark';
 import { addPlayerToGame, preferNewerGame } from '../storage/gameStore';
@@ -276,8 +276,8 @@ export function SorryScreen({ navigation, route }: Props) {
       >
         <View style={styles.header}>
           <View style={{ flex: 1, gap: 4 }}>
-            <Text style={typography.title}>{game.name}</Text>
-            <Badge label="Sorry" tone="accent" />
+            <Text style={typography.title}>{game.name === 'Sorry' ? 'Apology' : game.name}</Text>
+            <Badge label="Apology" tone="accent" />
           </View>
           <GameHelp templateId="sorry" />
           <ShareCodePanel shareCode={game.shareCode} passAndPlay={playModeOf(game) === 'pass-and-play'} />
@@ -354,7 +354,7 @@ export function SorryScreen({ navigation, route }: Props) {
         {showCelebration ? (
           <FireworksOverlay
             winnerName={snapshot.winnerName}
-            subtitle="Sorry"
+            subtitle="Apology"
             onDismiss={dismissCelebration}
           />
         ) : null}

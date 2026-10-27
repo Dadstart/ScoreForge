@@ -1,4 +1,4 @@
-import { SAFETY_SPACES, SIDE_SPACES, safetyGate, slideSpans, startExit, type SlideSpan } from './sorry';
+import { SAFETY_SPACES, SIDE_SPACES, safetyGate, slideSpans, startExit, type SlideSpan } from './apology';
 
 export type Point = { x: number; y: number };
 

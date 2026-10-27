@@ -89,7 +89,7 @@ export const templates: GameTemplate[] = [
   },
   {
     id: 'sorry',
-    name: 'Sorry',
+    name: 'Apology',
     description:
       'Race four pawns home on a shared board. Draw a card, slide on another color’s triangle, or bump someone back to Start.',
     scoringMode: 'Instant',

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { createPlayer, type Player } from './models';
-import { slidePoint } from './sorryBoard';
+import { slidePoint } from './apologyBoard';
 import {
   createSorryState,
   type CardKind,
@@ -12,7 +12,7 @@ import {
   playMove,
   startExit,
   type PawnSpot,
-} from './sorry';
+} from './apology';
 
 function atStart(): PawnSpot[] {
   return [{ zone: 'start' }, { zone: 'start' }, { zone: 'start' }, { zone: 'start' }];
@@ -65,7 +65,7 @@ describe('sorry', () => {
     ]);
   });
 
-  it('bumps an opponent with Sorry and sends them back to Start', () => {
+  it('bumps an opponent with Apology and sends them back to Start', () => {
     const state = {
       ...createSorryState(players),
       drawn: 'sorry' as const,

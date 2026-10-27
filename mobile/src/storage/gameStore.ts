@@ -38,7 +38,7 @@ import {
   type ScoreEvent,
 } from '../domain/models';
 import { nextSavedRevision } from '../domain/revisions';
-import { createSorryState } from '../domain/sorry';
+import { createSorryState } from '../domain/apology';
 import { createParcheesiState } from '../domain/parcheesi';
 import { createDangerState } from '../domain/danger';
 import { auth, db, ensureAnonymousAuth } from '../firebase/app';
