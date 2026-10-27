@@ -14,6 +14,7 @@ import {
   drawCard,
   ensureUneauxState,
   freshDeck,
+  kindOf,
   passTurn,
   playCard,
   winnerIds,
@@ -251,7 +252,9 @@ describe('uneaux', () => {
     const game = { ...createGame({ name: 'Uneaux', templateId: 'uneaux', players }), uneaux: null };
     const repaired = ensureUneauxState(game);
     assert.ok(repaired.uneaux?.phase === 'play' || repaired.uneaux?.phase === 'color');
-    assert.equal(repaired.uneaux?.hands[players[0].id]?.length, 7);
+    const up = repaired.uneaux?.discard.at(-1) ?? '';
+    assert.equal(repaired.uneaux?.hands[players[0].id]?.length, kindOf(up) === 'D' ? 9 : 7);
+    assert.equal(repaired.uneaux?.hands[players[1].id]?.length, 7);
     assert.equal(ensureUneauxState(repaired), repaired);
     const template = getTemplate('uneaux');
     assert.ok(template);
